@@ -107,7 +107,7 @@ Diminishing returns for repeated matches between same clan pair in 24h:
 ### Discord Roles
 - **Verified Role**: `Thiểu Năng Con` (Pre-existing server role. **DO NOT CREATE**).
 - **Mod Role**: `Hội đồng quản trị` (Pre-existing server role. **DO NOT CREATE**).
-- **Clan Role**: Auto-created per clan (e.g., `Clan <Name>`). Assigned to all members.
+- **Clan Role**: Auto-created per clan (e.g., `<ClanName>`). Assigned to all members.
 
 ### Internal Roles
 - **Captain**: Creator of the clan. Full control.

@@ -473,7 +473,7 @@ class ClanCog(commands.Cog):
         if is_verified:
             roles.append("Verified")
         if clan_role:
-            roles.append(f"Clan {clan_role.title()}")
+            roles.append(clan_role.title())
         
         embed.set_footer(text=f"Your roles: {', '.join(roles) if roles else 'None'}")
         
@@ -977,8 +977,8 @@ class ClanCog(commands.Cog):
             )
             return
         
-        # Create clan role
-        role_name = f"Clan {clan['name']}"
+        # Create clan role (using clan name directly, no "Clan" prefix)
+        role_name = clan['name']
         try:
             clan_role = await guild.create_role(
                 name=role_name,
