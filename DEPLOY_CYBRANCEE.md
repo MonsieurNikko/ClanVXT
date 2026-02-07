@@ -1,111 +1,114 @@
-# 🚀 Cybrancee Deployment Guide
+# 🚀 Hướng dẫn Deploy lên Cybrancee
 
-## Prerequisites
-- Cybrancee account with Discord Bot Hosting plan
-- Discord Bot Token from [Discord Developer Portal](https://discord.com/developers/applications)
+## Bước 1: Tạo tài khoản Cybrancee
+1. Vào [cybrancee.com/discord-bot-hosting](https://cybrancee.com/discord-bot-hosting)
+2. Chọn gói **Starter ($1.49/tháng)** hoặc cao hơn
+3. Dùng mã **25OFF2026** để giảm giá
 
-## Step 1: Get Your Bot Token
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create New Application → Name it "ClanVXT"
-3. Go to **Bot** tab → Click "Add Bot"
-4. Copy the **Token** (keep it secret!)
-5. Enable **MESSAGE CONTENT INTENT** under Privileged Gateway Intents
-6. Go to **OAuth2 → URL Generator**
+---
+
+## Bước 2: Lấy Bot Token từ Discord
+1. Vào [Discord Developer Portal](https://discord.com/developers/applications)
+2. Tạo Application mới → Vào tab **Bot**
+3. Copy **Token** (giữ bí mật!)
+4. Bật **MESSAGE CONTENT INTENT**
+5. Tab **OAuth2** → URL Generator:
    - Scopes: `bot`, `applications.commands`
-   - Permissions: `Administrator` (or specific permissions)
-7. Copy URL and invite bot to your server
+   - Permissions: `Administrator`
+6. Copy URL và invite bot vào server
 
-## Step 2: Get Discord IDs
-You need these IDs from your Discord server:
+---
 
-| Variable | How to Get |
-|----------|------------|
-| `GUILD_ID` | Right-click server icon → Copy Server ID |
-| Role IDs | Right-click role → Copy Role ID |
-| Channel IDs | Right-click channel → Copy Channel ID |
+## Bước 3: Setup Git trên Cybrancee
 
-> **Enable Developer Mode**: Settings → Advanced → Developer Mode
+### 3.1. Tạo GitHub Personal Access Token
+1. Vào [GitHub Settings → Tokens](https://github.com/settings/tokens)
+2. Generate new token → **Classic** (không phải Fine-grained)
+3. Chọn scope: `repo`
+4. Copy token (chỉ hiện 1 lần!)
 
-## Step 3: Prepare Files
-Create a `.env` file in the project root:
+### 3.2. Cấu hình trên Cybrancee Panel
+1. Login vào [panel.cybrancee.com](https://panel.cybrancee.com)
+2. Vào tab **Startup**
+3. Điền các trường:
+
+| Field | Giá trị |
+|-------|---------|
+| **GIT REPO ADDRESS** | `https://github.com/MonsieurNikko/ClanVXT.git` |
+| **GIT BRANCH** | `main` |
+| **AUTO UPDATE** | ✅ ON |
+| **BOT PY FILE** | `main.py` |
+| **REQUIREMENTS FILE** | `requirements.txt` |
+| **GIT USERNAME** | Username GitHub của bạn |
+| **GIT ACCESS TOKEN** | Token vừa tạo ở bước 3.1 |
+
+4. **QUAN TRỌNG:** Xóa hết files trong File Manager trước khi setup Git
+5. Vào **Settings** → **Reinstall Server**
+
+---
+
+## Bước 4: Cấu hình Environment Variables
+
+Trong tab **Startup**, tìm phần **Variables** hoặc tạo file `.env`:
 
 ```env
 BOT_TOKEN=your_discord_bot_token_here
 GUILD_ID=your_server_id_here
 ```
 
-## Step 4: Upload to Cybrancee
+**Cách lấy GUILD_ID:**
+- Bật Developer Mode trong Discord (Settings → Advanced)
+- Click chuột phải vào server → Copy Server ID
 
-### Via SFTP (Recommended)
-1. Login to Cybrancee Panel
-2. Go to **Settings** → Copy SFTP credentials
-3. Use FileZilla to connect:
-   - Host: from panel
-   - Username: from panel
-   - Password: your panel password
-   - Port: from panel
-4. Upload ALL files to the server root
+---
 
-### Via Git Integration (Alternative)
-1. In Cybrancee Panel → **Settings** → Git Integration
-2. Enter your GitHub repo URL: `https://github.com/MonsieurNikko/ClanVXT.git`
-3. The bot will auto-pull latest code on restart
+## Bước 5: Start Bot
+1. Nhấn nút **Start** trong Dashboard
+2. Xem Console để check logs
+3. Nếu thấy `✅ Bot is ready!` → Thành công!
+4. Trong Discord, gõ `/clan help` để test
 
-## Step 5: Configure Cybrancee Panel
+---
 
-1. **Docker Image**: Select `Python 3.11` (or latest)
-2. **Startup Command**: `python main.py`
-3. **Dependencies**: Paste contents of `requirements.txt`:
-   ```
-   discord.py>=2.0.0
-   aiosqlite>=0.17.0
-   python-dotenv>=1.0.0
-   ```
+## 🔄 Cập nhật code sau này
 
-## Step 6: Set Environment Variables
-In Cybrancee Panel → **Startup** → Environment Variables:
+Khi bạn muốn update code:
+1. Push code lên GitHub: `git push`
+2. Vào Cybrancee → **Restart** bot
+3. Bot sẽ tự `git pull` và chạy code mới
 
-| Variable | Value |
-|----------|-------|
-| `BOT_TOKEN` | Your Discord bot token |
-| `GUILD_ID` | Your server ID |
+---
 
-## Step 7: Start the Bot
-1. Click **Start** in Cybrancee Panel
-2. Watch console for: `✅ Bot is ready!`
-3. In Discord, type `/clan help` to test
+## 💾 Về Database
+
+- Bot dùng **SQLite** (file `data/clan.db`)
+- File database **TỰ TẠO** khi bot chạy lần đầu
+- **KHÔNG BỊ MẤT** khi update code (vì không có trên Git)
+- Chỉ mất khi **Reinstall Server** → Nhớ backup trước!
+
+### Backup database:
+1. Vào tab **Files** trên Panel
+2. Download file `data/clan.db`
+3. Hoặc dùng tab **Backups** để backup toàn bộ
+
+---
 
 ## 🔧 Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Bot not starting | Check console for errors, verify token is correct |
-| Commands not showing | Wait 1 hour for sync, or kick/re-invite bot |
-| Database errors | Check `data/` folder exists, bot has write permission |
-| "Guild not found" | Verify GUILD_ID is correct |
+| Lỗi | Giải pháp |
+|-----|-----------|
+| Bot không start | Check Console, xem lỗi gì |
+| "Token invalid" | Kiểm tra lại BOT_TOKEN |
+| "Guild not found" | Kiểm tra GUILD_ID |
+| Commands không hiện | Chờ 1 tiếng hoặc kick/invite lại bot |
+| Database error | Check file `data/clan.db` có tồn tại không |
 
-## 📂 File Structure on Cybrancee
-```
-/
-├── main.py          ← Startup file
-├── config.py
-├── requirements.txt
-├── .env             ← Your secrets (create this!)
-├── cogs/
-├── services/
-├── data/
-│   └── clan.db      ← Created automatically
-└── db/
-    └── schema.sql
-```
+---
 
-## 🔄 Updating the Bot
-1. Push changes to GitHub
-2. In Cybrancee Panel → Restart (if using Git Integration)
-3. Or re-upload files via SFTP
+## 📞 Hỗ trợ
+- Cybrancee Discord: [discord.gg/cY5wawVnnQ](https://discord.gg/cY5wawVnnQ)
+- Cybrancee Support: 24/7
 
-## 💾 Database Backup
-Cybrancee has **scheduled backups**. You can also:
-1. Go to Cybrancee Panel → **Backups**
-2. Create manual backup before major changes
-3. Download `data/clan.db` via SFTP for local backup
+---
+
+> 🎉 Chúc bạn deploy thành công!
