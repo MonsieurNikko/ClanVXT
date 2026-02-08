@@ -287,13 +287,13 @@ async def get_clan_members(clan_id: int) -> List[Dict[str, Any]]:
 
 
 async def get_user_clan(user_id: int) -> Optional[Dict[str, Any]]:
-    """Get the clan a user belongs to."""
+    """Get the clan a user belongs to (excludes disbanded/cancelled clans)."""
     async with get_connection() as conn:
         cursor = await conn.execute(
             """SELECT c.*, cm.role as member_role
                FROM clans c
                JOIN clan_members cm ON c.id = cm.clan_id
-               WHERE cm.user_id = ?""",
+               WHERE cm.user_id = ? AND c.status NOT IN ('disbanded', 'cancelled', 'rejected')""",
             (user_id,)
         )
         row = await cursor.fetchone()
