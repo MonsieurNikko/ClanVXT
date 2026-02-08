@@ -309,3 +309,8 @@ class LoanCog(commands.Cog):
             "LOAN_CANCELLED",
             f"Loan {loan_id} cancelled by {interaction.user.mention}"
         )
+
+
+async def setup(bot: commands.Bot):
+    """Required setup function for loading the cog."""
+    await bot.add_cog(LoanCog(bot))

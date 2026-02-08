@@ -312,3 +312,8 @@ class TransferCog(commands.Cog):
             "TRANSFER_CANCELLED",
             f"Transfer {transfer_id} cancelled by {interaction.user.mention}"
         )
+
+
+async def setup(bot: commands.Bot):
+    """Required setup function for loading the cog."""
+    await bot.add_cog(TransferCog(bot))
