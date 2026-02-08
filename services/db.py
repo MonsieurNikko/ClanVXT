@@ -5,7 +5,7 @@ Async SQLite operations using aiosqlite
 
 import aiosqlite
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
@@ -620,7 +620,7 @@ async def activate_loan(loan_id: int) -> None:
         if not row:
             raise ValueError(f"Loan {loan_id} not found")
         
-        start_at = datetime.utcnow()
+        start_at = datetime.now(timezone.utc)
         end_at = start_at + timedelta(days=row["duration_days"])
         
         await conn.execute(
@@ -777,7 +777,7 @@ async def get_cooldown(target_type: str, target_id: int, kind: str) -> Optional[
 async def set_cooldown(target_type: str, target_id: int, kind: str, duration_days: int, reason: str) -> None:
     """Set or update a cooldown."""
     async with get_connection() as conn:
-        until = (datetime.utcnow() + timedelta(days=duration_days)).isoformat()
+        until = (datetime.now(timezone.utc) + timedelta(days=duration_days)).isoformat()
         await conn.execute(
             """INSERT INTO cooldowns (target_type, target_id, kind, until, reason)
                VALUES (?, ?, ?, ?, ?)
@@ -864,7 +864,7 @@ async def update_case_status(case_id: int, status: str) -> None:
 async def resolve_case(case_id: int, mod_id: int, verdict: str, verdict_reason: str, punishment: Optional[str] = None) -> None:
     """Resolve a case with verdict."""
     async with get_connection() as conn:
-        appeal_deadline = (datetime.utcnow() + timedelta(days=7)).isoformat()
+        appeal_deadline = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
         
         await conn.execute(
             """UPDATE cases SET 

@@ -3,7 +3,7 @@ Cooldown Management Service
 Centralized logic for checking and applying cooldowns.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Tuple, Dict, Any
 from services import db
 
@@ -50,7 +50,7 @@ async def check_member_join_cooldown(user_id: int) -> Tuple[bool, Optional[str]]
     user = await db.get_user_by_id(user_id)
     if user and user.get("cooldown_until"):
         until_dt = datetime.fromisoformat(user["cooldown_until"])
-        if until_dt > datetime.utcnow():
+        if until_dt > datetime.now(timezone.utc).replace(tzinfo=None):
             return True, user["cooldown_until"]
             
     return False, None

@@ -4,7 +4,7 @@ Implements Elo rating formula with anti-farm mechanics
 """
 
 from typing import Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from services import db
 
 # Constants
@@ -66,7 +66,7 @@ async def count_elo_matches_between_clans(clan_a_id: int, clan_b_id: int) -> int
     Order-independent (A vs B = B vs A).
     """
     async with db.get_connection() as conn:
-        cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         cursor = await conn.execute(
             """SELECT COUNT(*) as count FROM matches 
                WHERE ((clan_a_id = ? AND clan_b_id = ?) OR (clan_a_id = ? AND clan_b_id = ?))
