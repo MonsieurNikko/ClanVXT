@@ -635,6 +635,281 @@ class AdminCog(commands.Cog):
         else:
             await interaction.response.send_message(f"Clan **{clan['name']}** không bị đóng băng.", ephemeral=True)
 
+    # =========================================================================
+    # DASHBOARD COMMAND
+    # =========================================================================
+    
+    @admin_group.command(name="dashboard", description="View database overview with all clans, members, matches")
+    async def admin_dashboard(self, interaction: discord.Interaction):
+        """Show admin dashboard with database overview."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        view = DashboardView(self.bot)
+        embed = await view.get_overview_embed()
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+
+# =============================================================================
+# DASHBOARD VIEW
+# =============================================================================
+
+class DashboardView(discord.ui.View):
+    """Dashboard with tabs for admin overview."""
+    
+    def __init__(self, bot: commands.Bot):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.current_page = 0
+        self.current_tab = "overview"
+    
+    async def get_overview_embed(self) -> discord.Embed:
+        """Get overview/stats embed."""
+        async with db.get_connection() as conn:
+            # Count clans by status
+            cursor = await conn.execute("SELECT status, COUNT(*) FROM clans GROUP BY status")
+            clan_stats = {row[0]: row[1] for row in await cursor.fetchall()}
+            
+            # Count total users
+            cursor = await conn.execute("SELECT COUNT(*) FROM users")
+            total_users = (await cursor.fetchone())[0]
+            
+            # Count total matches by status
+            cursor = await conn.execute("SELECT status, COUNT(*) FROM matches GROUP BY status")
+            match_stats = {row[0]: row[1] for row in await cursor.fetchall()}
+            
+            # Active loans
+            cursor = await conn.execute("SELECT COUNT(*) FROM loans WHERE status = 'active'")
+            active_loans = (await cursor.fetchone())[0]
+            
+            # Pending transfers
+            cursor = await conn.execute("SELECT COUNT(*) FROM transfers WHERE status = 'requested'")
+            pending_transfers = (await cursor.fetchone())[0]
+            
+            # Pending invites
+            cursor = await conn.execute("SELECT COUNT(*) FROM invite_requests WHERE status = 'pending'")
+            pending_invites = (await cursor.fetchone())[0]
+        
+        embed = discord.Embed(
+            title="📊 Admin Dashboard - Overview",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Clan stats
+        clan_text = f"🟢 Active: **{clan_stats.get('active', 0)}**\n"
+        clan_text += f"🟡 Pending: **{clan_stats.get('pending_approval', 0)}**\n"
+        clan_text += f"⏳ Waiting Accept: **{clan_stats.get('waiting_accept', 0)}**\n"
+        clan_text += f"🔴 Inactive: **{clan_stats.get('inactive', 0)}**\n"
+        clan_text += f"❄️ Frozen: **{clan_stats.get('frozen', 0)}**\n"
+        clan_text += f"💀 Disbanded: **{clan_stats.get('disbanded', 0)}**"
+        embed.add_field(name="🏰 Clans", value=clan_text, inline=True)
+        
+        # User stats
+        user_text = f"👥 Total Users: **{total_users}**\n"
+        user_text += f"📨 Pending Invites: **{pending_invites}**"
+        embed.add_field(name="👤 Users", value=user_text, inline=True)
+        
+        # Match stats
+        total_matches = sum(match_stats.values())
+        match_text = f"📊 Total: **{total_matches}**\n"
+        match_text += f"✅ Confirmed: **{match_stats.get('confirmed', 0)}**\n"
+        match_text += f"⚠️ Disputed: **{match_stats.get('dispute', 0)}**\n"
+        match_text += f"⏳ Created: **{match_stats.get('created', 0)}**"
+        embed.add_field(name="⚔️ Matches", value=match_text, inline=True)
+        
+        # Operations
+        ops_text = f"🔄 Active Loans: **{active_loans}**\n"
+        ops_text += f"📦 Pending Transfers: **{pending_transfers}**"
+        embed.add_field(name="📋 Operations", value=ops_text, inline=False)
+        
+        embed.set_footer(text="Use dropdown to view details")
+        return embed
+    
+    async def get_clans_embed(self, page: int = 0) -> discord.Embed:
+        """Get clans list embed with pagination."""
+        async with db.get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT c.id, c.name, c.status, c.elo, c.matches_played,
+                       (SELECT COUNT(*) FROM clan_members WHERE clan_id = c.id) as member_count
+                FROM clans c
+                WHERE c.status NOT IN ('disbanded', 'cancelled', 'rejected')
+                ORDER BY c.elo DESC
+                LIMIT 10 OFFSET ?
+            """, (page * 10,))
+            clans = await cursor.fetchall()
+            
+            cursor = await conn.execute("SELECT COUNT(*) FROM clans WHERE status NOT IN ('disbanded', 'cancelled', 'rejected')")
+            total = (await cursor.fetchone())[0]
+        
+        embed = discord.Embed(
+            title=f"🏰 All Clans (Page {page + 1}/{max(1, (total + 9) // 10)})",
+            color=discord.Color.green()
+        )
+        
+        if not clans:
+            embed.description = "No clans found."
+            return embed
+        
+        description = "```\n"
+        description += f"{'Clan':<20} {'Elo':<6} {'M':<4} {'Status':<10}\n"
+        description += "-" * 44 + "\n"
+        for clan in clans:
+            status_icon = {"active": "🟢", "inactive": "🔴", "frozen": "❄️", "pending_approval": "🟡", "waiting_accept": "⏳"}.get(clan[2], "❓")
+            name = clan[1][:18] + ".." if len(clan[1]) > 20 else clan[1]
+            description += f"{name:<20} {clan[3]:<6} {clan[5]:<4} {status_icon}{clan[2][:8]}\n"
+        description += "```"
+        embed.description = description
+        embed.set_footer(text=f"M = Members | Total: {total} clans")
+        
+        self.total_pages = max(1, (total + 9) // 10)
+        return embed
+    
+    async def get_members_embed(self, page: int = 0) -> discord.Embed:
+        """Get members list with clan info."""
+        async with db.get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT u.discord_id, u.riot_id, u.is_banned, cm.role, c.name as clan_name
+                FROM users u
+                LEFT JOIN clan_members cm ON u.id = cm.user_id
+                LEFT JOIN clans c ON cm.clan_id = c.id AND c.status IN ('active', 'inactive', 'frozen')
+                ORDER BY c.name, cm.role DESC
+                LIMIT 15 OFFSET ?
+            """, (page * 15,))
+            members = await cursor.fetchall()
+            
+            cursor = await conn.execute("SELECT COUNT(*) FROM users")
+            total = (await cursor.fetchone())[0]
+        
+        embed = discord.Embed(
+            title=f"👥 All Members (Page {page + 1}/{max(1, (total + 14) // 15)})",
+            color=discord.Color.purple()
+        )
+        
+        if not members:
+            embed.description = "No members found."
+            return embed
+        
+        description = "```\n"
+        description += f"{'Discord ID':<20} {'Role':<8} {'Clan':<15}\n"
+        description += "-" * 45 + "\n"
+        for m in members:
+            role_icon = {"captain": "👑", "vice": "⚔️", "member": "👤"}.get(m[3], "–")
+            clan = (m[4][:13] + "..") if m[4] and len(m[4]) > 15 else (m[4] or "–")
+            discord_id = str(m[0])[-8:]  # Last 8 digits
+            description += f"...{discord_id:<17} {role_icon}{(m[3] or '–'):<6} {clan}\n"
+        description += "```"
+        embed.description = description
+        embed.set_footer(text=f"Total: {total} users")
+        
+        self.total_pages = max(1, (total + 14) // 15)
+        return embed
+    
+    async def get_matches_embed(self, page: int = 0) -> discord.Embed:
+        """Get recent matches."""
+        async with db.get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT m.id, ca.name, cb.name, m.status, m.created_at,
+                       CASE WHEN m.reported_winner_clan_id = m.clan_a_id THEN 'A'
+                            WHEN m.reported_winner_clan_id = m.clan_b_id THEN 'B'
+                            ELSE '–' END as winner
+                FROM matches m
+                JOIN clans ca ON m.clan_a_id = ca.id
+                JOIN clans cb ON m.clan_b_id = cb.id
+                ORDER BY m.created_at DESC
+                LIMIT 10 OFFSET ?
+            """, (page * 10,))
+            matches = await cursor.fetchall()
+            
+            cursor = await conn.execute("SELECT COUNT(*) FROM matches")
+            total = (await cursor.fetchone())[0]
+        
+        embed = discord.Embed(
+            title=f"⚔️ Recent Matches (Page {page + 1}/{max(1, (total + 9) // 10)})",
+            color=discord.Color.orange()
+        )
+        
+        if not matches:
+            embed.description = "No matches found."
+            return embed
+        
+        description = "```\n"
+        description += f"{'ID':<5} {'Clan A vs B':<25} {'W':<3} {'Status':<10}\n"
+        description += "-" * 45 + "\n"
+        for m in matches:
+            clan_a = m[1][:10] + ".." if len(m[1]) > 12 else m[1]
+            clan_b = m[2][:10] + ".." if len(m[2]) > 12 else m[2]
+            status_icon = {"confirmed": "✅", "dispute": "⚠️", "created": "⏳", "reported": "📝", "resolved": "✔️", "cancelled": "❌"}.get(m[3], "❓")
+            description += f"{m[0]:<5} {clan_a} vs {clan_b:<10} {m[5]:<3} {status_icon}{m[3][:8]}\n"
+        description += "```"
+        embed.description = description
+        embed.set_footer(text=f"W = Winner (A/B) | Total: {total} matches")
+        
+        self.total_pages = max(1, (total + 9) // 10)
+        return embed
+    
+    @discord.ui.select(
+        placeholder="Select tab...",
+        options=[
+            discord.SelectOption(label="Overview", value="overview", emoji="📊", description="System stats overview"),
+            discord.SelectOption(label="Clans", value="clans", emoji="🏰", description="All clans with Elo"),
+            discord.SelectOption(label="Members", value="members", emoji="👥", description="All registered members"),
+            discord.SelectOption(label="Matches", value="matches", emoji="⚔️", description="Recent matches"),
+        ]
+    )
+    async def tab_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle tab selection."""
+        self.current_tab = select.values[0]
+        self.current_page = 0
+        
+        if self.current_tab == "overview":
+            embed = await self.get_overview_embed()
+        elif self.current_tab == "clans":
+            embed = await self.get_clans_embed()
+        elif self.current_tab == "members":
+            embed = await self.get_members_embed()
+        elif self.current_tab == "matches":
+            embed = await self.get_matches_embed()
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Previous page."""
+        if self.current_page > 0:
+            self.current_page -= 1
+        
+        if self.current_tab == "clans":
+            embed = await self.get_clans_embed(self.current_page)
+        elif self.current_tab == "members":
+            embed = await self.get_members_embed(self.current_page)
+        elif self.current_tab == "matches":
+            embed = await self.get_matches_embed(self.current_page)
+        else:
+            embed = await self.get_overview_embed()
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Next page."""
+        self.current_page += 1
+        if hasattr(self, 'total_pages') and self.current_page >= self.total_pages:
+            self.current_page = self.total_pages - 1
+        
+        if self.current_tab == "clans":
+            embed = await self.get_clans_embed(self.current_page)
+        elif self.current_tab == "members":
+            embed = await self.get_members_embed(self.current_page)
+        elif self.current_tab == "matches":
+            embed = await self.get_matches_embed(self.current_page)
+        else:
+            embed = await self.get_overview_embed()
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+
 
 # =============================================================================
 # SETUP
