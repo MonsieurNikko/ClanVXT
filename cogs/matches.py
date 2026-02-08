@@ -413,8 +413,12 @@ class MatchesCog(commands.Cog):
             return
         
         custom_id = interaction.data.get("custom_id", "")
-        if custom_id:
-            print(f"[DEBUG] Interaction by {interaction.user.id}: {custom_id}")
+        
+        # Early return if not a match interaction
+        if not custom_id.startswith("match_"):
+            return
+        
+        print(f"[DEBUG] Match Interaction by {interaction.user.id}: {custom_id}")
         
         # Check if already handled
         if interaction.response.is_done():

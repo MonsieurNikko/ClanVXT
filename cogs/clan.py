@@ -457,13 +457,14 @@ class ClanCog(commands.Cog):
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan accept button click."""
-        print(f"[DEBUG] User {user_id} clicked ACCEPT for Clan ID {clan_id}")
+        discord_user = interaction.user
+        print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm ACCEPT cho Clan ID {clan_id}")
         
         # Check if request exists (any status) to see if we've already processed it
         request = await db.get_user_request_any_status(clan_id, user_id)
         
         if not request:
-            print(f"[DEBUG] No request found for user {user_id} in clan {clan_id}")
+            print(f"[DEBUG] Không tìm thấy yêu cầu cho @{discord_user.name} trong clan {clan_id}")
             await interaction.response.edit_message(
                 content="Yêu cầu ứng tuyển này đã hết hạn hoặc bị hủy.",
                 view=None
@@ -477,15 +478,15 @@ class ClanCog(commands.Cog):
         # If already accepted but clan still waiting_accept, we might be recovering from a crash
         # or it's a double click. Either way, we proceed to check completion.
         if request["status"] == "accepted":
-            print(f"[DEBUG] User {user_id} already accepted. Proceeding to completion check.")
+            print(f"[DEBUG] @{discord_user.name} đã accept rồi. Tiến hành kiểm tra hoàn thành...")
         elif request["status"] == "pending":
-            print(f"[DEBUG] Accepting request for user {user_id}...")
+            print(f"[DEBUG] Đang xử lý ACCEPT cho @{discord_user.name}...")
             # Accept the request
             await db.accept_create_request(clan_id, user_id)
             # Add user to clan_members (idempotent)
             await db.add_member(user_id, clan_id, "member")
         else:
-            print(f"[DEBUG] Request status for user {user_id} is '{request['status']}'.")
+            print(f"[DEBUG] Yêu cầu của @{discord_user.name} đang ở trạng thái: '{request['status']}'.")
             await interaction.response.edit_message(
                 content=f"Yêu cầu của bạn đang ở trạng thái: **{request['status']}**.",
                 view=None
@@ -494,7 +495,7 @@ class ClanCog(commands.Cog):
         
         # Check if all 4 accepted
         all_accepted = await db.check_all_accepted(clan_id)
-        print(f"[DEBUG] Clan {clan_id} all_accepted status: {all_accepted}")
+        print(f"[DEBUG] Clan '{clan_name}' (ID: {clan_id}) - Đủ 4 người: {all_accepted}")
         
         # Only acknowledge on the interaction if it hasn't been acknowledged yet
         # If the interaction was a double-click, it might already be acknowledged
@@ -503,7 +504,8 @@ class ClanCog(commands.Cog):
                 content=f"✅ Bạn đã **chấp nhận** tham gia clan **{clan_name}**!",
                 view=None
             )
-        except discord.errors.InteractionResponded:
+        except (discord.errors.InteractionResponded, discord.errors.HTTPException):
+            # Interaction already handled by another listener or timed out
             pass
         
         if all_accepted:
@@ -540,12 +542,13 @@ class ClanCog(commands.Cog):
 
     async def handle_clan_decline(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan decline button click."""
-        print(f"[DEBUG] User {user_id} clicked DECLINE for Clan ID {clan_id}")
+        discord_user = interaction.user
+        print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm DECLINE cho Clan ID {clan_id}")
         # Check if request exists (any status)
         request = await db.get_user_request_any_status(clan_id, user_id)
         
         if not request:
-            print(f"[DEBUG] No request found for user {user_id} in clan {clan_id}")
+            print(f"[DEBUG] Không tìm thấy yêu cầu cho @{discord_user.name} trong clan {clan_id}")
             await interaction.response.edit_message(
                 content="Lời mời này đã hết hạn hoặc đã bị hủy.",
                 view=None
@@ -556,7 +559,7 @@ class ClanCog(commands.Cog):
         clan = await db.get_clan_by_id(clan_id)
         clan_name = clan["name"] if clan else "Unknown"
         
-        print(f"[DEBUG] Declining request and cancelling clan creation for '{clan_name}'...")
+        print(f"[DEBUG] @{discord_user.name} từ chối - Hủy tạo clan '{clan_name}'...")
         # Decline the request
         await db.decline_create_request(clan_id, user_id)
         
@@ -601,14 +604,14 @@ class ClanCog(commands.Cog):
                 clan_role = clan_data.get("member_role")
         
         embed = discord.Embed(
-            title="🏰 Clan System - Help",
+            title="🏰 Hệ Thống Clan - Hướng Dẫn",
             color=discord.Color.blue()
         )
         
         # Basic commands (everyone)
         basic_cmds = """
-`/clan register` - Đăng ký sử dụng hệ thống clan
-`/clan info [name]` - Xem thông tin clan
+`/clan register` - Đăng ký vào hệ thống (bắt buộc trước khi tạo clan)
+`/clan info [tên]` - Xem thông tin của một clan
 `/clan help` - Hiển thị hướng dẫn này
 """
         embed.add_field(name="📋 Lệnh Cơ Bản", value=basic_cmds, inline=False)
@@ -616,56 +619,59 @@ class ClanCog(commands.Cog):
         # Verified user commands
         if is_verified:
             user_cmds = """
-`/clan create` - Tạo clan mới (cần bạn + 4 thành viên)
-`/clan leave` - Rời khỏi clan hiện tại (chờ 14 ngày)
+`/clan create <tên> @member1 @member2 @member3 @member4` - Tạo clan mới (bạn + 4 người)
+`/clan accept` - Chấp nhận lời mời vào clan
+`/clan decline` - Từ chối lời mời vào clan
+`/clan leave` - Rời khỏi clan hiện tại (cooldown 14 ngày)
 """
             embed.add_field(name="👤 Lệnh Thành Viên", value=user_cmds, inline=False)
         
         # Match commands (any clan member)
         if clan_role:
             match_cmds = """
-`/match create <opponent_clan> [note]` - Tạo trận đấu với clan khác
-• Nút: **Báo thắng** (chỉ người tạo), **Hủy** (trước khi báo kết quả)
-• Sau khi báo kết quả: **Xác nhận** / **Tranh chấp** (clan đối thủ)
+`/match create <tên_clan_đối_thủ> [ghi_chú]` - Tạo trận đấu
+• Nút **Báo Thắng**: Chỉ người tạo trận mới có thể bấm
+• Nút **Hủy**: Hủy trận (trước khi báo kết quả)
+• Sau khi báo: Clan đối thủ bấm **Xác Nhận** hoặc **Tranh Chấp**
 """
-            embed.add_field(name="⚔️ Match Commands", value=match_cmds, inline=False)
+            embed.add_field(name="⚔️ Lệnh Trận Đấu", value=match_cmds, inline=False)
         
         # Captain commands
         if clan_role == "captain":
             captain_cmds = """
-`/clan promote_vice @user` - Promote member to Vice Captain
-`/clan demote_vice @user` - Demote Vice Captain to Member
-`/clan kick @user` - Kick a member from your clan
-`/clan disband` - Disband your entire clan
+`/clan promote_vice @member` - Thăng cấp thành viên lên Đội Phó
+`/clan demote_vice @member` - Giáng cấp Đội Phó xuống Thành Viên
+`/clan kick @member` - Kick thành viên khỏi clan
+`/clan disband` - Giải tán clan (yêu cầu xác nhận)
 """
-            embed.add_field(name="👑 Captain Commands", value=captain_cmds, inline=False)
+            embed.add_field(name="👑 Lệnh Đội Trưởng", value=captain_cmds, inline=False)
         
         # Mod commands
         if is_mod:
             mod_cmds = """
-`/mod clan approve <name>` - Approve a pending clan
-`/mod clan reject <name> <reason>` - Reject a pending clan
-`/mod clan delete <name>` - Hard delete any clan
-`/admin match resolve <id> <winner> <reason>` - Resolve disputed match
+`/mod clan approve <tên>` - Duyệt clan đang chờ
+`/mod clan reject <tên> <lý_do>` - Từ chối clan
+`/mod clan delete <tên>` - Xóa vĩnh viễn một clan
+`/admin match resolve <id> <người_thắng> <lý_do>` - Xử lý tranh chấp
 """
-            embed.add_field(name="🛡️ Mod Commands", value=mod_cmds, inline=False)
+            embed.add_field(name="🛡️ Lệnh Mod", value=mod_cmds, inline=False)
         
         # Elo info (show if in clan)
         if clan_role:
             elo_txt = """
-• **K-Factor**: 24 | **Start Elo**: 1000
-• **Anti-farm**: 1st=100%, 2nd=70%, 3rd=40%, 4th+=20%
-• Elo applies only if both clans are **active**
+• **K-Factor**: 24 | **Elo Khởi Điểm**: 1000
+• **Chống farm**: Trận 1=100%, Trận 2=70%, Trận 3=40%, Trận 4+=20%
+• Elo chỉ tính khi cả 2 clan đều **active**
 """
-            embed.add_field(name="📊 Elo Rules", value=elo_txt, inline=False)
+            embed.add_field(name="📊 Quy Tắc Elo", value=elo_txt, inline=False)
         
         # Info section
         info_txt = """
-• Clans need **5 members** to be approved
-• If members drop below 5, clan becomes **inactive**
-• Leaving a clan = **14-day cooldown** before joining another
+• Clan cần **5 thành viên** để được duyệt
+• Nếu thành viên giảm xuống dưới 5, clan trở thành **inactive**
+• Rời clan = **cooldown 14 ngày** trước khi tham gia clan khác
 """
-        embed.add_field(name="ℹ️ Info", value=info_txt, inline=False)
+        embed.add_field(name="ℹ️ Thông Tin Chung", value=info_txt, inline=False)
         
         # Footer with role info
         roles = []

@@ -188,8 +188,12 @@ class LoanCog(commands.Cog):
             return
         
         custom_id = interaction.data.get("custom_id", "")
-        if custom_id:
-            print(f"[DEBUG] Loan Interaction by {interaction.user.id}: {custom_id}")
+        
+        # Early return if not a loan interaction
+        if not custom_id.startswith("loan_"):
+            return
+        
+        print(f"[DEBUG] Loan Interaction by {interaction.user.id}: {custom_id}")
         
         if interaction.response.is_done():
             return

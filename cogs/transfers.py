@@ -221,8 +221,12 @@ class TransferCog(commands.Cog):
             return
         
         custom_id = interaction.data.get("custom_id", "")
-        if custom_id:
-            print(f"[DEBUG] Transfer Interaction by {interaction.user.id}: {custom_id}")
+        
+        # Early return if not a transfer interaction
+        if not custom_id.startswith("transfer_"):
+            return
+        
+        print(f"[DEBUG] Transfer Interaction by {interaction.user.id}: {custom_id}")
         
         if interaction.response.is_done():
             return
