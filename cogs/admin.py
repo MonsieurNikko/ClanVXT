@@ -793,13 +793,14 @@ class DashboardView(discord.ui.View):
             return embed
         
         description = "```\n"
-        description += f"{'Discord ID':<20} {'Role':<8} {'Clan':<15}\n"
+        description += f"{'Name (Riot ID)':<20} {'Role':<8} {'Clan':<15}\n"
         description += "-" * 45 + "\n"
         for m in members:
             role_icon = {"captain": "👑", "vice": "⚔️", "member": "👤"}.get(m[3], "–")
             clan = (m[4][:13] + "..") if m[4] and len(m[4]) > 15 else (m[4] or "–")
-            discord_id = str(m[0])[-8:]  # Last 8 digits
-            description += f"...{discord_id:<17} {role_icon}{(m[3] or '–'):<6} {clan}\n"
+            # Show Riot ID instead of Discord ID
+            name = (m[1][:17] + "..") if len(m[1]) > 19 else m[1]
+            description += f"{name:<20} {role_icon}{(m[3] or '–'):<6} {clan}\n"
         description += "```"
         embed.description = description
         embed.set_footer(text=f"Total: {total} users")
