@@ -34,10 +34,32 @@ async def get_connection():
 async def init_db() -> None:
     """Initialize database by executing schema.sql."""
     async with get_connection() as conn:
+        # Get existing tables before init
+        cursor = await conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
+        existing_tables = {row[0] for row in await cursor.fetchall()}
+        
+        # Execute schema
         schema = SCHEMA_PATH.read_text(encoding="utf-8")
         await conn.executescript(schema)
         await conn.commit()
+        
+        # Get tables after init
+        cursor = await conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
+        all_tables = {row[0] for row in await cursor.fetchall()}
+        
+        # Check for new tables
+        new_tables = all_tables - existing_tables
+        
         print(f"Database initialized at {DB_PATH}")
+        if new_tables:
+            print(f"  ✓ New tables created: {', '.join(sorted(new_tables))}")
+        else:
+            print(f"  ✓ Schema up to date ({len(all_tables)} tables)")
+
 
 
 # =============================================================================
