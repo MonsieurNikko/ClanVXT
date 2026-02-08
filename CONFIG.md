@@ -14,7 +14,7 @@
 | `CHANNEL_MOD_LOG` | `log` | Text channel for system logs. |
 | `CATEGORY_CLANS` | `CLANS` | Category where clan private channels are created. |
 
-| `CLAN_CREATE_TIMEOUT` | `48h` | Time to gather 5 acceptances. |
+| `CLAN_CREATE_TIMEOUT` | `48h` | Time to gather 4 acceptances (Captain + 4 = 5 total). |
 | `MIN_MEMBERS_ACTIVE` | `5` | Minimum members to keep clan active. |
 | `COOLDOWN_DAYS` | `14d` | Cooldown after leaving/kick (join/leave cooldown). |
 | `LOAN_DAYS_MAX` | `7d` | Maximum duration for a member loan. |

@@ -421,6 +421,128 @@ class PersistentAcceptDeclineView(discord.ui.View):
         pass
 
 
+class InviteAcceptDeclineView(discord.ui.View):
+    """View for accepting/declining clan invitation to an existing active clan (sent via DM)."""
+    
+    def __init__(self, invite_id: int, clan_id: int, user_id: int, clan_name: str, invited_by_name: str):
+        super().__init__(timeout=None)  # Persistent view
+        self.invite_id = invite_id
+        self.clan_id = clan_id
+        self.user_id = user_id
+        self.clan_name = clan_name
+        self.invited_by_name = invited_by_name
+        
+        # Add buttons with dynamic custom_ids
+        accept_btn = discord.ui.Button(
+            label="Accept",
+            style=discord.ButtonStyle.green,
+            custom_id=f"invite_accept:{invite_id}:{user_id}"
+        )
+        accept_btn.callback = self.accept_callback
+        self.add_item(accept_btn)
+        
+        decline_btn = discord.ui.Button(
+            label="Decline",
+            style=discord.ButtonStyle.red,
+            custom_id=f"invite_decline:{invite_id}:{user_id}"
+        )
+        decline_btn.callback = self.decline_callback
+        self.add_item(decline_btn)
+    
+    async def accept_callback(self, interaction: discord.Interaction):
+        # Check if invite still exists and is pending
+        invite = await db.get_invite_by_id(self.invite_id)
+        if not invite or invite["status"] != "pending":
+            await interaction.response.edit_message(
+                content="Lời mời này đã hết hạn hoặc bị hủy.",
+                view=None
+            )
+            return
+        
+        # Get user record (auto-register if needed)
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await db.create_user(str(interaction.user.id), f"{interaction.user.name}#0000")
+            user = await db.get_user(str(interaction.user.id))
+        
+        # Check if user is already in a clan
+        existing_clan = await db.get_user_clan(user["id"])
+        if existing_clan:
+            await interaction.response.edit_message(
+                content=f"❌ Bạn đã ở trong clan **{existing_clan['name']}** rồi. Hãy rời clan trước khi tham gia clan khác.",
+                view=None
+            )
+            return
+        
+        # Check cooldown
+        if user.get("cooldown_until"):
+            from datetime import datetime, timezone
+            cooldown = datetime.fromisoformat(user["cooldown_until"].replace('Z', '+00:00'))
+            if cooldown > datetime.now(timezone.utc):
+                await interaction.response.edit_message(
+                    content=f"❌ Bạn đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
+                    view=None
+                )
+                return
+        
+        # Accept the invite
+        success = await db.accept_invite(self.invite_id)
+        if not success:
+            await interaction.response.edit_message(
+                content="Không thể xử lý lời mời. Vui lòng thử lại.",
+                view=None
+            )
+            return
+        
+        # Add user to clan
+        await db.add_member(user["id"], self.clan_id, "member")
+        
+        # Assign Discord role if exists
+        clan = await db.get_clan_by_id(self.clan_id)
+        if clan and clan.get("discord_role_id") and interaction.guild:
+            try:
+                role = interaction.guild.get_role(int(clan["discord_role_id"]))
+                if role:
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if member:
+                        await member.add_roles(role)
+            except Exception as e:
+                print(f"[DEBUG] Failed to assign role: {e}")
+        
+        await interaction.response.edit_message(
+            content=f"✅ Bạn đã tham gia clan **{self.clan_name}** thành công!",
+            view=None
+        )
+        
+        await bot_utils.log_event(
+            "MEMBER_JOINED",
+            f"{interaction.user.mention} joined clan '{self.clan_name}' via invite from {self.invited_by_name}"
+        )
+    
+    async def decline_callback(self, interaction: discord.Interaction):
+        # Check if invite still exists and is pending
+        invite = await db.get_invite_by_id(self.invite_id)
+        if not invite or invite["status"] != "pending":
+            await interaction.response.edit_message(
+                content="Lời mời này đã hết hạn hoặc bị hủy.",
+                view=None
+            )
+            return
+        
+        # Decline the invite
+        await db.decline_invite(self.invite_id)
+        
+        await interaction.response.edit_message(
+            content=f"❌ Bạn đã **từ chối** lời mời tham gia **{self.clan_name}**.",
+            view=None
+        )
+        
+        await bot_utils.log_event(
+            "INVITE_DECLINED",
+            f"{interaction.user.mention} declined invite to clan '{self.clan_name}'"
+        )
+
+
 # =============================================================================
 # COG DEFINITION
 # =============================================================================
@@ -610,7 +732,6 @@ class ClanCog(commands.Cog):
         
         # Basic commands (everyone)
         basic_cmds = """
-`/clan register` - Đăng ký vào hệ thống (bắt buộc trước khi tạo clan)
 `/clan info [tên]` - Xem thông tin của một clan
 `/clan help` - Hiển thị hướng dẫn này
 """
@@ -619,10 +740,9 @@ class ClanCog(commands.Cog):
         # Verified user commands
         if is_verified:
             user_cmds = """
-`/clan create <tên> @member1 @member2 @member3 @member4` - Tạo clan mới (bạn + 4 người)
-`/clan accept` - Chấp nhận lời mời vào clan
-`/clan decline` - Từ chối lời mời vào clan
+`/clan create` - Tạo clan mới (mở modal, chọn 4 người)
 `/clan leave` - Rời khỏi clan hiện tại (cooldown 14 ngày)
+• **Lời mời clan**: Nhận và phản hồi qua **DM** (nút Accept/Decline)
 """
             embed.add_field(name="👤 Lệnh Thành Viên", value=user_cmds, inline=False)
         
@@ -636,7 +756,14 @@ class ClanCog(commands.Cog):
 """
             embed.add_field(name="⚔️ Lệnh Trận Đấu", value=match_cmds, inline=False)
         
-        # Captain commands
+        # Captain/Vice commands
+        if clan_role in ("captain", "vice"):
+            capvice_cmds = """
+`/clan invite @member` - Mời người vào clan (gửi DM)
+"""
+            embed.add_field(name="⚔️ Lệnh Captain/Vice", value=capvice_cmds, inline=False)
+        
+        # Captain only commands
         if clan_role == "captain":
             captain_cmds = """
 `/clan promote_vice @member` - Thăng cấp thành viên lên Đội Phó
@@ -652,7 +779,7 @@ class ClanCog(commands.Cog):
 `/mod clan approve <tên>` - Duyệt clan đang chờ
 `/mod clan reject <tên> <lý_do>` - Từ chối clan
 `/mod clan delete <tên>` - Xóa vĩnh viễn một clan
-`/admin match resolve <id> <người_thắng> <lý_do>` - Xử lý tranh chấp
+`/matchadmin match resolve <id> <clan_thắng> <lý_do>` - Xử lý tranh chấp
 """
             embed.add_field(name="🛡️ Lệnh Mod", value=mod_cmds, inline=False)
         
@@ -686,7 +813,7 @@ class ClanCog(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
-    @clan_group.command(name="create", description="Create a new clan with 5 members")
+    @clan_group.command(name="create", description="Create a new clan (you + 4 members = 5 total)")
     async def clan_create(self, interaction: discord.Interaction):
         """Create a new clan."""
         # Check verified role
@@ -726,7 +853,7 @@ class ClanCog(commands.Cog):
             user = await get_user_db(str(interaction.user.id))
             if not user:
                 await interaction.response.send_message(
-                    "Bạn chưa đăng ký. Hãy dùng `/clan register` để bắt đầu.",
+                    "Bạn chưa ở trong clan nào. Hãy tạo hoặc được mời vào một clan!",
                     ephemeral=True
                 )
                 return
@@ -981,6 +1108,136 @@ class ClanCog(commands.Cog):
             f"✅ {member.mention} đã được thăng chức thành **Vice Captain**!",
             ephemeral=True
         )
+    
+    @clan_group.command(name="invite", description="Invite a member to join your clan")
+    @app_commands.describe(member="The member to invite")
+    async def clan_invite(self, interaction: discord.Interaction, member: discord.Member):
+        """Invite a member to join your clan (Captain/Vice only)."""
+        if not await check_verified(interaction):
+            return
+        
+        user = await ensure_user_registered(interaction)
+        if not user:
+            return
+        
+        # Check user is captain or vice
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data:
+            await interaction.response.send_message(
+                "❌ Bạn không ở trong clan nào.",
+                ephemeral=True
+            )
+            return
+        
+        if clan_data["member_role"] not in ("captain", "vice"):
+            await interaction.response.send_message(
+                "❌ Chỉ Captain hoặc Vice Captain mới có thể mời thành viên.",
+                ephemeral=True
+            )
+            return
+        
+        # Check clan is active
+        if clan_data["status"] != "active":
+            await interaction.response.send_message(
+                "❌ Clan của bạn chưa được duyệt hoặc không hoạt động.",
+                ephemeral=True
+            )
+            return
+        
+        # Check target user
+        if member.bot:
+            await interaction.response.send_message("❌ Không thể mời bot vào clan.", ephemeral=True)
+            return
+        
+        if member.id == interaction.user.id:
+            await interaction.response.send_message("❌ Không thể tự mời chính mình.", ephemeral=True)
+            return
+        
+        # Check if target has verified role
+        target_role_names = [role.name for role in member.roles]
+        if config.ROLE_VERIFIED not in target_role_names:
+            await interaction.response.send_message(
+                f"❌ {member.mention} chưa có role `{config.ROLE_VERIFIED}`.",
+                ephemeral=True
+            )
+            return
+        
+        # Get or create target user
+        target_user = await db.get_user(str(member.id))
+        if not target_user:
+            await db.create_user(str(member.id), f"{member.name}#0000")
+            target_user = await db.get_user(str(member.id))
+        
+        # Check if target is already in a clan
+        target_clan = await db.get_user_clan(target_user["id"])
+        if target_clan:
+            await interaction.response.send_message(
+                f"❌ {member.mention} đã ở trong clan **{target_clan['name']}**.",
+                ephemeral=True
+            )
+            return
+        
+        # Check cooldown
+        if target_user.get("cooldown_until"):
+            cooldown = datetime.fromisoformat(target_user["cooldown_until"].replace('Z', '+00:00'))
+            if cooldown > datetime.now(timezone.utc):
+                await interaction.response.send_message(
+                    f"❌ {member.mention} đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
+                    ephemeral=True
+                )
+                return
+        
+        # Check for existing pending invite
+        existing_invite = await db.get_pending_invite(target_user["id"], clan_data["id"])
+        if existing_invite:
+            await interaction.response.send_message(
+                f"❌ Đã có lời mời đang chờ cho {member.mention}. Vui lòng đợi họ phản hồi.",
+                ephemeral=True
+            )
+            return
+        
+        # Create invite request (expires in 48 hours)
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+        invite_id = await db.create_invite_request(
+            clan_data["id"],
+            target_user["id"],
+            user["id"],
+            expires_at
+        )
+        
+        # Send DM to target
+        try:
+            view = InviteAcceptDeclineView(
+                invite_id=invite_id,
+                clan_id=clan_data["id"],
+                user_id=target_user["id"],
+                clan_name=clan_data["name"],
+                invited_by_name=interaction.user.display_name
+            )
+            
+            await member.send(
+                f"🏰 **Lời mời tham gia clan!**\n\n"
+                f"**{interaction.user.display_name}** đã mời bạn tham gia clan **{clan_data['name']}**.\n\n"
+                f"⏰ Lời mời này hết hạn sau **48 giờ**.\n\n"
+                f"Bấm **Accept** để tham gia hoặc **Decline** để từ chối.",
+                view=view
+            )
+            
+            await interaction.response.send_message(
+                f"✅ Đã gửi lời mời đến {member.mention}. Họ có 48 giờ để phản hồi.",
+                ephemeral=True
+            )
+            
+            await bot_utils.log_event(
+                "CLAN_INVITE_SENT",
+                f"{interaction.user.mention} invited {member.mention} to clan '{clan_data['name']}'"
+            )
+            
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"❌ Không thể gửi DM đến {member.mention}. Họ có thể đã tắt DM từ server.",
+                ephemeral=True
+            )
     
     @clan_group.command(name="demote_vice", description="Demote a Vice Captain to Member")
     @app_commands.describe(member="The Vice Captain to demote")
@@ -1438,43 +1695,7 @@ class ClanCog(commands.Cog):
             f"✅ {member.mention} hiện đã là Captain của **{clan_name}**.",
             ephemeral=True
         )
-    
-    # =========================================================================
-    # REGISTER COMMAND (in clan group)
-    # =========================================================================
-    
-    @clan_group.command(name="register", description="Register to use the clan system")
-    async def register(self, interaction: discord.Interaction):
-        """Register to use the clan system."""
-        discord_id = str(interaction.user.id)
-        
-        # Check if already registered
-        existing = await db.get_user(discord_id)
-        if existing:
-            await interaction.response.send_message(
-                "✅ Bạn đã đăng ký trong hệ thống clan rồi!",
-                ephemeral=True
-            )
-            return
-        
-        # Create user (use Discord username as placeholder for riot_id)
-        try:
-            await db.create_user(discord_id, f"{interaction.user.name}#0000")
-            await interaction.response.send_message(
-                f"✅ Đăng ký thành công!\n"
-                f"Bạn có thể sử dụng `/clan create` và các lệnh clan khác!",
-                ephemeral=True
-            )
-            
-            await bot_utils.log_event(
-                "USER_REGISTERED",
-                f"{interaction.user.mention} registered in clan system"
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Đăng ký thất bại: {str(e)}",
-                ephemeral=True
-            )
+
 
 
 # =============================================================================

@@ -5,6 +5,29 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.1.2] - 2026-02-08
+### 📝 Documentation Sync
+- **Clan Create Flow**: Sửa documentation - Captain chọn 4 người (bạn + 4 = 5 tổng), không phải 5 người.
+- **Accept/Decline via DM**: Làm rõ accept/decline lời mời clan là qua button trong DM, không phải slash command.
+- **Matchadmin Namespace**: Sửa `/admin match resolve` thành `/matchadmin match resolve` trong tất cả docs và code.
+- **Remove /clan register**: Xóa hoàn toàn lệnh `/clan register` vì hệ thống tự động đăng ký user khi cần.
+
+### 🔧 Code Fixes
+- **Help Command**: Cập nhật `/clan help` trong `cogs/clan.py` để phản ánh đúng các lệnh thực tế.
+- **Log Message**: Sửa lệnh trong thông báo tranh chấp match (`cogs/matches.py`).
+
+### ✨ New Features
+- **Clan Invite Command**: Thêm lệnh `/clan invite <user>` cho Captain/Vice Captain để mời người vào clan đã active.
+  - Tạo bảng database mới `invite_requests`
+  - Thêm functions trong `services/db.py`
+  - Thêm UI component `InviteAcceptDeclineView`
+  - Gửi lời mời qua DM với nút Accept/Decline
+  - Hết hạn sau 48 giờ
+  - Tự động kiểm tra cooldown, role, clan status
+  - Vice Captain giờ cũng có quyền invite (cập nhật tất cả docs)
+
+---
+
 ## [1.1.1] - 2026-02-09
 ### 🛡️ Concurrency & Stability (P0)
 - **Idempotent Acceptance**: Updated `handle_clan_accept` to be idempotent. If a user double-clicks or the system crashes mid-process, subsequent clicks will now "repair" the state and trigger missing notifications.
@@ -44,4 +67,4 @@ This document provides a cumulative history of all technical improvements, fixes
 - Initial database schema and service layer.
 
 ---
-*Last Updated: 2026-02-09*
+*Last Updated: 2026-02-08*

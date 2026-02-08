@@ -40,7 +40,7 @@ CATEGORY_CLANS: str = "CLANS"     # Category for clan private channels
 # SYSTEM CONSTANTS
 # =============================================================================
 
-CLAN_CREATE_TIMEOUT_HOURS: int = 48   # Time to gather 5 acceptances
+CLAN_CREATE_TIMEOUT_HOURS: int = 48   # Time to gather 4 acceptances (Captain + 4 = 5 total)
 MIN_MEMBERS_ACTIVE: int = 5           # Minimum members to keep clan active
 COOLDOWN_DAYS: int = 14               # Cooldown after leaving/kicking/loan
 LOAN_MAX_DAYS: int = 7                # Maximum loan duration

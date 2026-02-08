@@ -410,6 +410,75 @@ async def check_all_accepted(clan_id: int) -> bool:
 
 
 # =============================================================================
+# INVITE REQUESTS CRUD (Invite to existing active clan)
+# =============================================================================
+
+async def create_invite_request(clan_id: int, user_id: int, invited_by_user_id: int, expires_at: str) -> int:
+    """Create a new invite request for joining an existing clan. Returns invite ID."""
+    async with get_connection() as conn:
+        # Cancel any existing pending invites for this user to this clan
+        await conn.execute(
+            "UPDATE invite_requests SET status = 'cancelled' WHERE clan_id = ? AND user_id = ? AND status = 'pending'",
+            (clan_id, user_id)
+        )
+        cursor = await conn.execute(
+            "INSERT INTO invite_requests (clan_id, user_id, invited_by_user_id, expires_at) VALUES (?, ?, ?, ?)",
+            (clan_id, user_id, invited_by_user_id, expires_at)
+        )
+        await conn.commit()
+        return cursor.lastrowid
+
+
+async def get_pending_invite(user_id: int, clan_id: int = None) -> Optional[Dict[str, Any]]:
+    """Get pending invite for a user. Optionally filter by clan."""
+    async with get_connection() as conn:
+        if clan_id:
+            cursor = await conn.execute(
+                "SELECT * FROM invite_requests WHERE user_id = ? AND clan_id = ? AND status = 'pending'",
+                (user_id, clan_id)
+            )
+        else:
+            cursor = await conn.execute(
+                "SELECT * FROM invite_requests WHERE user_id = ? AND status = 'pending'",
+                (user_id,)
+            )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def accept_invite(invite_id: int) -> bool:
+    """Accept an invite. Returns True if successful."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE invite_requests SET status = 'accepted', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
+            (invite_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def decline_invite(invite_id: int) -> bool:
+    """Decline an invite. Returns True if successful."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE invite_requests SET status = 'declined', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
+            (invite_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def get_invite_by_id(invite_id: int) -> Optional[Dict[str, Any]]:
+    """Get invite by ID."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM invite_requests WHERE id = ?", (invite_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+# =============================================================================
 # MATCHES CRUD (v2 - Updated for new workflow)
 # =============================================================================
 

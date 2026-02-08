@@ -47,13 +47,13 @@ Captain có quyền bổ nhiệm hoặc thu hồi quyền đội phó bất cứ
 Captain phải là thành viên đã xác minh (role Verified/Member), không thuộc clan nào, không trong cooldown, không bị system ban.
 
 
-Khi tạo clan, Captain phải khai báo tối thiểu 5 người ngay từ đầu (danh sách 5 Discord user trong server).
+Khi tạo clan, Captain phải chọn tối thiểu 4 người ngay từ đầu (bạn + 4 = 5 thành viên tổng cộng).
 
 
-5 người được khai báo phải tự bấm Đồng ý tham gia (Accept). Không được phép nhét tên người khác nếu họ chưa đồng ý.
+4 người được chọn sẽ nhận lời mời qua DM và phải bấm Đồng ý tham gia (Accept). Không được phép nhét tên người khác nếu họ chưa đồng ý.
 
 
-Nếu sau 48 giờ không đủ 5 người đồng ý, yêu cầu tạo clan tự hủy.
+Nếu sau 48 giờ không đủ 4 người đồng ý, yêu cầu tạo clan tự hủy.
 
 
 Tên clan là duy nhất trong server. Không dùng tag.
@@ -67,7 +67,7 @@ Cấm tên chứa nội dung tục tĩu, kỳ thị, kích động thù hằn, c
 
 
 Mod duyệt clan
-Clan sau khi đủ 5 Accept sẽ ở trạng thái chờ duyệt.
+Clan sau khi đủ 4 Accept sẽ ở trạng thái chờ duyệt.
 
 
 Mod có quyền Approve/Reject và phải ghi lý do khi từ chối.
@@ -100,9 +100,10 @@ Quản lý thành viên
 Member có quyền rời clan bất cứ lúc nào nhưng vẫn chịu cooldown 14 ngày.
 
 
-Captain có quyền mời/kick thành viên. Kick vẫn áp dụng cooldown 14 ngày cho người bị kick.
+Captain có quyền kick thành viên. Kick vẫn áp dụng cooldown 14 ngày cho người bị kick.
 - **Bảo vệ lãnh đạo**: Không thể kick Captain. Vice Captain phải bị hạ cấp (demote) xuống Thành viên trước khi có thể bị kick.
 - **Tự động giải tán**: Nếu Captain rời clan mà không có Đội phó hoặc thành viên khác để thay thế, clan sẽ tự động giải tán.
+- **Mời thành viên mới**: Captain hoặc Vice có thể mời người vào clan bằng lệnh `/clan invite @user`. Người được mời nhận lời mời qua DM.
 
 
 

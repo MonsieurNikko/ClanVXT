@@ -371,7 +371,7 @@ class DisputeReasonModal(discord.ui.Modal, title="Lý do tranh chấp"):
                 f"• {match['clan_a_name']} vs {match['clan_b_name']}\n"
                 f"• Người tranh chấp: {interaction.user.mention}\n"
                 f"• Lý do: {self.reason.value}\n\n"
-                f"Sử dụng `/admin match resolve {self.match_id} <winner_clan> <reason>` để xử lý."
+                f"Sử dụng `/matchadmin match resolve {self.match_id} <winner_clan> <reason>` để xử lý."
             )
         
         # [P2 Fix] Notify creator via DM

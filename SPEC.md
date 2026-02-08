@@ -5,9 +5,8 @@
 ### User Commands
 | Command | Description | Requirements |
 | :--- | :--- | :--- |
-| `/clan create <name> <member1> <member2> <member3> <member4> <member5>` | Create a new clan with 5 initial members. | User is Verified, not in clan, not in cooldown. Name unique. All members must have registered Riot ID. |
-| `/clan accept` | Accept a clan invitation or creation request. | User has pending request. |
-| `/clan decline` | Decline a clan invitation or creation request. | User has pending request. |
+| `/clan create` | Mở modal để tạo clan mới. Nhập tên clan và chọn 4 thành viên (bạn + 4 = 5 tổng). | User is Verified, not in clan, not in cooldown. Name unique. |
+| `/clan help` | Hiển thị hướng dẫn lệnh theo role của bạn. | None. |
 | `/clan info [clan_name]` | View clan stats, members, Elo. | None. |
 | `/clan leave` | Leave current clan. | User in clan. Starts 14-day cooldown. |
 | `/loan request <member> <clan> <days>` | Request to loan a member to another clan. | Captain/Vice of Source. 3-party accept required. |
@@ -37,12 +36,17 @@
 ### Captain/Vice Commands
 | Command | Description | Permission |
 | :--- | :--- | :--- |
-| `/clan invite <user>` | Invite a new member. | Captain/Vice. Target not in clan/cooldown. |
-| `/clan kick <user>` | Kick a member. | Captain. Target gets 14-day cooldown. |
-| `/clan promote_vice <user>` | Promote member to Vice Captain. | Captain. |
-| `/clan demote_vice <user>` | Demote Vice Captain to Member. | Captain. |
-| `/loan request ...` | (See User Commands - Captain/Vice only) | |
-| `/transfer request ...` | (See User Commands - Captain/Vice only) | |
+| `/clan invite <user>` | Mời người vào clan (đã active). Gửi DM với nút Accept/Decline. | Captain/Vice. |
+| `/loan request ...` | (See User Commands) | Captain/Vice. |
+| `/transfer request ...` | (See User Commands) | Captain/Vice. |
+
+### Captain Only Commands
+| Command | Description | Permission |
+| :--- | :--- | :--- |
+| `/clan kick <user>` | Kick a member. | Captain only. Target gets 14-day cooldown. |
+| `/clan promote_vice <user>` | Promote member to Vice Captain. | Captain only. |
+| `/clan demote_vice <user>` | Demote Vice Captain to Member. | Captain only. |
+| `/clan disband` | Giải tán clan (yêu cầu xác nhận). | Captain only. |
 
 ### Mod Commands
 | Command | Description | Permission |
@@ -54,7 +58,7 @@
 | `/mod case resolve <case_id> <verdict>` | Resolve a report/appeal case. | Mod Role. |
 | `/mod elo set <clan_name> <value>` | Manually set clan Elo. | Mod Role. |
 | `/mod elo rollback <match_id>` | Revert Elo change from a match. | Mod Role. |
-| `/admin match resolve <match_id> <winner_clan> <reason>` | Resolve a disputed match. | Mod Role. |
+| `/matchadmin match resolve <match_id> <winner_clan> <reason>` | Resolve a disputed match. | Mod Role. |
 | `/admin cooldown view <target>` | View active cooldowns. | Mod Role. |
 | `/admin cooldown set <target> <kind> <days> <reason>` | Set/Overwrite a cooldown. | Mod Role. |
 | `/admin cooldown clear <target> [kind]` | Clear cooldowns. | Mod Role. |
@@ -113,7 +117,7 @@ Diminishing returns for repeated matches between same clan pair in 24h:
 
 ### Internal Roles
 - **Captain**: Creator of the clan. Full control.
-- **Vice Captain**: Appointed by Captain. Can invite, match, loan. Cannot kick (only Captain can kick per rule "Captain có quyền mời/kick thành viên").
+- **Vice Captain**: Appointed by Captain. Can invite, match, loan, transfer. Cannot kick.
 - **Member**: Standard member.
 
 ## 3. Logging Rules
@@ -125,7 +129,7 @@ All events must be logged to the **Mod Log Channel** (`log`).
 
 ### Events to Log
 1.  **Clan Lifecycle**:
-    -   `CLAN_CREATE_REQUEST`: Captain + 5 members.
+    -   `CLAN_CREATE_REQUEST`: Captain + 4 members (tổng 5).
     -   `CLAN_APPROVED`: By Mod.
     -   `CLAN_REJECTED`: Reason provided.
     -   `CLAN_DISBANDED`: By Mod or System (inactive).

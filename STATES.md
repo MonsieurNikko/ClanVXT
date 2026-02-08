@@ -5,7 +5,7 @@
 stateDiagram-v2
     [*] --> INIT
     INIT --> WAITING_ACCEPT: /clan create
-    WAITING_ACCEPT --> PENDING_APPROVAL: All 5 members Accepted
+    WAITING_ACCEPT --> PENDING_APPROVAL: All 4 members Accepted
     WAITING_ACCEPT --> CANCELLED: Timeout (48h) or Captain Cancel
     PENDING_APPROVAL --> ACTIVE: Mod Approve
     PENDING_APPROVAL --> REJECTED: Mod Reject
@@ -15,11 +15,11 @@ stateDiagram-v2
 
 ### States
 - **INIT**: Command received. Validation passed.
-- **WAITING_ACCEPT**: System DMing 5 members. Waiting for all to click "Accept".
-- **PENDING_APPROVAL**: All 5 accepted. Alert sent to Mod Log.
+- **WAITING_ACCEPT**: System DMing 4 members. Waiting for all to click "Accept".
+- **PENDING_APPROVAL**: All 4 accepted. Alert sent to Mod Log.
 - **ACTIVE**: Clan created. Roles/Channels assigned.
 - **REJECTED**: Mod denied request. Reason logged.
-- **CANCELLED**: Failed to get 5 members in time.
+- **CANCELLED**: Failed to get 4 members in time.
 
 ## 2. Match Lifecycle
 ```mermaid

@@ -62,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id);
 
 -- -----------------------------------------------------------------------------
 -- CREATE REQUESTS TABLE
--- Tracks the 5-accept flow when creating a new clan
+-- Tracks the 4-accept flow when creating a new clan (Captain + 4 members = 5)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS create_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,6 +79,29 @@ CREATE TABLE IF NOT EXISTS create_requests (
 CREATE INDEX IF NOT EXISTS idx_create_requests_clan ON create_requests(clan_id);
 CREATE INDEX IF NOT EXISTS idx_create_requests_user ON create_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_create_requests_status ON create_requests(status);
+
+-- -----------------------------------------------------------------------------
+-- INVITE REQUESTS TABLE
+-- Tracks invitations to join an existing active clan (different from create_requests)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS invite_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id INTEGER NOT NULL,                           -- FK to clans.id (active clan)
+    user_id INTEGER NOT NULL,                           -- FK to users.id (invited member)
+    invited_by_user_id INTEGER NOT NULL,                -- FK to users.id (captain/vice who invited)
+    status TEXT NOT NULL DEFAULT 'pending',             -- pending, accepted, declined, expired, cancelled
+    expires_at TEXT NOT NULL,                           -- 48h timeout
+    responded_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(clan_id, user_id, status),                   -- Only one pending invite per user per clan
+    FOREIGN KEY (clan_id) REFERENCES clans(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invited_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_requests_clan ON invite_requests(clan_id);
+CREATE INDEX IF NOT EXISTS idx_invite_requests_user ON invite_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_invite_requests_status ON invite_requests(status);
 
 -- -----------------------------------------------------------------------------
 -- MATCHES TABLE

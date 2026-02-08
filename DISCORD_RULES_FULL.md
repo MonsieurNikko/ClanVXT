@@ -36,10 +36,9 @@ Hệ thống Clan là nền tảng quản lý đội thi đấu trong server, đ
 
 ## 2. QUY ĐỊNH TÀI KHOẢN
 
-### 2.1. Đăng ký hệ thống
-- **Bắt buộc:** Gõ `/clan register` trước khi tham gia bất kỳ clan nào
+### 2.1. Tham gia hệ thống
 - **Yêu cầu:** Phải có role `Thiểu Năng Con` trong server
-- **Riot ID:** Phải khai báo Riot ID thật (ví dụ: `TênBạn#VN1`), cấm dùng smurf
+- **Tự động:** Hệ thống tự đăng ký bạn khi tạo clan hoặc được mời vào clan
 
 ### 2.2. Giới hạn
 | Quy định | Chi tiết |
@@ -82,22 +81,21 @@ Cooldown là khoảng thời gian bạn không thể thực hiện một số h�
 
 | Hành động | Captain | Vice | Member |
 |-----------|:-------:|:----:|:------:|
-| Mời thành viên | ✅ | ✅ | ❌ |
+| Mời thành viên mới | ✅ | ✅ | ❌ |
 | Kick thành viên | ✅ | ❌ | ❌ |
 | Promote Vice | ✅ | ❌ | ❌ |
 | Demote Vice | ✅ | ❌ | ❌ |
+| Giải tán clan | ✅ | ❌ | ❌ |
 | Tạo trận đấu | ✅ | ✅ | ✅ |
 | Report kết quả | Chỉ người tạo trận | | |
 | Confirm/Dispute | ✅ | ✅ | ✅ |
 | Loan request | ✅ | ✅ | ❌ |
 | Transfer request | ✅ | ✅ | ❌ |
-
 ---
 
 ## 4. QUY TRÌNH TẠO CLAN
 
 ### 4.1. Điều kiện của Captain
-- Đã đăng ký trong hệ thống (`/clan register`)
 - Có role `Thiểu Năng Con`
 - Không thuộc clan nào
 - Không trong thời gian cooldown
@@ -107,12 +105,12 @@ Cooldown là khoảng thời gian bạn không thể thực hiện một số h�
 
 ```
 Bước 1: /clan create
-        └── Nhập tên clan + tag 5 thành viên
+        └── Mở modal, nhập tên clan
 
-Bước 2: Hệ thống gửi lời mời tới 5 người
-        └── Mỗi người nhận thông báo Accept/Decline
+Bước 2: Chọn 4 thành viên từ danh sách
+        └── Hệ thống gửi lời mời qua DM tới 4 người
 
-Bước 3: Chờ 5 người Accept
+Bước 3: Chờ 4 người Accept trong DM
         └── Thời hạn: 48 giờ
         └── Nếu không đủ → Yêu cầu tự hủy
 
@@ -134,7 +132,7 @@ Bước 5: Mod duyệt
 
 | Trạng thái | Điều kiện | Được phép |
 |------------|-----------|-----------|
-| **WAITING_ACCEPT** | Đang chờ 5 người accept | Không có |
+| **WAITING_ACCEPT** | Đang chờ 4 người accept | Không có |
 | **PENDING_APPROVAL** | Đủ accept, chờ Mod | Không có |
 | **ACTIVE** | ≥5 thành viên, được duyệt | Tất cả tính năng |
 | **INACTIVE** | <5 thành viên | Không thi đấu, không tính Elo |
@@ -346,13 +344,11 @@ Chuyển vĩnh viễn thành viên từ clan này sang clan khác.
 
 | Lệnh | Mô tả | Quyền |
 |------|-------|-------|
-| `/clan register` | Đăng ký hệ thống | Ai cũng được |
-| `/clan create` | Tạo clan mới | Chưa có clan |
+| `/clan create` | Tạo clan mới (mở modal) | Chưa có clan |
+| `/clan invite <user>` | Mời người vào clan | Captain/Vice |
 | `/clan info [clan]` | Xem thông tin | Ai cũng được |
 | `/clan leave` | Rời clan | Member+ |
-| `/clan accept` | Chấp nhận lời mời | Có pending |
-| `/clan decline` | Từ chối lời mời | Có pending |
-| `/clan invite <user>` | Mời thành viên | Captain/Vice |
+| `/clan disband` | Giải tán clan | Captain |
 | `/clan kick <user>` | Kick thành viên | Captain |
 | `/clan promote_vice <user>` | Bổ nhiệm Vice | Captain |
 | `/clan demote_vice <user>` | Thu hồi Vice | Captain |

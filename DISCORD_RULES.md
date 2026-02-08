@@ -15,11 +15,8 @@ Clan là **đội của bạn** trong server. Bạn và đồng đội sẽ thi 
 
 ## 📝 BẮT ĐẦU NHƯ NÀO?
 
-### Bước 1: Đăng ký
-Gõ `/clan register` để đăng ký vào hệ thống.
-
-### Bước 2: Tham gia clan
-**Cách 1:** Được mời → Bấm **Accept**
+### Tham gia clan
+**Cách 1:** Được mời bởi Captain/Vice của clan → Check DM và bấm **Accept**
 **Cách 2:** Tự tạo clan → Xem phần "Tạo clan mới" bên dưới
 
 ---
@@ -27,8 +24,8 @@ Gõ `/clan register` để đăng ký vào hệ thống.
 ## 🏗️ MUỐN TẠO CLAN MỚI?
 
 1. Gõ `/clan create`
-2. Đặt tên clan + Chọn 5 người đồng đội
-3. Chờ 5 người đó bấm **Accept** (có 48 tiếng)
+2. Đặt tên clan + Chọn **4 người** đồng đội (bạn + 4 = 5 người)
+3. Chờ 4 người đó bấm **Accept** trong DM (có 48 tiếng)
 4. Chờ Mod duyệt
 5. Done! Clan của bạn đã được tạo 🎉
 
@@ -64,8 +61,8 @@ Bất kỳ ai trong clan đều có thể gõ:
 
 | Vai trò | Làm được gì |
 |---------|------------|
-| 👑 **Captain** | Mời người, kick người, quản lý mọi thứ |
-| ⚔️ **Vice Captain** | Phó đội trưởng, mời người, tạo trận |
+| 👑 **Captain** | Tạo clan, mời người, kick người, quản lý mọi thứ |
+| ⚔️ **Vice Captain** | Phó đội trưởng, mời người, tạo trận, yêu cầu loan/transfer |
 | 👥 **Member** | Đánh trận, rời clan |
 
 ---
@@ -133,7 +130,6 @@ Gõ `/report create` để báo cáo
 
 | Lệnh | Để làm gì |
 |------|----------|
-| `/clan register` | Đăng ký lần đầu |
 | `/clan info` | Xem thông tin clan |
 | `/clan leave` | Rời clan |
 | `/match create <clan>` | Tạo trận đấu |
@@ -144,13 +140,13 @@ Gõ `/report create` để báo cáo
 ## ❓ CÂU HỎI THƯỜNG GẶP
 
 **Q: Làm sao để vào clan?**
-A: Nhờ Captain/Vice của clan đó invite bạn, rồi bấm Accept.
+A: Được Captain hoặc Vice của clan mời bằng lệnh `/clan invite`, rồi bấm Accept trong DM.
 
 **Q: Clan tôi dưới 5 người thì sao?**
-A: Clan sẽ bị "Inactive" - không đánh trận được, không tính Elo. Mời thêm người nhé!
+A: Clan sẽ bị "Inactive" - không đánh trận được, không tính Elo. Mời thêm người bằng `/clan invite`!
 
 **Q: Tôi muốn đổi clan?**
-A: Gõ `/clan leave`, chờ 14 ngày, rồi xin vào clan mới.
+A: Gõ `/clan leave`, chờ 14 ngày, rồi xin được invite vào clan mới.
 
 **Q: Elo tính kiểu gì?**
 A: Thắng clan mạnh hơn → Được nhiều Elo. Thắng clan yếu hơn → Được ít Elo.
