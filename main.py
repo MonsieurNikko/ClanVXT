@@ -187,6 +187,131 @@ async def on_ready():
     await log_event("BOT_STARTED", f"Clan System bot started. Commands synced: {len(synced)}")
 
 
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    """Handle persistent button interactions (for clan accept/decline after bot restart)."""
+    if interaction.type != discord.InteractionType.component:
+        return
+    
+    custom_id = interaction.data.get("custom_id", "")
+    
+    # Handle clan accept buttons
+    if custom_id.startswith("clan_accept:"):
+        parts = custom_id.split(":")
+        if len(parts) == 3:
+            clan_id = int(parts[1])
+            user_id = int(parts[2])
+            await handle_clan_accept(interaction, clan_id, user_id)
+            return
+    
+    # Handle clan decline buttons
+    if custom_id.startswith("clan_decline:"):
+        parts = custom_id.split(":")
+        if len(parts) == 3:
+            clan_id = int(parts[1])
+            user_id = int(parts[2])
+            await handle_clan_decline(interaction, clan_id, user_id)
+            return
+
+
+async def handle_clan_accept(interaction: discord.Interaction, clan_id: int, user_id: int):
+    """Handle clan accept button click."""
+    # Check if request still exists and is pending
+    request = await db.get_user_pending_request(user_id)
+    if not request or request["clan_id"] != clan_id:
+        await interaction.response.edit_message(
+            content="This invitation has expired or been cancelled.",
+            view=None
+        )
+        return
+    
+    # Get clan name for messages
+    clan = await db.get_clan_by_id(clan_id)
+    clan_name = clan["name"] if clan else "Unknown"
+    
+    # Accept the request
+    await db.accept_create_request(clan_id, user_id)
+    
+    # Add user to clan_members
+    await db.add_member(user_id, clan_id, "member")
+    
+    # Check if all 4 accepted
+    all_accepted = await db.check_all_accepted(clan_id)
+    
+    await interaction.response.edit_message(
+        content=f"✅ You have **accepted** the invitation to join **{clan_name}**!",
+        view=None
+    )
+    
+    if all_accepted:
+        # Update clan status to pending_approval
+        await db.update_clan_status(clan_id, "pending_approval")
+        
+        # Notify captain via DM
+        try:
+            # Get captain's discord_id from clan_members
+            members = await db.get_clan_members(clan_id)
+            captain_member = next((m for m in members if m["role"] == "captain"), None)
+            if captain_member:
+                captain_discord_id = captain_member["discord_id"]
+                captain_user = interaction.client.get_user(int(captain_discord_id))
+                if not captain_user:
+                    captain_user = await interaction.client.fetch_user(int(captain_discord_id))
+                if captain_user:
+                    await captain_user.send(
+                        f"🎉 **Great news!**\n\n"
+                        f"All 4 invited members have **accepted** your clan **{clan_name}**!\n\n"
+                        f"Your clan is now **pending mod approval**. A moderator will review and approve it soon."
+                    )
+        except Exception as e:
+            print(f"Failed to DM captain: {e}")
+        
+        # Alert mod-log
+        await log_event(
+            "CLAN_PENDING_APPROVAL",
+            f"Clan '{clan_name}' - All 4 invited members accepted. Awaiting mod approval. (ID: {clan_id})"
+        )
+
+
+async def handle_clan_decline(interaction: discord.Interaction, clan_id: int, user_id: int):
+    """Handle clan decline button click."""
+    # Check if request still exists
+    request = await db.get_user_pending_request(user_id)
+    if not request or request["clan_id"] != clan_id:
+        await interaction.response.edit_message(
+            content="This invitation has expired or been cancelled.",
+            view=None
+        )
+        return
+    
+    # Get clan name for messages
+    clan = await db.get_clan_by_id(clan_id)
+    clan_name = clan["name"] if clan else "Unknown"
+    
+    # Decline the request
+    await db.decline_create_request(clan_id, user_id)
+    
+    # Delete the entire clan creation
+    async with db.get_connection() as conn:
+        await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+        await conn.commit()
+    
+    await interaction.response.edit_message(
+        content=f"❌ You have **declined** the invitation to join **{clan_name}**.\n"
+                f"The clan creation has been cancelled.",
+        view=None
+    )
+    
+    await log_event(
+        "CLAN_CANCELLED",
+        f"Clan '{clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
+    )
+
+
+
+
 # =============================================================================
 # BACKGROUND TASKS
 # =============================================================================

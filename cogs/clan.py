@@ -298,9 +298,25 @@ class AcceptDeclineView(discord.ui.View):
         self.user_id = user_id
         self.clan_name = clan_name
         self.captain_name = captain_name
+        
+        # Add buttons with dynamic custom_ids
+        accept_btn = discord.ui.Button(
+            label="Accept",
+            style=discord.ButtonStyle.green,
+            custom_id=f"clan_accept:{clan_id}:{user_id}"
+        )
+        accept_btn.callback = self.accept_callback
+        self.add_item(accept_btn)
+        
+        decline_btn = discord.ui.Button(
+            label="Decline",
+            style=discord.ButtonStyle.red,
+            custom_id=f"clan_decline:{clan_id}:{user_id}"
+        )
+        decline_btn.callback = self.decline_callback
+        self.add_item(decline_btn)
     
-    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green, custom_id="clan_accept")
-    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def accept_callback(self, interaction: discord.Interaction):
         # Check if request still exists and is pending
         request = await db.get_user_pending_request(self.user_id)
         if not request or request["clan_id"] != self.clan_id:
@@ -356,8 +372,7 @@ class AcceptDeclineView(discord.ui.View):
                 f"Clan '{self.clan_name}' - All 4 invited members accepted. Awaiting mod approval. (ID: {self.clan_id})"
             )
     
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red, custom_id="clan_decline")
-    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def decline_callback(self, interaction: discord.Interaction):
         # Check if request still exists
         request = await db.get_user_pending_request(self.user_id)
         if not request or request["clan_id"] != self.clan_id:
@@ -387,6 +402,22 @@ class AcceptDeclineView(discord.ui.View):
             "CLAN_CANCELLED",
             f"Clan '{self.clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
         )
+
+
+class PersistentAcceptDeclineView(discord.ui.View):
+    """Persistent view handler for clan accept/decline buttons (registered on startup)."""
+    
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green, custom_id="clan_accept_persistent")
+    async def accept_placeholder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # This is just a placeholder - actual handling is done via on_interaction
+        pass
+    
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red, custom_id="clan_decline_persistent")
+    async def decline_placeholder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
 
 
 # =============================================================================
