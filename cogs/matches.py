@@ -463,10 +463,10 @@ class MatchesCog(commands.Cog):
     # ADMIN COMMANDS
     # =========================================================================
     
-    admin_group = app_commands.Group(name="admin", description="Admin commands")
-    admin_match_group = app_commands.Group(name="match", description="Match admin", parent=admin_group)
+    matchadmin_group = app_commands.Group(name="matchadmin", description="Match admin commands")
+    matchadmin_match = app_commands.Group(name="match", description="Match admin", parent=matchadmin_group)
     
-    @admin_match_group.command(name="resolve", description="Xử lý match tranh chấp (Mod only)")
+    @matchadmin_match.command(name="resolve", description="Xử lý match tranh chấp (Mod only)")
     @app_commands.describe(
         match_id="ID của match",
         winner_clan="Tên clan thắng",
