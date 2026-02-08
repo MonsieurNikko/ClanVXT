@@ -15,6 +15,7 @@ This document provides a cumulative history of all technical improvements, fixes
 ### 🔧 Code Fixes
 - **Help Command**: Cập nhật `/clan help` trong `cogs/clan.py` để phản ánh đúng các lệnh thực tế.
 - **Log Message**: Sửa lệnh trong thông báo tranh chấp match (`cogs/matches.py`).
+- **Clan Delete Fix**: Sửa lỗi `IntegrityError` (FOREIGN KEY constraint failed) khi xóa clan bằng cách xóa tất cả dữ liệu liên quan (matches, loans, transfers, v.v.) trước.
 
 ### ✨ New Features
 - **Clan Invite Command**: Thêm lệnh `/clan invite <user>` cho Captain/Vice Captain để mời người vào clan đã active.

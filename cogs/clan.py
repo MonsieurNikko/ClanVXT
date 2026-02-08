@@ -1622,8 +1622,26 @@ class ClanCog(commands.Cog):
         
         # Remove all members and delete clan from DB
         async with db.get_connection() as conn:
+            # Delete related data to avoid IntegrityError (FK constraints)
+            # Order matters: child tables first
             await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
             await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
+            await conn.execute("DELETE FROM invite_requests WHERE clan_id = ?", (clan_id,))
+            await conn.execute("DELETE FROM clan_flags WHERE clan_id = ?", (clan_id,))
+            await conn.execute("DELETE FROM elo_history WHERE clan_id = ?", (clan_id,))
+            
+            # Matches, loans, transfers can reference the clan on either side
+            await conn.execute("DELETE FROM matches WHERE clan_a_id = ? OR clan_b_id = ?", (clan_id, clan_id))
+            await conn.execute("DELETE FROM loans WHERE lending_clan_id = ? OR borrowing_clan_id = ?", (clan_id, clan_id))
+            await conn.execute("DELETE FROM transfers WHERE source_clan_id = ? OR dest_clan_id = ?", (clan_id, clan_id))
+            
+            # Unified cooldowns table
+            await conn.execute("DELETE FROM cooldowns WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
+            
+            # Cases targeting this clan
+            await conn.execute("DELETE FROM cases WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
+            
+            # Finally delete the clan
             await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
             await conn.commit()
         
