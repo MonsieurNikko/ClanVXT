@@ -5,6 +5,17 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.1.1] - 2026-02-09
+### 🛡️ Concurrency & Stability (P0)
+- **Idempotent Acceptance**: Updated `handle_clan_accept` to be idempotent. If a user double-clicks or the system crashes mid-process, subsequent clicks will now "repair" the state and trigger missing notifications.
+- **SQLite Integrity Protection**: Added `INSERT OR IGNORE` to `db.add_member` to prevent unique constraint crashes during race conditions.
+- **Self-Healing Logic**: Clans "stuck" in enrollment due to previous failures can now be finalized by simply clicking the Accept button again.
+
+### 🔍 Observability
+- **Console Debug Logging**: Added descriptive `[DEBUG]` logs for all major button interactions (Clan, Match, Loan, Transfer) to track user actions in real-time.
+
+---
+
 ## [1.1.0] - 2026-02-09
 ### 🛡️ Logic & Security Hardening (P0)
 - **Atomic Acceptance**: Modified `services/db.py` to ensure loan/transfer acceptance and completion are atomic. Added `WHERE status = 'requested'` to update queries.

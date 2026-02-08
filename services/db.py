@@ -243,10 +243,10 @@ async def set_clan_discord_ids(clan_id: int, role_id: str, channel_id: str) -> N
 # =============================================================================
 
 async def add_member(user_id: int, clan_id: int, role: str = "member") -> None:
-    """Add a member to a clan."""
+    """Add a member to a clan. Idempotent: uses INSERT OR IGNORE."""
     async with get_connection() as conn:
         await conn.execute(
-            "INSERT INTO clan_members (user_id, clan_id, role) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO clan_members (user_id, clan_id, role) VALUES (?, ?, ?)",
             (user_id, clan_id, role)
         )
         await conn.commit()
@@ -382,6 +382,17 @@ async def get_user_pending_request(user_id: int) -> Optional[Dict[str, Any]]:
         cursor = await conn.execute(
             "SELECT * FROM create_requests WHERE user_id = ? AND status = 'pending'",
             (user_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def get_user_request_any_status(clan_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """Get request for a user in a specific clan regardless of status."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM create_requests WHERE clan_id = ? AND user_id = ?",
+            (clan_id, user_id)
         )
         row = await cursor.fetchone()
         return dict(row) if row else None

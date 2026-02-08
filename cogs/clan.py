@@ -457,36 +457,61 @@ class ClanCog(commands.Cog):
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan accept button click."""
-        # Check if request still exists and is pending
-        request = await db.get_user_pending_request(user_id)
-        if not request or request["clan_id"] != clan_id:
+        print(f"[DEBUG] User {user_id} clicked ACCEPT for Clan ID {clan_id}")
+        
+        # Check if request exists (any status) to see if we've already processed it
+        request = await db.get_user_request_any_status(clan_id, user_id)
+        
+        if not request:
+            print(f"[DEBUG] No request found for user {user_id} in clan {clan_id}")
             await interaction.response.edit_message(
-                content="This invitation has expired or been cancelled.",
+                content="Yêu cầu ứng tuyển này đã hết hạn hoặc bị hủy.",
+                view=None
+            )
+            return
+
+        # Get clan name for messages
+        clan = await db.get_clan_by_id(clan_id)
+        clan_name = clan["name"] if clan else "Unknown"
+
+        # If already accepted but clan still waiting_accept, we might be recovering from a crash
+        # or it's a double click. Either way, we proceed to check completion.
+        if request["status"] == "accepted":
+            print(f"[DEBUG] User {user_id} already accepted. Proceeding to completion check.")
+        elif request["status"] == "pending":
+            print(f"[DEBUG] Accepting request for user {user_id}...")
+            # Accept the request
+            await db.accept_create_request(clan_id, user_id)
+            # Add user to clan_members (idempotent)
+            await db.add_member(user_id, clan_id, "member")
+        else:
+            print(f"[DEBUG] Request status for user {user_id} is '{request['status']}'.")
+            await interaction.response.edit_message(
+                content=f"Yêu cầu của bạn đang ở trạng thái: **{request['status']}**.",
                 view=None
             )
             return
         
-        # Get clan name for messages
-        clan = await db.get_clan_by_id(clan_id)
-        clan_name = clan["name"] if clan else "Unknown"
-        
-        # Accept the request
-        await db.accept_create_request(clan_id, user_id)
-        
-        # Add user to clan_members
-        await db.add_member(user_id, clan_id, "member")
-        
         # Check if all 4 accepted
         all_accepted = await db.check_all_accepted(clan_id)
+        print(f"[DEBUG] Clan {clan_id} all_accepted status: {all_accepted}")
         
-        await interaction.response.edit_message(
-            content=f"✅ You have **accepted** the invitation to join **{clan_name}**!",
-            view=None
-        )
+        # Only acknowledge on the interaction if it hasn't been acknowledged yet
+        # If the interaction was a double-click, it might already be acknowledged
+        try:
+            await interaction.response.edit_message(
+                content=f"✅ Bạn đã **chấp nhận** tham gia clan **{clan_name}**!",
+                view=None
+            )
+        except discord.errors.InteractionResponded:
+            pass
         
         if all_accepted:
-            # Update clan status to pending_approval
-            await db.update_clan_status(clan_id, "pending_approval")
+            # Check current clan status to avoid redundant notifications
+            if clan and clan["status"] == "waiting_accept":
+                print(f"[DEBUG] Finalizing clan {clan_id} ('{clan_name}'). Moving to pending_approval.")
+                # Update clan status to pending_approval
+                await db.update_clan_status(clan_id, "pending_approval")
             
             # Notify captain via DM
             try:
@@ -515,9 +540,12 @@ class ClanCog(commands.Cog):
 
     async def handle_clan_decline(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan decline button click."""
-        # Check if request still exists
-        request = await db.get_user_pending_request(user_id)
-        if not request or request["clan_id"] != clan_id:
+        print(f"[DEBUG] User {user_id} clicked DECLINE for Clan ID {clan_id}")
+        # Check if request exists (any status)
+        request = await db.get_user_request_any_status(clan_id, user_id)
+        
+        if not request:
+            print(f"[DEBUG] No request found for user {user_id} in clan {clan_id}")
             await interaction.response.edit_message(
                 content="Lời mời này đã hết hạn hoặc đã bị hủy.",
                 view=None
@@ -528,6 +556,7 @@ class ClanCog(commands.Cog):
         clan = await db.get_clan_by_id(clan_id)
         clan_name = clan["name"] if clan else "Unknown"
         
+        print(f"[DEBUG] Declining request and cancelling clan creation for '{clan_name}'...")
         # Decline the request
         await db.decline_create_request(clan_id, user_id)
         
