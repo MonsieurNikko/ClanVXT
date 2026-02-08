@@ -66,8 +66,15 @@ async def can_request_loan(member_id: int, clan_id: int) -> Tuple[bool, str]:
     Validate if a loan can be requested for a member.
     Returns (allowed, error_message).
     """
-    # 1. Check if member is in the clan
-    # (Caller should have verified this, but good to double check if we have context)
+    # 1. Check if member is a captain or vice (Protected)
+    member_data = await db.get_user_clan(member_id)
+    if member_data and member_data["member_role"] in ["captain", "vice"]:
+        return False, f"Không thể cho mượn **{member_data['member_role']}** của clan."
+    
+    # [P0 Fix] Check source clan size (must not drop below 5)
+    source_count = await db.count_clan_members(clan_id)
+    if source_count <= 5:
+        return False, "Clan nguồn sẽ còn dưới 5 thành viên sau khi cho mượn. Không thể thực hiện."
     
     # 2. Check if member is already on active loan
     active_loan = await db.get_active_loan_for_member(member_id)
@@ -99,6 +106,11 @@ async def can_request_transfer(member_id: int, source_clan_id: int, dest_clan_id
     Validate if a transfer can be requested.
     Returns (allowed, error_message).
     """
+    # 0. Check if member is a captain or vice (Protected)
+    member_data = await db.get_user_clan(member_id)
+    if member_data and member_data["member_role"] in ["captain", "vice"]:
+        return False, f"Không thể chuyển nhượng **{member_data['member_role']}** của clan."
+
     # 1. Check member status
     active_loan = await db.get_active_loan_for_member(member_id)
     if active_loan:

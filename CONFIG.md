@@ -14,16 +14,13 @@
 | `CHANNEL_MOD_LOG` | `log` | Text channel for system logs. |
 | `CATEGORY_CLANS` | `CLANS` | Category where clan private channels are created. |
 
-### System Constants
-| Config Key | Value | Description |
-| :--- | :--- | :--- |
 | `CLAN_CREATE_TIMEOUT` | `48h` | Time to gather 5 acceptances. |
 | `MIN_MEMBERS_ACTIVE` | `5` | Minimum members to keep clan active. |
-| `COOLDOWN_JOIN_LEAVE` | `14d` | Cooldown after leaving/kicking/loan. |
-| `LOAN_MAX_DURATION` | `7d` | Maximum duration for a member loan. |
-| `LOAN_COOLDOWN` | `14d` | Cooldown after loan ends. |
-| `TRANSFER_COOLDOWN` | `30d` | Min time between transfers. |
-| `TRANSFER_SICKNESS` | `72h` | Match ban duration after transfer. |
+| `COOLDOWN_DAYS` | `14d` | Cooldown after leaving/kick (join/leave cooldown). |
+| `LOAN_DAYS_MAX` | `7d` | Maximum duration for a member loan. |
+| `LOAN_COOLDOWN_DAYS` | `14d` | Cooldown after loan ends. |
+| `TRANSFER_COOLDOWN_DAYS` | `14d` | Min time between transfers (reusing join/leave). |
+| `TRANSFER_SICKNESS_HOURS` | `72h` | Match ban duration after transfer. |
 | `MATCH_LIMIT_24H` | `2` | Max matches between same 2 clans in 24h. |
 | `ELO_INITIAL` | `1000` | Starting Elo for new clans. |
 | `ELO_PLACEMENT_MATCHES` | `10` | Number of matches with high K-factor. |

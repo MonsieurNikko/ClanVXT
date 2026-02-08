@@ -11,7 +11,8 @@ from typing import Optional, Literal
 
 import config
 from services import db, permissions
-import main as bot_main
+from services import db, permissions
+from services import bot_utils
 
 
 # =============================================================================
@@ -137,16 +138,16 @@ class ModerationCog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
         
         # Log to mod channel
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CASE_OPENED",
             f"Case #{case_id} opened by {interaction.user.mention}. "
             f"Type: {target_type}, Target: {target_name}"
         )
         
         # Send alert to mod log
-        log_channel = bot_main.get_log_channel()
+        log_channel = bot_utils.get_log_channel()
         if log_channel:
-            mod_role = bot_main.get_mod_role()
+            mod_role = bot_utils.get_mod_role()
             ping = mod_role.mention if mod_role else ""
             
             alert_embed = discord.Embed(
@@ -332,15 +333,15 @@ class ModerationCog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
         
         # Log
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "APPEAL_CREATED",
             f"Appeal #{appeal_id} created for Case #{case_id} by {interaction.user.mention}"
         )
         
         # Alert mods
-        log_channel = bot_main.get_log_channel()
+        log_channel = bot_utils.get_log_channel()
         if log_channel:
-            mod_role = bot_main.get_mod_role()
+            mod_role = bot_utils.get_mod_role()
             ping = mod_role.mention if mod_role else ""
             
             await log_channel.send(

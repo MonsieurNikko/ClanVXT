@@ -26,11 +26,13 @@
 | `/match create <opponent_clan> [note]` | Create a custom match against another clan. | User must be in a clan. Match created on behalf of user's clan. |
 
 **Match Button Workflow:**
-- After creation, message shows: `[Clan A Win]` `[Clan B Win]` `[Cancel]`
-- **Report**: Only match creator can report result or cancel.
-- **Cancel**: Only allowed before result is reported.
-- After report, message shows: `[Confirm]` `[Dispute]`
-- **Confirm/Dispute**: Any member of opponent clan can click (1 person needed).
+- Sau khi tạo, tin nhắn hiển thị: `[Tên Clan A Thắng]` `[Tên Clan B Thắng]` `[Hủy]`
+- **Report**: Chỉ người tạo trận mới có thể báo cáo kết quả hoặc hủy.
+- **Hủy**: Chỉ được phép trước khi kết quả được báo cáo.
+- **Cooldown**: Có thời gian chờ 5 phút giữa các lần tạo trận tương tự để tránh spam.
+- Sau khi report, tin nhắn hiển thị: `[Xác Nhận]` `[Tranh Chấp]`
+- **Xác Nhận/Tranh Chấp**: Bất kỳ thành viên nào của clan đối phương đều có thể click (chỉ cần 1 người).
+- **Tranh Chấp**: Nếu có tranh chấp, Mod sẽ nhận được thông báo DM.
 
 ### Captain/Vice Commands
 | Command | Description | Permission |
@@ -153,19 +155,23 @@ All events must be logged to the **Mod Log Channel** (`log`).
 
 ## 4. Error Messages
 
-| Error Code | Message |
+| Mã Lỗi | Thông báo |
 | :--- | :--- |
-| `ERR_ALREADY_IN_CLAN` | "You are already in a clan." |
-| `ERR_COOLDOWN_ACTIVE` | "You are in cooldown. Days remaining: {days}." |
-| `ERR_NAME_TAKEN` | "Clan name '{name}' is already taken." |
-| `ERR_NAME_INVALID` | "Clan name contains invalid characters or forbidden words." |
-| `ERR_NOT_VERIFIED` | "You must have the '{role}' role to participate." |
-| `ERR_CLAN_FULL` | "Clan has reached maximum capacity." (If applicable, though not specified in rulebook, usually implied). |
-| `ERR_LOAN_LIMIT` | "Clan already has an active loan." |
-| `ERR_MATCH_LIMIT` | "Match limit reached (2 matches vs this clan in 24h)." |
-| `ERR_INSUFFICIENT_MEMBERS` | "Clan must have at least 5 members to perform this action." |
-| `ERR_PERMISSION_DENIED` | "You do not have permission to execute this command." |
-| `ERR_TRANSFER_COOLDOWN` | "You can only transfer once every {days} days." |
-| `ERR_TRANSFER_SICKNESS` | "You have Transfer Sickness. Cannot play matches for {hours}h." |
-| `ERR_NO_RIOT_ID` | "You must register your Valorant Riot ID with `/register` before joining a clan." |
-| `ERR_RIOT_ID_TAKEN` | "This Riot ID is already registered by another user." |
+| `ALREADY_IN_CLAN` | "Bạn đã ở trong một clan rồi." |
+| `COOLDOWN_ACTIVE` | "Bạn đang trong thời gian chờ. Còn lại: {days} ngày." |
+| `NAME_TAKEN` | "Tên clan '{name}' đã được sử dụng." |
+| `NAME_INVALID` | "Tên clan chứa ký tự không hợp lệ hoặc từ cấm." |
+| `NOT_VERIFIED` | "Bạn cần role '{role}' để tham gia hệ thống clan." |
+| `PERMISSION_DENIED` | "Bạn không có quyền thực hiện lệnh này." |
+| `NOT_IN_CLAN` | "Bạn không ở trong clan nào." |
+| `NOT_CAPTAIN` | "Chỉ Captain của clan mới có thể thực hiện lệnh này." |
+| `TARGET_NOT_IN_CLAN` | "Người dùng này không thuộc clan của bạn." |
+| `CANNOT_KICK_SELF` | "Bạn không thể tự kick chính mình. Hãy dùng `/clan leave`." |
+| `CANNOT_KICK_CAPTAIN` | "Bạn không thể kick Captain của clan." |
+| `NO_PENDING_REQUEST` | "Bạn không có yêu cầu ứng tuyển nào đang chờ." |
+| `CLAN_NOT_FOUND` | "Không tìm thấy clan." |
+| `NOT_MOD` | "Bạn cần role '{role}' để sử dụng lệnh này." |
+| `BOT_MISSING_PERMS` | "Bot thiếu quyền: {perms}. Vui lòng cấp quyền Manage Roles và Manage Channels." |
+| `ROLE_HIERARCHY` | "Không thể tạo role - Role của bot phải nằm trên role clan trong danh sách Role." |
+| `NO_RIOT_ID` | "Bạn phải đăng ký Riot ID bằng `/register` trước khi gia nhập clan." |
+| `RIOT_ID_TAKEN` | "Riot ID này đã được đăng ký bởi người dùng khác." |

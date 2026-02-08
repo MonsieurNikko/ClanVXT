@@ -262,6 +262,25 @@ async def remove_member(user_id: int, clan_id: int) -> None:
         await conn.commit()
 
 
+async def move_member(user_id: int, from_clan_id: int, to_clan_id: int, new_role: str = "member") -> None:
+    """Move a member from one clan to another in a single transaction."""
+    async with get_connection() as conn:
+        await conn.execute("BEGIN")
+        try:
+            await conn.execute(
+                "DELETE FROM clan_members WHERE user_id = ? AND clan_id = ?",
+                (user_id, from_clan_id)
+            )
+            await conn.execute(
+                "INSERT INTO clan_members (user_id, clan_id, role) VALUES (?, ?, ?)",
+                (user_id, to_clan_id, new_role)
+            )
+            await conn.commit()
+        except Exception as e:
+            await conn.rollback()
+            raise e
+
+
 async def update_member_role(user_id: int, clan_id: int, role: str) -> None:
     """Update member's role in a clan."""
     async with get_connection() as conn:
@@ -533,10 +552,12 @@ async def get_match_with_clans(match_id: int) -> Optional[Dict[str, Any]]:
         cursor = await conn.execute(
             """SELECT m.*, 
                       ca.name as clan_a_name, ca.elo as clan_a_elo, ca.status as clan_a_status,
-                      cb.name as clan_b_name, cb.elo as clan_b_elo, cb.status as clan_b_status
+                      cb.name as clan_b_name, cb.elo as clan_b_elo, cb.status as clan_b_status,
+                      u.discord_id as creator_discord_id
                FROM matches m
                JOIN clans ca ON m.clan_a_id = ca.id
                JOIN clans cb ON m.clan_b_id = cb.id
+               JOIN users u ON m.creator_user_id = u.id
                WHERE m.id = ?""",
             (match_id,)
         )
@@ -604,15 +625,17 @@ async def update_loan_acceptance(loan_id: int, lending: Optional[bool] = None, b
         if updates:
             updates.append("updated_at = datetime('now')")
             params.append(loan_id)
-            await conn.execute(
-                f"UPDATE loans SET {', '.join(updates)} WHERE id = ?",
+            cursor = await conn.execute(
+                f"UPDATE loans SET {', '.join(updates)} WHERE id = ? AND status = 'requested'",
                 params
             )
             await conn.commit()
+            return cursor.rowcount > 0
+        return False
 
 
-async def activate_loan(loan_id: int) -> None:
-    """Activate a loan (all parties accepted)."""
+async def activate_loan(loan_id: int) -> bool:
+    """Activate a loan (all parties accepted). Returns True if status was changed."""
     async with get_connection() as conn:
         # Get duration
         cursor = await conn.execute("SELECT duration_days FROM loans WHERE id = ?", (loan_id,))
@@ -623,11 +646,12 @@ async def activate_loan(loan_id: int) -> None:
         start_at = datetime.now(timezone.utc)
         end_at = start_at + timedelta(days=row["duration_days"])
         
-        await conn.execute(
-            "UPDATE loans SET status = 'active', start_at = ?, end_at = ?, updated_at = datetime('now') WHERE id = ?",
+        cursor = await conn.execute(
+            "UPDATE loans SET status = 'active', start_at = ?, end_at = ?, updated_at = datetime('now') WHERE id = ? AND status = 'requested'",
             (start_at.isoformat(), end_at.isoformat(), loan_id)
         )
         await conn.commit()
+        return cursor.rowcount > 0
 
 
 async def end_loan(loan_id: int) -> None:
@@ -661,6 +685,19 @@ async def get_active_loan_for_clan(clan_id: int) -> Optional[Dict[str, Any]]:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+
+async def get_all_active_loans_for_clan(clan_id: int) -> List[Dict[str, Any]]:
+    """Get all active loans for a clan (as lending or borrowing)."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT * FROM loans 
+               WHERE (lending_clan_id = ? OR borrowing_clan_id = ?) 
+               AND status = 'active'""",
+            (clan_id, clan_id)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 async def get_active_loan_for_member(user_id: int) -> Optional[Dict[str, Any]]:
@@ -719,21 +756,24 @@ async def update_transfer_acceptance(transfer_id: int, source: Optional[bool] = 
         if updates:
             updates.append("updated_at = datetime('now')")
             params.append(transfer_id)
-            await conn.execute(
-                f"UPDATE transfers SET {', '.join(updates)} WHERE id = ?",
+            cursor = await conn.execute(
+                f"UPDATE transfers SET {', '.join(updates)} WHERE id = ? AND status = 'requested'",
                 params
             )
             await conn.commit()
+            return cursor.rowcount > 0
+        return False
 
 
-async def complete_transfer(transfer_id: int) -> None:
-    """Complete a transfer."""
+async def complete_transfer(transfer_id: int) -> bool:
+    """Complete a transfer. Returns True if status was changed."""
     async with get_connection() as conn:
-        await conn.execute(
-            "UPDATE transfers SET status = 'completed', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+        cursor = await conn.execute(
+            "UPDATE transfers SET status = 'completed', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'requested'",
             (transfer_id,)
         )
         await conn.commit()
+        return cursor.rowcount > 0
 
 
 async def cancel_transfer(transfer_id: int, user_id: int, reason: str) -> None:
@@ -775,9 +815,24 @@ async def get_cooldown(target_type: str, target_id: int, kind: str) -> Optional[
 
 
 async def set_cooldown(target_type: str, target_id: int, kind: str, duration_days: int, reason: str) -> None:
-    """Set or update a cooldown."""
+    """Set or update a cooldown in days."""
     async with get_connection() as conn:
         until = (datetime.now(timezone.utc) + timedelta(days=duration_days)).isoformat()
+        await conn.execute(
+            """INSERT INTO cooldowns (target_type, target_id, kind, until, reason)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(target_type, target_id, kind) 
+               DO UPDATE SET until = excluded.until, reason = excluded.reason, updated_at = datetime('now')""",
+            (target_type, target_id, kind, until, reason)
+        )
+        await conn.commit()
+
+
+async def set_cooldown_minutes(target_type: str, target_id: int, kind, duration_minutes: int, reason: str) -> None:
+    """Set or update a cooldown in minutes."""
+    async with get_connection() as conn:
+        # Use timezone-aware now
+        until = (datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)).isoformat()
         await conn.execute(
             """INSERT INTO cooldowns (target_type, target_id, kind, until, reason)
                VALUES (?, ?, ?, ?, ?)

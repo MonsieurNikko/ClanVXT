@@ -12,7 +12,8 @@ import json
 
 import config
 from services import db, cooldowns, moderation, permissions
-import main as bot_main
+from services import db, cooldowns, moderation, permissions
+from services import bot_utils
 
 
 class AdminCog(commands.Cog):
@@ -32,7 +33,7 @@ class AdminCog(commands.Cog):
         user_role_names = [role.name for role in interaction.user.roles]
         if config.ROLE_MOD in user_role_names:
             return True
-        await interaction.response.send_message(f"You need the '{config.ROLE_MOD}' role to use this command.", ephemeral=True)
+        await interaction.response.send_message(f"Bạn cần role '{config.ROLE_MOD}' để sử dụng lệnh này.", ephemeral=True)
         return False
 
     # =========================================================================
@@ -58,7 +59,7 @@ class AdminCog(commands.Cog):
                 return await interaction.response.send_message("Please specify a user.", ephemeral=True)
             db_user = await db.get_user(str(user.id))
             if not db_user:
-                return await interaction.response.send_message("User not registered.", ephemeral=True)
+                return await interaction.response.send_message("Người dùng chưa đăng ký.", ephemeral=True)
             target_id = db_user["id"]
             target_name = user.display_name
         else:
@@ -66,7 +67,7 @@ class AdminCog(commands.Cog):
                 return await interaction.response.send_message("Please specify a clan name.", ephemeral=True)
             clan = await db.get_clan_any_status(clan_name)
             if not clan:
-                return await interaction.response.send_message("Clan not found.", ephemeral=True)
+                return await interaction.response.send_message("Không tìm thấy clan.", ephemeral=True)
             target_id = clan["id"]
             target_name = clan["name"]
             
@@ -77,12 +78,12 @@ class AdminCog(commands.Cog):
         for kind in kinds:
             is_cd, until = await cooldowns.check_cooldown(target_type, target_id, kind)
             if is_cd:
-                active_cooldowns.append(f"• **{kind}**: Until {until}")
+                active_cooldowns.append(f"• **{kind}**: Đến {until}")
                 
         if not active_cooldowns:
-            await interaction.response.send_message(f"✅ No active cooldowns for **{target_name}** ({target_type}).", ephemeral=True)
+            await interaction.response.send_message(f"✅ Không có cooldown nào đang hoạt động cho **{target_name}** ({target_type}).", ephemeral=True)
         else:
-            await interaction.response.send_message(f"⏳ **Active Cooldowns for {target_name}**:\n" + "\n".join(active_cooldowns), ephemeral=True)
+            await interaction.response.send_message(f"⏳ **Cooldown đang hoạt động cho {target_name}**:\n" + "\n".join(active_cooldowns), ephemeral=True)
 
     @cooldown_group.command(name="set", description="Set or overwrite a cooldown")
     @app_commands.describe(
@@ -99,7 +100,7 @@ class AdminCog(commands.Cog):
             return
             
         if not (0 <= duration_days <= 365):
-            return await interaction.response.send_message("Duration must be between 0 and 365 days.", ephemeral=True)
+            return await interaction.response.send_message("Thời hạn phải từ 0 đến 365 ngày.", ephemeral=True)
 
         target_id = 0
         target_name = ""
@@ -123,9 +124,9 @@ class AdminCog(commands.Cog):
             
         await cooldowns.apply_cooldown(target_type, target_id, kind, duration_days, reason)
         
-        await interaction.response.send_message(f"✅ Set **{kind}** cooldown for **{target_name}** for {duration_days} days.\nReason: {reason}")
+        await interaction.response.send_message(f"✅ Đã đặt cooldown **{kind}** cho **{target_name}** trong {duration_days} ngày.\nLý do: {reason}")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "ADMIN_COOLDOWN_SET",
             f"Admin {interaction.user.mention} set {kind} cooldown for {target_name} ({target_type}) for {duration_days} days. Reason: {reason}"
         )
@@ -164,10 +165,10 @@ class AdminCog(commands.Cog):
             
         await cooldowns.clear_cooldown(target_type, target_id, kind)
         
-        msg = f"✅ Cleared **{kind if kind else 'ALL'}** cooldowns for **{target_name}**."
+        msg = f"✅ Đã xóa **{kind if kind else 'TẤT CẢ'}** cooldown cho **{target_name}**."
         await interaction.response.send_message(msg)
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "ADMIN_COOLDOWN_CLEAR",
             f"Admin {interaction.user.mention} cleared {kind if kind else 'ALL'} cooldowns for {target_name} ({target_type})."
         )
@@ -297,7 +298,7 @@ class AdminCog(commands.Cog):
         guild = interaction.guild
         
         result_msg = ""
-        target_info = target_id or "N/A"
+        target_info = target_id or "Không có"
         
         try:
             if action_type == "warning":
@@ -456,7 +457,7 @@ class AdminCog(commands.Cog):
             
             await interaction.followup.send(result_msg, ephemeral=True)
             
-            await bot_main.log_event(
+            await bot_utils.log_event(
                 "CASE_ACTION",
                 f"Case #{case_id}: {interaction.user.mention} performed **{action_type}** on {target_info}. Reason: {reason}"
             )
@@ -487,9 +488,9 @@ class AdminCog(commands.Cog):
         
         await interaction.response.send_message(f"✅ Đã đóng Case #{case_id}.")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CASE_CLOSED",
-            f"Case #{case_id} closed by {interaction.user.mention}. Decision: {decision or 'N/A'}"
+            f"Case #{case_id} closed by {interaction.user.mention}. Decision: {decision or 'Không có'}"
         )
 
     # =========================================================================
@@ -516,7 +517,7 @@ class AdminCog(commands.Cog):
         
         await interaction.response.send_message(f"🚫 Đã cấm hệ thống **{user.display_name}**.\nLý do: {reason}")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "SYSTEM_BAN",
             f"User {user.mention} banned by {interaction.user.mention}. Reason: {reason}"
         )
@@ -541,7 +542,7 @@ class AdminCog(commands.Cog):
         
         await interaction.response.send_message(f"🚫 Đã cấm hệ thống clan **{clan['name']}**.\nLý do: {reason}")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "SYSTEM_BAN",
             f"Clan {clan['name']} banned by {interaction.user.mention}. Reason: {reason}"
         )
@@ -568,7 +569,7 @@ class AdminCog(commands.Cog):
             removed = await moderation.unban_user_system(db_user["id"])
             if removed:
                 await interaction.response.send_message(f"✅ Đã gỡ cấm hệ thống cho **{user.display_name}**.")
-                await bot_main.log_event("SYSTEM_UNBAN", f"User {user.mention} unbanned by {interaction.user.mention}.")
+                await bot_utils.log_event("SYSTEM_UNBAN", f"User {user.mention} unbanned by {interaction.user.mention}.")
             else:
                 await interaction.response.send_message(f"User không bị cấm hệ thống.", ephemeral=True)
         else:
@@ -582,7 +583,7 @@ class AdminCog(commands.Cog):
             removed = await moderation.unban_clan_system(clan["id"])
             if removed:
                 await interaction.response.send_message(f"✅ Đã gỡ cấm hệ thống cho clan **{clan['name']}**.")
-                await bot_main.log_event("SYSTEM_UNBAN", f"Clan {clan['name']} unbanned by {interaction.user.mention}.")
+                await bot_utils.log_event("SYSTEM_UNBAN", f"Clan {clan['name']} unbanned by {interaction.user.mention}.")
             else:
                 await interaction.response.send_message(f"Clan không bị cấm hệ thống.", ephemeral=True)
 
@@ -610,7 +611,7 @@ class AdminCog(commands.Cog):
         
         await interaction.response.send_message(f"🥶 Đã đóng băng clan **{clan['name']}**.\nElo sẽ không được áp dụng cho các trận đấu.\nLý do: {reason}")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_FROZEN",
             f"Clan {clan['name']} frozen by {interaction.user.mention}. Reason: {reason}"
         )
@@ -630,7 +631,7 @@ class AdminCog(commands.Cog):
         unfrozen = await moderation.unfreeze_clan(clan["id"])
         if unfrozen:
             await interaction.response.send_message(f"🔥 Đã bỏ đóng băng clan **{clan['name']}**.")
-            await bot_main.log_event("CLAN_UNFROZEN", f"Clan {clan['name']} unfrozen by {interaction.user.mention}.")
+            await bot_utils.log_event("CLAN_UNFROZEN", f"Clan {clan['name']} unfrozen by {interaction.user.mention}.")
         else:
             await interaction.response.send_message(f"Clan **{clan['name']}** không bị đóng băng.", ephemeral=True)
 

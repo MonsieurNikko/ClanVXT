@@ -247,6 +247,10 @@ async def dissolve_clan(clan_id: int, mod_id: int, guild: discord.Guild) -> Dict
         except Exception as e:
             results["channel_error"] = str(e)
     
+    # [P2 Fix] End all active loans involving this clan
+    from services import loan_service
+    await loan_service.end_all_clan_loans(clan_id, guild)
+    
     # Update clan status
     await db.update_clan_status(clan_id, "disbanded")
     

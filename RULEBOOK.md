@@ -101,6 +101,8 @@ Member có quyền rời clan bất cứ lúc nào nhưng vẫn chịu cooldown 
 
 
 Captain có quyền mời/kick thành viên. Kick vẫn áp dụng cooldown 14 ngày cho người bị kick.
+- **Bảo vệ lãnh đạo**: Không thể kick Captain. Vice Captain phải bị hạ cấp (demote) xuống Thành viên trước khi có thể bị kick.
+- **Tự động giải tán**: Nếu Captain rời clan mà không có Đội phó hoặc thành viên khác để thay thế, clan sẽ tự động giải tán.
 
 
 
@@ -211,6 +213,7 @@ Kick thành viên liên quan.
 
 
 Giải tán clan.
+- **Xử lý khoản mượn**: Khi một clan bị giải tán, tất cả các thành viên đang trong diện cho mượn (loan) liên quan đến clan đó (bất kể là bên cho mượn hay bên mượn) sẽ được bot tự động chấm dứt khoản mượn ngay lập tức và đưa về trạng thái hợp lệ.
 
 
 Cấm tham gia hệ thống clan.

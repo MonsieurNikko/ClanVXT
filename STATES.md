@@ -55,8 +55,8 @@ stateDiagram-v2
     [*] --> REQUESTED: /loan request
     REQUESTED --> ACTIVE: All 3 Parties Accepted (Lending, Borrowing, Member)
     REQUESTED --> CANCELLED: Cancelled by Initiator/Captain or Expired (48h)
-    ACTIVE --> ENDED: Time expired (1-7d) or Manual End
     ENDED --> [*]: Cooldown (14d) applied to Member, Lending Clan, Borrowing Clan
+    ACTIVE --> ENDED: Clan Disbanded (Force Return)
 ```
 
 ### States
@@ -64,6 +64,7 @@ stateDiagram-v2
 - **ACTIVE**: All parties accepted. Member temporarily in Borrowing Clan.
 - **ENDED**: Loan finished. Member returns to Lending Clan. Cooldowns applied.
 - **CANCELLED**: Request cancelled or expired.
+- **FORCE RETURN**: Special termination logic when either involved clan disbands. Loans involving the member are cleaned up immediately to prevent data corruption.
 
 ## 4. Report & Case System
 ```mermaid
@@ -96,5 +97,7 @@ stateDiagram-v2
 
 ### States
 - **REQUESTED**: Transfer proposed. Waiting for 3-party acceptance (Source Captain, Dest Captain, Member).
-- **COMPLETED**: All parties accepted. Member moved to Dest Clan.
+- **COMPLETED**: All parties accepted. Member moved to Dest Clan. 
+    - **Transaction Safety**: All member moves are atomic blocks in Python/SQLite to ensure they never end up in zero or two clans.
+    - **Acceptance Logic**: Initiator's acceptance is automatically granted if they are a required party.
 - **CANCELLED**: Request cancelled or expired.

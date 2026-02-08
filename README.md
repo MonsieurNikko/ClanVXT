@@ -8,8 +8,9 @@ A Discord bot for managing a competitive clan system for Valorant communities. I
 - **Elo System**: Automated Elo calculation with anti-farm mechanics
 - **Match Tracking**: Create matches, report results, handle disputes
 - **Loan System**: Temporarily loan members between clans
-- **Transfer System**: Permanent member transfers with sickness cooldown
+- **Transfer System**: Permanent member transfers with atomic movement logic
 - **Moderation**: Reports, appeals, case management, bans
+- **Localization**: Fully localized in Vietnamese for all user-facing interactions
 
 ## 📋 Requirements
 

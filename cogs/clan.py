@@ -13,7 +13,8 @@ import config
 from services import db, cooldowns
 
 # Import main module helpers (will be available after bot loads this cog)
-import main as bot_main
+# Import main module helpers (will be available after bot loads this cog)
+from services import bot_utils
 
 
 # =============================================================================
@@ -21,22 +22,22 @@ import main as bot_main
 # =============================================================================
 
 ERRORS = {
-    "ALREADY_IN_CLAN": "You are already in a clan.",
-    "COOLDOWN_ACTIVE": "You are in cooldown. Days remaining: {days}.",
-    "NAME_TAKEN": "Clan name '{name}' is already taken.",
-    "NAME_INVALID": "Clan name contains invalid characters or forbidden words.",
-    "NOT_VERIFIED": "You must have the '{role}' role to participate.",
-    "PERMISSION_DENIED": "You do not have permission to execute this command.",
-    "NOT_IN_CLAN": "You are not in a clan.",
-    "NOT_CAPTAIN": "Only the clan captain can execute this command.",
-    "TARGET_NOT_IN_CLAN": "The target user is not in your clan.",
-    "CANNOT_KICK_SELF": "You cannot kick yourself. Use /clan leave instead.",
-    "CANNOT_KICK_CAPTAIN": "You cannot kick the clan captain.",
-    "NO_PENDING_REQUEST": "You have no pending clan request.",
-    "CLAN_NOT_FOUND": "Clan not found.",
-    "NOT_MOD": "You need the '{role}' role to use this command.",
-    "BOT_MISSING_PERMS": "Bot is missing permissions: {perms}. Please grant Manage Roles and Manage Channels.",
-    "ROLE_HIERARCHY": "Cannot create role - bot's role must be higher in hierarchy.",
+    "ALREADY_IN_CLAN": "Bạn đã ở trong một clan rồi.",
+    "COOLDOWN_ACTIVE": "Bạn đang trong thời gian chờ. Còn lại: {days} ngày.",
+    "NAME_TAKEN": "Tên clan '{name}' đã được sử dụng.",
+    "NAME_INVALID": "Tên clan chứa ký tự không hợp lệ hoặc từ cấm.",
+    "NOT_VERIFIED": "Bạn cần role '{role}' để tham gia hệ thống clan.",
+    "PERMISSION_DENIED": "Bạn không có quyền thực hiện lệnh này.",
+    "NOT_IN_CLAN": "Bạn không ở trong clan nào.",
+    "NOT_CAPTAIN": "Chỉ Captain của clan mới có thể thực hiện lệnh này.",
+    "TARGET_NOT_IN_CLAN": "Người dùng này không thuộc clan của bạn.",
+    "CANNOT_KICK_SELF": "Bạn không thể tự kick chính mình. Hãy dùng `/clan leave`.",
+    "CANNOT_KICK_CAPTAIN": "Bạn không thể kick Captain của clan.",
+    "NO_PENDING_REQUEST": "Bạn không có yêu cầu ứng tuyển nào đang chờ.",
+    "CLAN_NOT_FOUND": "Không tìm thấy clan.",
+    "NOT_MOD": "Bạn cần role '{role}' để sử dụng lệnh này.",
+    "BOT_MISSING_PERMS": "Bot thiếu quyền: {perms}. Vui lòng cấp quyền Manage Roles và Manage Channels.",
+    "ROLE_HIERARCHY": "Không thể tạo role - Role của bot phải nằm trên role clan trong danh sách Role.",
 }
 
 
@@ -93,7 +94,7 @@ def check_cooldown(cooldown_until: Optional[str]) -> Optional[int]:
         now = datetime.now(timezone.utc)
         if cooldown_dt > now:
             return (cooldown_dt - now).days + 1
-    except:
+    except Exception:
         pass
     return None
 
@@ -162,7 +163,7 @@ class MemberSelectView(discord.ui.View):
         
         # Validate all selected members
         errors = []
-        verified_role = bot_main.get_verified_role()
+        verified_role = bot_utils.get_verified_role()
         
         for member in self.selected_members:
             # Can't select self
@@ -263,7 +264,7 @@ class ConfirmCreateButton(discord.ui.Button):
         
         # Log event
         member_mentions = ", ".join(m.mention for m in self.members)
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_CREATE_REQUEST",
             f"Captain: {interaction.user.mention}, Clan: '{self.clan_name}', Members: {member_mentions}"
         )
@@ -367,7 +368,7 @@ class AcceptDeclineView(discord.ui.View):
                 print(f"Failed to DM captain: {e}")
             
             # Alert mod-log
-            await bot_main.log_event(
+            await bot_utils.log_event(
                 "CLAN_PENDING_APPROVAL",
                 f"Clan '{self.clan_name}' - All 4 invited members accepted. Awaiting mod approval. (ID: {self.clan_id})"
             )
@@ -398,7 +399,7 @@ class AcceptDeclineView(discord.ui.View):
             view=None
         )
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_CANCELLED",
             f"Clan '{self.clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
         )
@@ -429,6 +430,124 @@ class ClanCog(commands.Cog):
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Handle persistent button interactions for clan invites."""
+        if interaction.type != discord.InteractionType.component:
+            return
+        
+        custom_id = interaction.data.get("custom_id", "")
+        
+        if custom_id.startswith("clan_accept:"):
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                clan_id = int(parts[1])
+                user_id = int(parts[2])
+                await self.handle_clan_accept(interaction, clan_id, user_id)
+                return
+        
+        if custom_id.startswith("clan_decline:"):
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                clan_id = int(parts[1])
+                user_id = int(parts[2])
+                await self.handle_clan_decline(interaction, clan_id, user_id)
+                return
+
+    async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
+        """Handle clan accept button click."""
+        # Check if request still exists and is pending
+        request = await db.get_user_pending_request(user_id)
+        if not request or request["clan_id"] != clan_id:
+            await interaction.response.edit_message(
+                content="This invitation has expired or been cancelled.",
+                view=None
+            )
+            return
+        
+        # Get clan name for messages
+        clan = await db.get_clan_by_id(clan_id)
+        clan_name = clan["name"] if clan else "Unknown"
+        
+        # Accept the request
+        await db.accept_create_request(clan_id, user_id)
+        
+        # Add user to clan_members
+        await db.add_member(user_id, clan_id, "member")
+        
+        # Check if all 4 accepted
+        all_accepted = await db.check_all_accepted(clan_id)
+        
+        await interaction.response.edit_message(
+            content=f"✅ You have **accepted** the invitation to join **{clan_name}**!",
+            view=None
+        )
+        
+        if all_accepted:
+            # Update clan status to pending_approval
+            await db.update_clan_status(clan_id, "pending_approval")
+            
+            # Notify captain via DM
+            try:
+                # Get captain's discord_id from clan_members
+                members = await db.get_clan_members(clan_id)
+                captain_member = next((m for m in members if m["role"] == "captain"), None)
+                if captain_member:
+                    captain_discord_id = captain_member["discord_id"]
+                    captain_user = interaction.client.get_user(int(captain_discord_id))
+                    if not captain_user:
+                        captain_user = await interaction.client.fetch_user(int(captain_discord_id))
+                    if captain_user:
+                        await captain_user.send(
+                            f"🎉 **Tin vui!**\n\n"
+                            f"Tất cả 4 thành viên được mời đã **chấp nhận** tham gia clan **{clan_name}** của bạn!\n\n"
+                            f"Clan của bạn hiện đang **chờ Mod phê duyệt**. Moderator sẽ xem xét và phê duyệt sớm."
+                        )
+            except Exception as e:
+                print(f"Failed to DM captain: {e}")
+            
+            # Alert mod-log
+            await bot_utils.log_event(
+                "CLAN_PENDING_APPROVAL",
+                f"Clan '{clan_name}' - All 4 invited members accepted. Awaiting mod approval. (ID: {clan_id})"
+            )
+
+    async def handle_clan_decline(self, interaction: discord.Interaction, clan_id: int, user_id: int):
+        """Handle clan decline button click."""
+        # Check if request still exists
+        request = await db.get_user_pending_request(user_id)
+        if not request or request["clan_id"] != clan_id:
+            await interaction.response.edit_message(
+                content="Lời mời này đã hết hạn hoặc đã bị hủy.",
+                view=None
+            )
+            return
+        
+        # Get clan name for messages
+        clan = await db.get_clan_by_id(clan_id)
+        clan_name = clan["name"] if clan else "Unknown"
+        
+        # Decline the request
+        await db.decline_create_request(clan_id, user_id)
+        
+        # Delete the entire clan creation
+        async with db.get_connection() as conn:
+            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
+            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
+            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+            await conn.commit()
+        
+        await interaction.response.edit_message(
+            content=f"❌ Bạn đã **từ chối** lời mời tham gia **{clan_name}**.\n"
+                    f"Việc tạo clan đã bị hủy bỏ.",
+            view=None
+        )
+        
+        await bot_utils.log_event(
+            "CLAN_CANCELLED",
+            f"Clan '{clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
+        )
     
     # =========================================================================
     # USER COMMANDS
@@ -459,26 +578,26 @@ class ClanCog(commands.Cog):
         
         # Basic commands (everyone)
         basic_cmds = """
-`/clan register` - Register to use the clan system
-`/clan info [name]` - View clan information
-`/clan help` - Show this help message
+`/clan register` - Đăng ký sử dụng hệ thống clan
+`/clan info [name]` - Xem thông tin clan
+`/clan help` - Hiển thị hướng dẫn này
 """
-        embed.add_field(name="📋 Basic Commands", value=basic_cmds, inline=False)
+        embed.add_field(name="📋 Lệnh Cơ Bản", value=basic_cmds, inline=False)
         
         # Verified user commands
         if is_verified:
             user_cmds = """
-`/clan create` - Create a new clan (need 4 members + you)
-`/clan leave` - Leave your current clan (14-day cooldown)
+`/clan create` - Tạo clan mới (cần bạn + 4 thành viên)
+`/clan leave` - Rời khỏi clan hiện tại (chờ 14 ngày)
 """
-            embed.add_field(name="👤 Member Commands", value=user_cmds, inline=False)
+            embed.add_field(name="👤 Lệnh Thành Viên", value=user_cmds, inline=False)
         
         # Match commands (any clan member)
         if clan_role:
             match_cmds = """
-`/match create <opponent_clan> [note]` - Create a match vs another clan
-• Buttons: **Report Win** (creator only), **Cancel** (before report)
-• After report: **Confirm** / **Dispute** (opponent clan)
+`/match create <opponent_clan> [note]` - Tạo trận đấu với clan khác
+• Nút: **Báo thắng** (chỉ người tạo), **Hủy** (trước khi báo kết quả)
+• Sau khi báo kết quả: **Xác nhận** / **Tranh chấp** (clan đối thủ)
 """
             embed.add_field(name="⚔️ Match Commands", value=match_cmds, inline=False)
         
@@ -572,7 +691,7 @@ class ClanCog(commands.Cog):
             user = await get_user_db(str(interaction.user.id))
             if not user:
                 await interaction.response.send_message(
-                    "You are not registered. Use `/register` to register your Riot ID.",
+                    "Bạn chưa đăng ký. Hãy dùng `/clan register` để bắt đầu.",
                     ephemeral=True
                 )
                 return
@@ -594,9 +713,9 @@ class ClanCog(commands.Cog):
             title=f"🏰 {clan['name']}",
             color=discord.Color.blue()
         )
-        embed.add_field(name="Status", value=clan["status"].replace("_", " ").title(), inline=True)
+        embed.add_field(name="Trạng thái", value=clan["status"].replace("_", " ").title(), inline=True)
         embed.add_field(name="Elo", value=str(clan["elo"]), inline=True)
-        embed.add_field(name="Matches", value=str(clan["matches_played"]), inline=True)
+        embed.add_field(name="Trận đấu", value=str(clan["matches_played"]), inline=True)
         
         # Group members by role
         captain = [m for m in members if m["role"] == "captain"]
@@ -613,8 +732,8 @@ class ClanCog(commands.Cog):
             regular_list = ", ".join(f"<@{m['discord_id']}>" for m in regular)
             member_text += f"👥 **Members:** {regular_list}"
         
-        embed.add_field(name=f"Members ({len(members)})", value=member_text or "None", inline=False)
-        embed.set_footer(text=f"Created: {clan['created_at'][:10]}")
+        embed.add_field(name=f"Thành viên ({len(members)})", value=member_text or "Không có", inline=False)
+        embed.set_footer(text=f"Ngày thành lập: {clan['created_at'][:10]}")
         
         await interaction.response.send_message(embed=embed)
     
@@ -637,11 +756,11 @@ class ClanCog(commands.Cog):
         # Check if user is captain
         if clan_data["member_role"] == "captain":
             await interaction.response.send_message(
-                "❌ As clan captain, you cannot leave. Transfer captainship first or disband the clan.",
+                "❌ Với tư cách là Captain, bạn không thể rời clan. Hãy chuyển quyền Captain trước hoặc giải tán clan.",
                 ephemeral=True
             )
             return
-        
+
         clan_name = clan_data["name"]
         clan_id = clan_data["id"]
         
@@ -650,7 +769,7 @@ class ClanCog(commands.Cog):
         if active_loan:
             await db.end_loan(active_loan["id"])
             await cooldowns.apply_loan_cooldowns(active_loan["lending_clan_id"], active_loan["borrowing_clan_id"], user["id"])
-            await bot_main.log_event("LOAN_ENDED", f"Loan {active_loan['id']} ended due to member leaving.")
+            await bot_utils.log_event("LOAN_ENDED", f"Loan {active_loan['id']} ended due to member leaving.")
             
         await db.cancel_user_pending_requests(user["id"])
         
@@ -667,7 +786,7 @@ class ClanCog(commands.Cog):
                 role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
                 if role:
                     await interaction.user.remove_roles(role)
-            except:
+            except Exception:
                 pass
         
         # Check if clan drops below 5 members - AUTO DISBAND
@@ -679,7 +798,7 @@ class ClanCog(commands.Cog):
                     role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
                     if role:
                         await role.delete(reason="Clan auto-disbanded (members < 5)")
-                except:
+                except Exception:
                     pass
             
             if clan_data.get("discord_channel_id"):
@@ -687,29 +806,32 @@ class ClanCog(commands.Cog):
                     channel = interaction.guild.get_channel(int(clan_data["discord_channel_id"]))
                     if channel:
                         await channel.delete(reason="Clan auto-disbanded (members < 5)")
-                except:
+                except Exception:
                     pass
             
-            # Delete clan from DB
+            # [P2 Fix] End all active loans involving this clan
+            from services import loan_service
+            await loan_service.end_all_clan_loans(clan_id, interaction.guild)
+            
+            # Update clan status and remove members
             async with db.get_connection() as conn:
                 await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-                await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-                await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+                await conn.execute("UPDATE clans SET status = 'disbanded', updated_at = datetime('now') WHERE id = ?", (clan_id,))
                 await conn.commit()
             
-            await bot_main.log_event(
+            await bot_utils.log_event(
                 "CLAN_AUTO_DISBANDED",
                 f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE})"
             )
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "MEMBER_LEAVE",
             f"{interaction.user.mention} left clan '{clan_name}'. Cooldown: {config.COOLDOWN_DAYS} days."
         )
         
         await interaction.response.send_message(
-            f"✅ You have left **{clan_name}**.\n"
-            f"⏳ You are now in **{config.COOLDOWN_DAYS}-day cooldown** before you can join another clan.",
+            f"✅ Bạn đã rời clan **{clan_name}**.\n"
+            f"⏳ Bạn hiện đang trong thời gian chờ **{config.COOLDOWN_DAYS} ngày** trước khi có thể gia nhập clan khác.",
             ephemeral=True
         )
     
@@ -743,7 +865,7 @@ class ClanCog(commands.Cog):
                 role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
                 if role:
                     await role.delete(reason="Clan disbanded")
-            except:
+            except Exception:
                 pass
         
         if clan_data.get("discord_channel_id"):
@@ -751,24 +873,27 @@ class ClanCog(commands.Cog):
                 channel = interaction.guild.get_channel(int(clan_data["discord_channel_id"]))
                 if channel:
                     await channel.delete(reason="Clan disbanded")
-            except:
+            except Exception:
                 pass
         
-        # Remove all members and delete clan from DB
+        # [P2 Fix] End all active loans involving this clan
+        from services import loan_service
+        await loan_service.end_all_clan_loans(clan_id, interaction.guild)
+        
+        # Remove all members and update clan status to disbanded
         async with db.get_connection() as conn:
             await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+            await conn.execute("UPDATE clans SET status = 'disbanded', updated_at = datetime('now') WHERE id = ?", (clan_id,))
             await conn.commit()
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_DISBANDED",
             f"Clan '{clan_name}' disbanded by captain {interaction.user.mention}"
         )
         
         await interaction.response.send_message(
-            f"✅ Clan **{clan_name}** has been disbanded.\n"
-            f"All members have been removed. No cooldown applied.",
+            f"✅ Clan **{clan_name}** đã được giải tán.\n"
+            f"Tất cả thành viên đã bị xóa. Không áp dụng thời gian chờ.",
             ephemeral=True
         )
     
@@ -802,23 +927,23 @@ class ClanCog(commands.Cog):
             return
         
         if target_clan["member_role"] == "captain":
-            await interaction.response.send_message("Cannot promote yourself.", ephemeral=True)
+            await interaction.response.send_message("Không thể tự thăng chức cho chính mình.", ephemeral=True)
             return
         
         if target_clan["member_role"] == "vice":
-            await interaction.response.send_message(f"{member.mention} is already a Vice Captain.", ephemeral=True)
+            await interaction.response.send_message(f"{member.mention} đã là Vice Captain rồi.", ephemeral=True)
             return
         
         # Promote
         await db.update_member_role(target_user["id"], clan_data["id"], "vice")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "MEMBER_PROMOTED",
             f"{member.mention} promoted to Vice Captain in '{clan_data['name']}' by {interaction.user.mention}"
         )
         
         await interaction.response.send_message(
-            f"✅ {member.mention} has been promoted to **Vice Captain**!",
+            f"✅ {member.mention} đã được thăng chức thành **Vice Captain**!",
             ephemeral=True
         )
     
@@ -852,19 +977,19 @@ class ClanCog(commands.Cog):
             return
         
         if target_clan["member_role"] != "vice":
-            await interaction.response.send_message(f"{member.mention} is not a Vice Captain.", ephemeral=True)
+            await interaction.response.send_message(f"{member.mention} không phải là Vice Captain.", ephemeral=True)
             return
         
         # Demote
         await db.update_member_role(target_user["id"], clan_data["id"], "member")
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "MEMBER_DEMOTED",
             f"{member.mention} demoted from Vice Captain in '{clan_data['name']}' by {interaction.user.mention}"
         )
         
         await interaction.response.send_message(
-            f"✅ {member.mention} has been demoted to **Member**.",
+            f"✅ {member.mention} đã bị giáng chức xuống **Thành viên**.",
             ephemeral=True
         )
     
@@ -910,7 +1035,7 @@ class ClanCog(commands.Cog):
         if active_loan:
             await db.end_loan(active_loan["id"])
             await cooldowns.apply_loan_cooldowns(active_loan["lending_clan_id"], active_loan["borrowing_clan_id"], target_user["id"])
-            await bot_main.log_event("LOAN_ENDED", f"Loan {active_loan['id']} ended due to member kick.")
+            await bot_utils.log_event("LOAN_ENDED", f"Loan {active_loan['id']} ended due to member kick.")
             
         await db.cancel_user_pending_requests(target_user["id"])
 
@@ -927,7 +1052,7 @@ class ClanCog(commands.Cog):
                 role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
                 if role:
                     await member.remove_roles(role)
-            except:
+            except Exception:
                 pass
         
         # Check if clan drops below 5 members - AUTO DISBAND
@@ -939,7 +1064,7 @@ class ClanCog(commands.Cog):
                     role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
                     if role:
                         await role.delete(reason="Clan auto-disbanded (members < 5)")
-                except:
+                except Exception:
                     pass
             
             if clan_data.get("discord_channel_id"):
@@ -947,39 +1072,42 @@ class ClanCog(commands.Cog):
                     channel = interaction.guild.get_channel(int(clan_data["discord_channel_id"]))
                     if channel:
                         await channel.delete(reason="Clan auto-disbanded (members < 5)")
-                except:
+                except Exception:
                     pass
             
-            # Delete clan from DB
+            # [P2 Fix] End all active loans involving this clan
+            from services import loan_service
+            await loan_service.end_all_clan_loans(clan_id, interaction.guild)
+            
+            # Update clan status and remove members
             async with db.get_connection() as conn:
                 await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-                await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-                await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+                await conn.execute("UPDATE clans SET status = 'disbanded', updated_at = datetime('now') WHERE id = ?", (clan_id,))
                 await conn.commit()
             
-            await bot_main.log_event(
+            await bot_utils.log_event(
                 "CLAN_AUTO_DISBANDED",
-                f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE})"
+                f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE}) after kick"
             )
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "MEMBER_KICK",
             f"{member.mention} kicked from '{clan_name}' by {interaction.user.mention}. Cooldown: {config.COOLDOWN_DAYS} days."
         )
         
         await interaction.response.send_message(
-            f"✅ {member.mention} has been kicked from **{clan_name}**.\n"
-            f"They now have a {config.COOLDOWN_DAYS}-day cooldown.",
+            f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n"
+            f"Họ hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày.",
             ephemeral=True
         )
         
         # Try to DM the kicked member
         try:
             await member.send(
-                f"⚠️ You have been **kicked** from clan **{clan_name}** by the captain.\n"
-                f"You are now in a {config.COOLDOWN_DAYS}-day cooldown before you can join another clan."
+                f"⚠️ Bạn đã bị **kick** khỏi clan **{clan_name}** bởi Captain.\n"
+                f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác."
             )
-        except:
+        except Exception:
             pass
     
     # =========================================================================
@@ -1008,7 +1136,7 @@ class ClanCog(commands.Cog):
         
         if clan["status"] != "pending_approval":
             await interaction.followup.send(
-                f"Clan '{clan['name']}' is not pending approval (status: {clan['status']}).",
+                f"Clan '{clan['name']}' không ở trạng thái chờ phê duyệt (trạng thái: {clan['status']}).",
                 ephemeral=True
             )
             return
@@ -1043,10 +1171,10 @@ class ClanCog(commands.Cog):
             return
         
         # Create private channel under CLANS category
-        category = bot_main.get_clans_category()
+        category = bot_utils.get_clans_category()
         if not category:
             await interaction.followup.send(
-                "❌ Error: CLANS category not found. Please check bot configuration.",
+                "❌ Lỗi: Không tìm thấy category CLANS. Vui lòng kiểm tra cấu hình bot.",
                 ephemeral=True
             )
             await clan_role.delete()  # Cleanup role
@@ -1068,7 +1196,7 @@ class ClanCog(commands.Cog):
         except discord.Forbidden:
             await clan_role.delete()  # Cleanup role
             await interaction.followup.send(
-                ERRORS["BOT_MISSING_PERMS"].format(perms="Manage Channels in CLANS category"),
+                ERRORS["BOT_MISSING_PERMS"].format(perms="Manage Channels trong category CLANS"),
                 ephemeral=True
             )
             return
@@ -1086,11 +1214,11 @@ class ClanCog(commands.Cog):
                 discord_member = guild.get_member(int(member_data["discord_id"]))
                 if discord_member:
                     await discord_member.add_roles(clan_role)
-            except:
+            except Exception:
                 role_assign_failures.append(member_data["discord_id"])
         
         # Log
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_APPROVED",
             f"Clan '{clan['name']}' approved by {interaction.user.mention}. "
             f"Role: {clan_role.mention}, Channel: {clan_channel.mention}"
@@ -1098,17 +1226,17 @@ class ClanCog(commands.Cog):
         
         # Send welcome message to clan channel
         await clan_channel.send(
-            f"🎉 **Welcome to {clan['name']}!**\n\n"
-            f"Your clan has been approved! This is your private clan channel.\n"
-            f"Good luck and have fun! 🏆"
+            f"🎉 **Chào mừng đến với {clan['name']}!**\n\n"
+            f"Clan của bạn đã được phê duyệt! Đây là kênh riêng tư của clan.\n"
+            f"Chúc các bạn thi đấu tốt và vui vẻ! 🏆"
         )
         
-        msg = f"✅ Clan **{clan['name']}** has been approved!\n" \
-              f"• Role created: {clan_role.mention}\n" \
-              f"• Channel created: {clan_channel.mention}"
+        msg = f"✅ Clan **{clan['name']}** đã được phê duyệt!\n" \
+              f"• Role đã tạo: {clan_role.mention}\n" \
+              f"• Kênh đã tạo: {clan_channel.mention}"
         
         if role_assign_failures:
-            msg += f"\n\n⚠️ Could not assign role to: {', '.join(role_assign_failures)}"
+            msg += f"\n\n⚠️ Không thể gán role cho: {', '.join(role_assign_failures)}"
         
         await interaction.followup.send(msg, ephemeral=True)
     
@@ -1129,7 +1257,7 @@ class ClanCog(commands.Cog):
         
         if clan["status"] != "pending_approval":
             await interaction.response.send_message(
-                f"Clan '{clan['name']}' is not pending approval (status: {clan['status']}).",
+                f"Clan '{clan['name']}' không ở trạng thái chờ phê duyệt (trạng thái: {clan['status']}).",
                 ephemeral=True
             )
             return
@@ -1142,7 +1270,7 @@ class ClanCog(commands.Cog):
             await conn.commit()
         
         # Log
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_REJECTED",
             f"Clan '{clan['name']}' rejected and deleted by {interaction.user.mention}. Reason: {reason}"
         )
@@ -1155,14 +1283,14 @@ class ClanCog(commands.Cog):
                 captain_member = guild.get_member(int(captain["discord_id"]))
                 if captain_member:
                     await captain_member.send(
-                        f"❌ Your clan **{clan['name']}** has been **rejected** by a moderator.\n\n"
-                        f"**Reason:** {reason}"
+                        f"❌ Clan **{clan['name']}** của bạn đã bị **từ chối** bởi Moderator.\n\n"
+                        f"**Lý do:** {reason}"
                     )
-            except:
+            except Exception:
                 pass
         
         await interaction.response.send_message(
-            f"✅ Clan **{clan['name']}** has been rejected.\nReason: {reason}",
+            f"✅ Clan **{clan['name']}** đã bị từ chối.\nLý do: {reason}",
             ephemeral=True
         )
 
@@ -1189,7 +1317,7 @@ class ClanCog(commands.Cog):
                 role = interaction.guild.get_role(int(clan["discord_role_id"]))
                 if role:
                     await role.delete(reason=f"Clan deleted by mod {interaction.user}")
-            except:
+            except Exception:
                 pass
         
         if clan.get("discord_channel_id"):
@@ -1197,7 +1325,7 @@ class ClanCog(commands.Cog):
                 channel = interaction.guild.get_channel(int(clan["discord_channel_id"]))
                 if channel:
                     await channel.delete(reason=f"Clan deleted by mod {interaction.user}")
-            except:
+            except Exception:
                 pass
         
         # Remove all members and delete clan from DB
@@ -1207,13 +1335,13 @@ class ClanCog(commands.Cog):
             await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
             await conn.commit()
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CLAN_DELETED_BY_MOD",
             f"Clan '{clan_name}' (ID: {clan_id}) hard deleted by mod {interaction.user.mention}"
         )
         
         await interaction.followup.send(
-            f"✅ Clan **{clan_name}** (ID: {clan_id}) has been hard deleted from the database.",
+            f"✅ Clan **{clan_name}** (ID: {clan_id}) đã bị xóa vĩnh viễn khỏi database.",
             ephemeral=True
         )
     
@@ -1242,7 +1370,7 @@ class ClanCog(commands.Cog):
         user_clan = await db.get_user_clan(target_user["id"])
         if not user_clan or user_clan["id"] != clan_id:
             await interaction.response.send_message(
-                f"❌ {member.mention} is not a member of clan '{clan_name}'.",
+                f"❌ {member.mention} không phải là thành viên của clan '{clan_name}'.",
                 ephemeral=True
             )
             return
@@ -1266,13 +1394,13 @@ class ClanCog(commands.Cog):
             )
             await conn.commit()
         
-        await bot_main.log_event(
+        await bot_utils.log_event(
             "CAPTAIN_SET_BY_MOD",
             f"{member.mention} set as captain of '{clan_name}' by mod {interaction.user.mention}"
         )
         
         await interaction.response.send_message(
-            f"✅ {member.mention} is now the captain of **{clan_name}**.",
+            f"✅ {member.mention} hiện đã là Captain của **{clan_name}**.",
             ephemeral=True
         )
     
@@ -1289,7 +1417,7 @@ class ClanCog(commands.Cog):
         existing = await db.get_user(discord_id)
         if existing:
             await interaction.response.send_message(
-                "✅ You are already registered in the clan system!",
+                "✅ Bạn đã đăng ký trong hệ thống clan rồi!",
                 ephemeral=True
             )
             return
@@ -1298,18 +1426,18 @@ class ClanCog(commands.Cog):
         try:
             await db.create_user(discord_id, f"{interaction.user.name}#0000")
             await interaction.response.send_message(
-                f"✅ Successfully registered!\n"
-                f"You can now use `/clan create` and other clan commands!",
+                f"✅ Đăng ký thành công!\n"
+                f"Bạn có thể sử dụng `/clan create` và các lệnh clan khác!",
                 ephemeral=True
             )
             
-            await bot_main.log_event(
+            await bot_utils.log_event(
                 "USER_REGISTERED",
                 f"{interaction.user.mention} registered in clan system"
             )
         except Exception as e:
             await interaction.response.send_message(
-                f"❌ Registration failed: {str(e)}",
+                f"❌ Đăng ký thất bại: {str(e)}",
                 ephemeral=True
             )
 
