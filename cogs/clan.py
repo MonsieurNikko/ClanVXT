@@ -316,7 +316,7 @@ class AcceptDeclineView(discord.ui.View):
         # Add user to clan_members
         await db.add_member(self.user_id, self.clan_id, "member")
         
-        # Check if all 5 accepted
+        # Check if all 4 accepted
         all_accepted = await db.check_all_accepted(self.clan_id)
         
         await interaction.response.edit_message(
@@ -327,6 +327,28 @@ class AcceptDeclineView(discord.ui.View):
         if all_accepted:
             # Update clan status to pending_approval
             await db.update_clan_status(self.clan_id, "pending_approval")
+            
+            # Notify captain via DM
+            try:
+                clan = await db.get_clan_by_id(self.clan_id)
+                if clan:
+                    # Get captain's discord_id from clan_members
+                    members = await db.get_clan_members(self.clan_id)
+                    captain_member = next((m for m in members if m["role"] == "captain"), None)
+                    if captain_member:
+                        captain_discord_id = captain_member["discord_id"]
+                        # Get discord user
+                        captain_user = interaction.client.get_user(int(captain_discord_id))
+                        if not captain_user:
+                            captain_user = await interaction.client.fetch_user(int(captain_discord_id))
+                        if captain_user:
+                            await captain_user.send(
+                                f"🎉 **Great news!**\n\n"
+                                f"All 4 invited members have **accepted** your clan **{self.clan_name}**!\n\n"
+                                f"Your clan is now **pending mod approval**. A moderator will review and approve it soon."
+                            )
+            except Exception as e:
+                print(f"Failed to DM captain: {e}")
             
             # Alert mod-log
             await bot_main.log_event(
