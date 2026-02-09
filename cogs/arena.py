@@ -429,6 +429,7 @@ class ArenaView(discord.ui.View):
         
         embed = discord.Embed(
             title="📜 Luật Lệ Hệ Thống Clan",
+            description="Tóm tắt các quy định quan trọng của hệ thống Clan VXT",
             color=discord.Color.dark_gold()
         )
         
@@ -456,7 +457,19 @@ class ArenaView(discord.ui.View):
             inline=False
         )
         
-        # Section 3: Cooldown & Rời Clan
+        # Section 3: Quyền lợi Clan
+        embed.add_field(
+            name="🎁 Quyền Lợi Khi Có Clan",
+            value=(
+                "• **Role riêng** với tên và màu của clan\n"
+                "• **Kênh chat riêng** chỉ clan và Mod xem được\n"
+                "• Tham gia **thi đấu** và ghi nhận **Elo**\n"
+                "• Cạnh tranh **BXH** và nhận **phần thưởng mùa**"
+            ),
+            inline=False
+        )
+        
+        # Section 4: Cooldown & Rời Clan
         embed.add_field(
             name="⏳ Cooldown",
             value=(
@@ -467,30 +480,55 @@ class ArenaView(discord.ui.View):
             inline=False
         )
         
-        # Section 4: Trận đấu
+        # Section 5: Trận đấu & Elo
         embed.add_field(
-            name="⚔️ Trận Đấu",
+            name="⚔️ Trận Đấu & Elo",
             value=(
-                "• Tối thiểu **5 người** để report match\n"
-                "• Clan **thắng** được **+25 Elo**\n"
-                "• Clan **thua** bị **-15 Elo**\n"
-                "• Mod sẽ xác nhận kết quả trận đấu"
+                "• Clan **thắng**: **+25 Elo** | **thua**: **-15 Elo**\n"
+                "• **Elo khởi điểm**: 1000 | **10 trận đầu**: xếp hạng nhanh\n"
+                "• Cùng 2 clan: tối đa **2 trận/24h** tính Elo\n"
+                "• Tranh chấp → **Mod** quyết định"
             ),
             inline=False
         )
         
-        # Section 5: Cấm
+        # Section 6: Cho mượn (Loan)
         embed.add_field(
-            name="🚫 Vi Phạm",
+            name="🤝 Cho Mượn Thành Viên",
             value=(
-                "• Dùng nhiều acc → **ban hệ thống**\n"
-                "• Gian lận Elo/match → **ban vĩnh viễn**\n"
-                "• Tên clan tục tĩu/kỳ thị → **reject**"
+                "• Tối đa **1 người** cho mượn/mỗi clan\n"
+                "• Cần **3 bên đồng ý**: 2 Captain + người được mượn\n"
+                "• Thời hạn tối đa **7 ngày**\n"
+                "• Cooldown **14 ngày** sau khi kết thúc"
+            ),
+            inline=True
+        )
+        
+        # Section 7: Chuyển nhượng (Transfer)
+        embed.add_field(
+            name="🔄 Chuyển Nhượng",
+            value=(
+                "• Cần **3 bên đồng ý** (giống Cho mượn)\n"
+                "• Clan nguồn phải còn **≥5 người** sau chuyển\n"
+                "• **Transfer Sickness**: cấm thi đấu **3 ngày**\n"
+                "• Cooldown **14 ngày** không rời clan mới"
+            ),
+            inline=True
+        )
+        
+        # Section 8: Vi phạm
+        embed.add_field(
+            name="🚫 Vi Phạm & Hình Phạt",
+            value=(
+                "• Dùng nhiều acc/smurf → **ban hệ thống**\n"
+                "• Gian lận Elo/dàn xếp → **ban vĩnh viễn**\n"
+                "• Tên clan tục tĩu/kỳ thị → **reject**\n"
+                "• Mọi quyết định cuối thuộc về **Mod**"
             ),
             inline=False
         )
         
-        embed.set_footer(text="💡 Liên hệ Mod nếu có thắc mắc!")
+        embed.set_footer(text="💡 Liên hệ Mod nếu có thắc mắc! | VXT Clan System")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
         print(f"[ARENA] Sent rules to {interaction.user}")
