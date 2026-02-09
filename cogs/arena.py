@@ -31,7 +31,7 @@ class ArenaView(discord.ui.View):
         custom_id="arena:clan_list"
     )
     async def clan_list_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Show all active clans."""
+        """Show all active clans with their members."""
         print(f"[ARENA] User {interaction.user} clicked: Clan List")
         await interaction.response.defer(ephemeral=True)
         
@@ -53,24 +53,32 @@ class ArenaView(discord.ui.View):
             # Sort by Elo descending
             clans_sorted = sorted(clans, key=lambda c: c.get("elo", 1000), reverse=True)
             
-            clan_lines = []
-            for i, clan in enumerate(clans_sorted[:15], 1):  # Limit to 15
-                member_count = await db.count_clan_members(clan["id"])
-                clan_lines.append(
-                    f"**{i}.** {clan['name']} | Elo: `{clan.get('elo', 1000)}` | 👥 {member_count}"
+            for i, clan in enumerate(clans_sorted[:10], 1):  # Limit to 10 clans
+                members = await db.get_clan_members(clan["id"])
+                member_count = len(members)
+                
+                # Build member list with roles
+                member_lines = []
+                for m in members:
+                    role_emoji = "👑" if m["role"] == "captain" else ("⚔️" if m["role"] == "vice" else "👤")
+                    # Try to get Discord member for display name
+                    discord_member = interaction.guild.get_member(int(m["discord_id"])) if interaction.guild else None
+                    display_name = discord_member.display_name if discord_member else m["riot_id"]
+                    member_lines.append(f"{role_emoji} {display_name}")
+                
+                members_text = "\n".join(member_lines) if member_lines else "Không có thành viên"
+                
+                embed.add_field(
+                    name=f"{i}. {clan['name']} | Elo: `{clan.get('elo', 1000)}` | 👥 {member_count}",
+                    value=members_text,
+                    inline=False
                 )
             
-            embed.add_field(
-                name="Top 15 Clan theo Elo",
-                value="\n".join(clan_lines) if clan_lines else "Không có dữ liệu",
-                inline=False
-            )
-            
-            if len(clans) > 15:
-                embed.set_footer(text=f"...và {len(clans) - 15} clan khác")
+            if len(clans) > 10:
+                embed.set_footer(text=f"...và {len(clans) - 10} clan khác")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
-            print(f"[ARENA] Sent clan list to {interaction.user}")
+            print(f"[ARENA] Sent clan list with members to {interaction.user}")
             
         except Exception as e:
             print(f"[ARENA] ERROR in clan_list_button: {e}")
