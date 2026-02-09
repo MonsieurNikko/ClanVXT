@@ -5,6 +5,19 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.7] - 2026-02-09
+### ✨ Feature: Tạo Clan từ Arena Dashboard
+- **Interactive Creation**: Thêm nút "Tạo Clan" (➕) vào Arena Dashboard.
+- **Same Flow**: Sử dụng cùng flow với lệnh `/clan create` (Modal → Select Members → Confirm).
+- **Validation**: Kiểm tra verified role, không trong clan khác, không cooldown.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `cogs/arena.py` |
+
+---
+
 ## [1.2.6] - 2026-02-09
 ### ✨ Feature: Thông Báo Cập Nhật Tự Động
 - **Update Channel**: Bot tự động tìm kênh `#update-bot` và gửi thông báo khi có tính năng mới.

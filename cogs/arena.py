@@ -273,6 +273,55 @@ class ArenaView(discord.ui.View):
         except Exception as e:
             print(f"[ARENA] ERROR in my_info_button: {e}")
             await interaction.followup.send("❌ Đã xảy ra lỗi khi tải thông tin.", ephemeral=True)
+    
+    @discord.ui.button(
+        label="Tạo Clan", 
+        style=discord.ButtonStyle.danger,
+        emoji="➕",
+        custom_id="arena:create_clan",
+        row=1
+    )
+    async def create_clan_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Open the clan creation modal."""
+        print(f"[ARENA] User {interaction.user} clicked: Create Clan")
+        
+        # Check verified role
+        user_role_names = [role.name for role in interaction.user.roles]
+        if config.ROLE_VERIFIED not in user_role_names:
+            await interaction.response.send_message(
+                f"❌ Bạn cần role **{config.ROLE_VERIFIED}** để tạo clan.",
+                ephemeral=True
+            )
+            return
+        
+        # Check if user already in a clan
+        user = await db.get_user(str(interaction.user.id))
+        if user:
+            existing_clan = await db.get_user_clan(user["id"])
+            if existing_clan:
+                await interaction.response.send_message(
+                    f"❌ Bạn đã ở trong clan **{existing_clan['name']}** rồi. Hãy rời clan trước khi tạo clan mới.",
+                    ephemeral=True
+                )
+                return
+            
+            # Check cooldown
+            cooldowns_list = await db.get_all_user_cooldowns(user["id"])
+            join_leave_cd = next((cd for cd in cooldowns_list if cd["kind"] == "join_leave"), None)
+            if join_leave_cd:
+                from datetime import datetime, timezone
+                cd_until = datetime.fromisoformat(join_leave_cd["until"].replace("Z", "+00:00"))
+                if cd_until > datetime.now(timezone.utc):
+                    await interaction.response.send_message(
+                        f"❌ Bạn đang trong thời gian chờ đến **{cd_until.strftime('%Y-%m-%d')}** trước khi có thể tạo/tham gia clan.",
+                        ephemeral=True
+                    )
+                    return
+        
+        # Import and show the ClanCreateModal from clan.py
+        from cogs.clan import ClanCreateModal
+        await interaction.response.send_modal(ClanCreateModal())
+        print(f"[ARENA] Opened ClanCreateModal for {interaction.user}")
 
 
 # =============================================================================
@@ -289,7 +338,8 @@ def create_arena_embed() -> discord.Embed:
             "🏰 **Danh sách Clan** — Xem tất cả các clan đang hoạt động\n"
             "🏆 **Bảng xếp hạng** — Top clan theo điểm Elo\n"
             "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
-            "👤 **Thông tin của tôi** — Xem thông tin clan của bạn"
+            "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n\n"
+            "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội"
         ),
         color=discord.Color.dark_gold()
     )
