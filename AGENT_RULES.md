@@ -1,0 +1,39 @@
+# 🤖 Agent Rules: VXT Clan System
+
+Tất cả các Agent (AI coding assistant) khi tham gia phát triển dự án này PHẢI tuân thủ các quy tắc sau để đảm bảo tính đồng nhất và ổn định của hệ thống.
+
+## 1. Quy Trình Cập Nhật (Workflow)
+- **Changelog**: Bất kỳ thay đổi nào (tính năng mới, sửa lỗi) ĐỀU PHẢI được ghi vào file `historyUpdate.md`.
+    - Format: Sử dụng heading `## [Version] - YYYY-MM-DD`.
+    - Tăng version (patch hoặc minor) cho mỗi lần commit.
+    - Cần có section `📢 Discord Update` (thông tin ngắn gọn cho user) và `🔧 Technical Details` (thông tin kỹ thuật cho dev/agent).
+- **Git Commit**: Commit message phải rõ ràng, ví dụ: `feat: add something`, `fix: resolve issue`. Đính kèm hash commit vào `walkthrough.md` nếu đang làm việc theo session.
+
+## 2. Tiêu Chuẩn Code (Coding Standards)
+- **Cogs Logic**: Dự án sử dụng mô hình Cogs của `discord.py`. Giữ logic liên quan đến UI (buttons, modals) trong cogs (ví dụ: `cogs/arena.py`, `cogs/clan.py`).
+- **Services Layer**: Các logic dùng chung hoặc thao tác Database PHẢI được viết trong `services/` (ví dụ: `services/db.py`, `services/bot_utils.py`). Không viết query SQL trực tiếp trong file Cog.
+- **Interaction Safety**:
+    - Luôn sử dụng `defer()` cho các thao tác tốn thời gian (thao tác DB, API).
+    - Kiểm tra `interaction.response.is_done()` trước khi thực hiện `followup` hoặc `send_message` để tránh lỗi "Interaction already acknowledged".
+    - Với các tương tác qua DM, lưu ý `interaction.guild` sẽ là `None`. Cần fetch guild qua `config.GUILD_ID`.
+
+## 3. Database (SQLite + aiosqlite)
+- **Async**: Tất cả các thao tác DB phải là `async`.
+- **Row Factory**: Sử dụng row factory (`aiosqlite.Row`) để truy cập dữ liệu theo tên cột.
+- **Transactions**: Sử dụng transaction khi thực hiện nhiều lệnh UPDATE/INSERT có liên quan đến nhau.
+- **Integrity**: Tôn trọng các ràng buộc (UNIQUE cho tên clan, Foreign Keys). Luôn bắt lỗi `IntegrityError` khi xử lý dữ liệu trùng lặp.
+
+## 4. Giao Diện Người Dùng (UI/UX)
+- **Arena Dashboard**: Đây là trung tâm thông tin. Các View trong Arena phải đặt `timeout=None` để đảm bảo nút luôn hoạt động sau khi bot restart.
+- **Emoji**: Sử dụng emoji nhất quán (👑 Captain, ⚔️ Match, 🏰 Clan, 📜 Rules).
+- **Compact View**: Với các danh sách dài (như danh sách thành viên), ưu tiên hiển thị inline hoặc dùng Dropdown/Pagination để tránh làm dài tin nhắn.
+
+## 5. Bảo Mật & Quyền Hạn
+- **Validation**: Luôn kiểm tra quyền hạn (ví dụ: `member_role == 'captain'`) trước khi cho phép thực hiện các hành động nhạy cảm như đổi tên, kick người, giải tán clan.
+- **Verified Role**: Các tính năng tạo clan hoặc tham gia thi đấu yêu cầu role `Thiểu Năng Con` (theo cấu hình trong `config.py`).
+
+## 6. Ghi Nhật Ký (Logging)
+- Sử dụng `await bot_utils.log_event(event_type, message)` cho tất cả các hành động quan trọng để lưu vào nhật ký hệ thống và hiển thị cho Mod.
+
+---
+*Tài liệu này được tạo tự động bởi Antigravity Agent dựa trên quá trình phát triển hệ thống.*
