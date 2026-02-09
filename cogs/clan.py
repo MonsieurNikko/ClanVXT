@@ -773,13 +773,23 @@ class ClanCog(commands.Cog):
         clan = await db.get_clan_by_id(clan_id)
         clan_name = clan["name"] if clan else "Unknown"
         
-        if clan and clan.get("discord_role_id") and interaction.guild:
+        # Need to get guild from bot since DM interactions don't have guild
+        if clan and clan.get("discord_role_id"):
             try:
-                role = interaction.guild.get_role(int(clan["discord_role_id"]))
-                if role:
-                    member = interaction.guild.get_member(interaction.user.id)
-                    if member:
-                        await member.add_roles(role)
+                guild = self.bot.get_guild(config.GUILD_ID)
+                if guild:
+                    role = guild.get_role(int(clan["discord_role_id"]))
+                    if role:
+                        member = guild.get_member(interaction.user.id)
+                        if member:
+                            await member.add_roles(role)
+                            print(f"[DEBUG] Assigned role {role.name} to {member.name}")
+                        else:
+                            print(f"[DEBUG] Could not find member {interaction.user.id} in guild")
+                    else:
+                        print(f"[DEBUG] Could not find role {clan['discord_role_id']}")
+                else:
+                    print(f"[DEBUG] Could not find guild {config.GUILD_ID}")
             except Exception as e:
                 print(f"[DEBUG] Failed to assign role: {e}")
         

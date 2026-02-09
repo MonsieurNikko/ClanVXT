@@ -5,6 +5,21 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.9] - 2026-02-09
+### 🐛 Bug Fix: Role Assignment on Invite Accept
+
+#### 📢 Discord Update
+> **[v1.2.9] Sửa lỗi nhận role khi accept invite!**
+> Giờ khi bạn accept lời mời clan qua DM, role clan sẽ được gán tự động.
+
+#### 🔧 Technical Details
+- Bug: `interaction.guild` là `None` trong DM, khiến role không được gán
+- Fix: Fetch guild từ `self.bot.get_guild(config.GUILD_ID)` thay vì `interaction.guild`
+- Thêm debug logs để dễ troubleshoot
+- Files: `cogs/clan.py`
+
+---
+
 ## [1.2.8] - 2026-02-09
 ### ✨ Feature: Auto-Post Updates từ historyUpdate.md
 
