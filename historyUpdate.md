@@ -5,61 +5,87 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.8] - 2026-02-09
+### ✨ Feature: Auto-Post Updates từ historyUpdate.md
+
+#### 📢 Discord Update
+> **[v1.2.8] Hệ thống thông báo hoàn chỉnh!**
+> Admin giờ có thể dùng lệnh `/post_latest_update` để tự động đăng thông báo cập nhật.
+> Nội dung sẽ được lấy từ phần "Discord Update" trong changelog.
+
+#### 🔧 Technical Details
+- Thêm lệnh `/post_latest_update` vào `ArenaCog`
+- Parse `historyUpdate.md` bằng regex
+- Trích xuất phần `#### 📢 Discord Update`
+- Post embed lên `#update-bot`
+- Format mới: mỗi version có 2 section (Discord Update + Technical Details)
+- Files: `cogs/arena.py`, `historyUpdate.md`
+
+---
+
 ## [1.2.7] - 2026-02-09
 ### ✨ Feature: Tạo Clan từ Arena Dashboard
-- **Interactive Creation**: Thêm nút "Tạo Clan" (➕) vào Arena Dashboard.
-- **Same Flow**: Sử dụng cùng flow với lệnh `/clan create` (Modal → Select Members → Confirm).
-- **Validation**: Kiểm tra verified role, không trong clan khác, không cooldown.
 
-### 📁 Files Changed
-| Action | File |
-|--------|------|
-| MODIFY | `cogs/arena.py` |
+#### 📢 Discord Update
+> **[v1.2.7] Tạo Clan dễ hơn bao giờ hết!**
+> Giờ đây bạn có thể tạo clan trực tiếp từ Arena Dashboard bằng nút ➕ **Tạo Clan**.
+> Không cần nhớ lệnh, chỉ cần bấm và làm theo hướng dẫn!
+
+#### 🔧 Technical Details
+- Thêm nút "Tạo Clan" vào `ArenaView` với `custom_id="arena:create_clan"`
+- Validation: verified role, not in clan, no cooldown
+- Import và sử dụng `ClanCreateModal` từ `cogs/clan.py`
+- Files: `cogs/arena.py`
 
 ---
 
 ## [1.2.6] - 2026-02-09
 ### ✨ Feature: Thông Báo Cập Nhật Tự Động
-- **Update Channel**: Bot tự động tìm kênh `#update-bot` và gửi thông báo khi có tính năng mới.
-- **Agent Guidelines**: Thêm hướng dẫn cho agent về quy tắc gửi thông báo (cuối file này).
-- **Helper Function**: `bot_utils.post_update()` để gửi thông báo dạng embed.
 
-### 📁 Files Changed
-| Action | File |
-|--------|------|
-| MODIFY | `config.py` |
-| MODIFY | `services/bot_utils.py` |
-| MODIFY | `main.py` |
-| MODIFY | `historyUpdate.md` |
+#### 📢 Discord Update
+> **[v1.2.6] Kênh #update-bot đi vào hoạt động!**
+> Từ giờ các bản cập nhật mới sẽ được thông báo tại đây.
+> Theo dõi để không bỏ lỡ tính năng mới nhé! 🔔
+
+#### 🔧 Technical Details
+- Thêm `CHANNEL_UPDATE_BOT` vào `config.py`
+- Thêm `post_update()` helper vào `bot_utils.py`
+- Tìm kênh trong `main.py` on_ready
+- Files: `config.py`, `services/bot_utils.py`, `main.py`
 
 ---
 
 ## [1.2.5] - 2026-02-09
 ### ✨ Feature: Clan Members in Arena Dashboard
-- **Enhanced Clan List**: Nút "Danh sách Clan" trong Arena Dashboard giờ hiển thị danh sách thành viên của mỗi clan.
-- **Role Indicators**: 👑 Captain | ⚔️ Vice Captain | 👤 Member.
-- **Display Names**: Hiển thị Discord display name (fallback: Riot ID).
-- **Limit Adjustment**: Giới hạn từ 15 clan xuống 10 clan để embed không quá dài.
 
-### 📁 Files Changed
-| Action | File |
-|--------|------|
-| MODIFY | `cogs/arena.py` |
+#### 📢 Discord Update
+> **[v1.2.5] Xem thành viên clan trong Arena!**
+> Nút "Danh sách Clan" giờ hiển thị đầy đủ thành viên của mỗi clan.
+> 👑 Captain | ⚔️ Vice | 👤 Member
+
+#### 🔧 Technical Details
+- Cập nhật `clan_list_button` trong `ArenaView`
+- Fetch members với `db.get_clan_members()`
+- Hiển thị role emoji và Discord display name
+- Files: `cogs/arena.py`
 
 ---
 
 ## [1.2.4] - 2026-02-09
 ### 🐛 Bug Fix: Invitation Persistence
-- **Fixed**: Lời mời gia nhập Clan hoạt động (active clan invite) không thể accept sau khi bot restart.
-- **Root Cause**: `InviteAcceptDeclineView` sử dụng custom ID không được xử lý trong `on_interaction`.
-- **Solution**: Thêm handlers `handle_invite_accept` và `handle_invite_decline` vào `ClanCog`.
 
-### 📁 Files Changed
-| Action | File |
-|--------|------|
-| MODIFY | `cogs/clan.py` |
+#### 📢 Discord Update
+> **[v1.2.4] Sửa lỗi lời mời Clan!**
+> Lời mời gia nhập Clan giờ hoạt động ổn định hơn.
+> Nếu trước đây bạn không accept được, hãy thử lại nhé!
+
+#### 🔧 Technical Details
+- `InviteAcceptDeclineView` custom_id không được xử lý trong `on_interaction`
+- Thêm `handle_invite_accept` và `handle_invite_decline` handlers
+- Files: `cogs/clan.py`
 
 ---
+
 
 ## [1.2.3] - 2026-02-09
 ### 📝 Refinements & Personal Touch

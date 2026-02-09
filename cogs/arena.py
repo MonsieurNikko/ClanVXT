@@ -467,6 +467,86 @@ class ArenaCog(commands.Cog):
         except Exception as e:
             print(f"[ARENA] ERROR refreshing dashboard: {e}")
             await interaction.followup.send(f"❌ Lỗi: {e}", ephemeral=True)
+    
+    @app_commands.command(name="post_latest_update", description="Đăng thông báo cập nhật mới nhất lên #update-bot (Admin only)")
+    @app_commands.default_permissions(administrator=True)
+    async def post_latest_update(self, interaction: discord.Interaction):
+        """Parse historyUpdate.md and post the latest Discord Update section."""
+        print(f"[ARENA] /post_latest_update called by {interaction.user}")
+        await interaction.response.defer(ephemeral=True)
+        
+        import re
+        from pathlib import Path
+        
+        # Read historyUpdate.md
+        history_path = Path(__file__).parent.parent / "historyUpdate.md"
+        if not history_path.exists():
+            await interaction.followup.send("❌ Không tìm thấy file historyUpdate.md", ephemeral=True)
+            return
+        
+        try:
+            content = history_path.read_text(encoding="utf-8")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Lỗi đọc file: {e}", ephemeral=True)
+            return
+        
+        # Parse latest version and Discord Update section
+        # Pattern: ## [version] - date ... #### 📢 Discord Update ... (until next #### or ---)
+        version_pattern = r'## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})'
+        discord_pattern = r'#### 📢 Discord Update\s*\n((?:>.*\n?)+)'
+        
+        version_match = re.search(version_pattern, content)
+        if not version_match:
+            await interaction.followup.send("❌ Không tìm thấy version trong historyUpdate.md", ephemeral=True)
+            return
+        
+        version = version_match.group(1)
+        date = version_match.group(2)
+        
+        # Find Discord Update section for this version (first occurrence after version header)
+        version_start = version_match.start()
+        discord_match = re.search(discord_pattern, content[version_start:])
+        
+        if not discord_match:
+            await interaction.followup.send(
+                f"❌ Không tìm thấy phần '#### 📢 Discord Update' cho version {version}",
+                ephemeral=True
+            )
+            return
+        
+        # Extract and clean the Discord Update content
+        raw_content = discord_match.group(1)
+        # Remove leading > from each line
+        lines = [line.lstrip("> ").strip() for line in raw_content.strip().split("\n")]
+        discord_content = "\n".join(lines)
+        
+        # Post to update channel
+        update_channel = bot_utils.get_update_channel()
+        if not update_channel:
+            await interaction.followup.send(
+                f"❌ Chưa tìm thấy kênh #update-bot. Hãy đảm bảo kênh tồn tại và restart bot.",
+                ephemeral=True
+            )
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title="🎉 Cập Nhật Mới!",
+            description=discord_content,
+            color=discord.Color.gold()
+        )
+        embed.set_footer(text=f"Phiên bản {version} • {date}")
+        
+        try:
+            await update_channel.send(embed=embed)
+            await interaction.followup.send(
+                f"✅ Đã đăng thông báo cập nhật **v{version}** lên #{update_channel.name}!",
+                ephemeral=True
+            )
+            print(f"[ARENA] Posted update v{version} to #{update_channel.name}")
+            await bot_utils.log_event("UPDATE_POSTED", f"v{version} posted by {interaction.user}")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Lỗi khi đăng: {e}", ephemeral=True)
 
 
 # =============================================================================
