@@ -25,7 +25,7 @@ Cooldown join/leave clan là 14 ngày. Rời clan hoặc bị kick thì phải c
 Ai bị cấm hệ thống clan (system ban) thì không được tạo clan, không được join clan.
 
 
-Mỗi người phải đăng ký Riot ID (tên ingame Valorant) trước khi tham gia clan. Phải dùng tài khoản chính, không được dùng smurf. Nếu phát hiện dùng smurf hoặc khai sai Riot ID sẽ bị xử phạt.
+Mỗi người sẽ được bot tự động đăng ký danh tính (dựa trên tên Discord) khi tham gia hệ thống clan lần đầu. Phải dùng tài khoản chính, không được dùng smurf. Nếu phát hiện dùng smurf sẽ bị xử phạt.
 
 
 

@@ -23,25 +23,21 @@ Không chỉ là một con bot vô hồn, VXT là trái tim của hệ thống �
 
 ### 📖 CẨM NANG SỬ DỤNG (DÀNH CHO TÂN THỦ)
 
-#### 1️⃣ Bước đầu tiên: Đăng ký danh tính
-Trước khi làm bất cứ điều gì, bạn phải đăng ký Riot ID (Valorant) của mình:
-👉 `/register <RiotID#TAG>` (Ví dụ: `/register Nikko#EUW`)
-
-#### 2️⃣ Thành lập Clan (Quy tắc 5 người)
+#### 1️⃣ Thành lập Clan (Quy tắc 5 người)
 Để tạo một đế chế, bạn không thể đi một mình:
 *   Sử dụng lệnh: `/clan create`
 *   **Quy tắc:** Bạn + chọn thêm 4 thành viên (Tổng cộng ít nhất 5 người).
 *   **Xác nhận:** Bot sẽ gửi tin nhắn riêng (DM) cho 4 người bạn chọn. Họ có **48h** để bấm **[Accept]**. Đủ 5 người đồng ý thì Clan mới được gửi lên Mod duyệt.
 *   **Lưu ý:** Chỉ Captain và Vice Captain mới có quyền mời thêm thành viên sau này bằng lệnh `/clan invite`.
 
-#### 3️⃣ Đấu Trường (Arena)
+#### 2️⃣ Đấu Trường (Arena)
 Bạn không cần gõ lệnh để xem thông tin. Hãy ghé kênh **#arena**:
 *   🏰 **Danh sách Clan:** Xem tất cả Clan đang hoạt động.
 *   🏆 **Bảng xếp hạng:** Top 10 Clan hàng đầu.
 *   ⚔️ **Lịch sử Match:** Các trận đấu gần đây.
 *   👤 **Thông tin của tôi:** Xem Profile, Clan, Role và cả Cooldown/Ban status của bạn.
 
-#### 4️⃣ Thi đấu Custom Match
+#### 3️⃣ Thi đấu Custom Match
 *   Dùng `/match create <ClanĐốiThủ>` để mở kèo.
 *   Sau khi đánh xong, bên Thắng báo kết quả -> Bên Thua bấm **[Xác nhận]** -> Elo sẽ tự cập nhật.
 

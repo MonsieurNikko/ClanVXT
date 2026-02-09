@@ -17,7 +17,6 @@
 | `/transfer cancel <id>` | Cancel a pending transfer request. | Initiator or Source Captain. |
 | `/report <target> <reason> [proof]` | Report a user/clan/match. | Creates a Case. |
 | `/appeal <case_id> <reason> [proof]` | Appeal a punishment. | Once within 7 days of punishment. |
-| `/register <riot_id>` | Register your Valorant Riot ID (e.g., `Name#TAG`). | Required before joining any clan. Must be your real account. |
 
 ### Match Commands (Any Clan Member)
 | Command | Description | Requirements |
@@ -189,5 +188,3 @@ All events must be logged to the **Mod Log Channel** (`log`).
 | `NOT_MOD` | "Bạn cần role '{role}' để sử dụng lệnh này." |
 | `BOT_MISSING_PERMS` | "Bot thiếu quyền: {perms}. Vui lòng cấp quyền Manage Roles và Manage Channels." |
 | `ROLE_HIERARCHY` | "Không thể tạo role - Role của bot phải nằm trên role clan trong danh sách Role." |
-| `NO_RIOT_ID` | "Bạn phải đăng ký Riot ID bằng `/register` trước khi gia nhập clan." |
-| `RIOT_ID_TAKEN` | "Riot ID này đã được đăng ký bởi người dùng khác." |
