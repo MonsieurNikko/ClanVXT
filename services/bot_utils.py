@@ -55,3 +55,60 @@ async def log_event(event_type: str, details: str) -> None:
             print(f"Failed to log event {event_type}: {e}")
     else:
         print(f"[LOG FAILED - NO CHANNEL] [{event_type}] {details}")
+
+
+# =============================================================================
+# UPDATE CHANNEL (for user-facing announcements)
+# =============================================================================
+
+_update_channel: Optional[discord.TextChannel] = None
+
+def set_update_channel(channel: discord.TextChannel):
+    global _update_channel
+    _update_channel = channel
+
+def get_update_channel() -> Optional[discord.TextChannel]:
+    return _update_channel
+
+
+async def post_update(title: str, description: str, version: str = None) -> bool:
+    """
+    Gửi thông báo cập nhật lên kênh #update-bot.
+    
+    Chỉ dùng cho:
+    - ✨ Tính năng mới
+    - 🐛 Sửa lỗi quan trọng (ảnh hưởng người dùng)
+    
+    KHÔNG dùng cho: refactor, docs update, minor fixes.
+    
+    Args:
+        title: Tiêu đề ngắn gọn (VD: "Arena Dashboard nâng cấp!")
+        description: Mô tả ngắn gọn, tập trung vào lợi ích người dùng
+        version: Phiên bản (VD: "1.2.5"), tùy chọn
+    
+    Returns:
+        True nếu gửi thành công, False nếu không tìm thấy kênh
+    """
+    channel = get_update_channel()
+    if not channel:
+        print(f"[UPDATE] No update channel set. Message not sent: {title}")
+        return False
+    
+    embed = discord.Embed(
+        title=f"🎉 {title}",
+        description=description,
+        color=discord.Color.gold(),
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    if version:
+        embed.set_footer(text=f"Phiên bản {version}")
+    
+    try:
+        await channel.send(embed=embed)
+        print(f"[UPDATE] Posted: {title}")
+        return True
+    except Exception as e:
+        print(f"[UPDATE] Failed to post: {e}")
+        return False
+

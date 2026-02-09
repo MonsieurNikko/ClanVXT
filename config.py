@@ -35,6 +35,7 @@ ROLE_MOD: str = "Hội đồng quản trị"     # Admin privileges
 
 CHANNEL_MOD_LOG: str = "log"      # System logs channel
 CHANNEL_ARENA: str = "arena"      # Arena dashboard channel (read-only for users)
+CHANNEL_UPDATE_BOT: str = "update-bot"  # Update announcements channel (read-only for users)
 CATEGORY_CLANS: str = "CLANS"     # Category for clan private channels
 
 # =============================================================================

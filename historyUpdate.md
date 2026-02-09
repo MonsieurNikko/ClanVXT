@@ -5,6 +5,22 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.6] - 2026-02-09
+### ✨ Feature: Thông Báo Cập Nhật Tự Động
+- **Update Channel**: Bot tự động tìm kênh `#update-bot` và gửi thông báo khi có tính năng mới.
+- **Agent Guidelines**: Thêm hướng dẫn cho agent về quy tắc gửi thông báo (cuối file này).
+- **Helper Function**: `bot_utils.post_update()` để gửi thông báo dạng embed.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `config.py` |
+| MODIFY | `services/bot_utils.py` |
+| MODIFY | `main.py` |
+| MODIFY | `historyUpdate.md` |
+
+---
+
 ## [1.2.5] - 2026-02-09
 ### ✨ Feature: Clan Members in Arena Dashboard
 - **Enhanced Clan List**: Nút "Danh sách Clan" trong Arena Dashboard giờ hiển thị danh sách thành viên của mỗi clan.
@@ -160,4 +176,49 @@ This document provides a cumulative history of all technical improvements, fixes
 - Initial database schema and service layer.
 
 ---
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-02-09*
+
+---
+
+# 📢 Hướng Dẫn Cho Agent
+
+## Khi Nào Gửi Thông Báo Lên #update-bot?
+
+| ✅ GỬI | ❌ KHÔNG GỬI |
+|--------|--------------|
+| ✨ Tính năng mới | 📁 Cập nhật documentation |
+| 🐛 Sửa lỗi quan trọng (ảnh hưởng người dùng) | 🔧 Refactor code |
+| 🎮 Thay đổi gameplay/UX | 📝 Sửa typo, comment |
+| | 🔒 Internal fixes (không ai thấy) |
+
+## Cách Gửi Thông Báo
+
+```python
+from services import bot_utils
+
+await bot_utils.post_update(
+    title="Arena Dashboard nâng cấp!",
+    description="Giờ đây bạn có thể xem danh sách thành viên của mỗi Clan ngay trong Arena.",
+    version="1.2.5"  # Tùy chọn
+)
+```
+
+## Nguyên Tắc Viết Thông Báo
+
+1. **Viết tiếng Việt**, ngắn gọn, thân thiện
+2. **Tập trung vào lợi ích người dùng**, không chi tiết kỹ thuật
+3. **Tiêu đề hấp dẫn**, mô tả điều mới mẻ
+4. **Không đề cập** tên file, function, database, etc.
+
+### Ví Dụ Tốt ✅
+> **Arena Dashboard nâng cấp!**  
+> Giờ đây bạn có thể xem danh sách thành viên của mỗi Clan ngay trong Arena.
+
+### Ví Dụ Xấu ❌
+> Đã sửa file cogs/arena.py, thêm hàm get_clan_members vào clan_list_button...
+
+## Quy Trình Sau Khi Commit
+
+1. Cập nhật `historyUpdate.md` với version mới
+2. Nếu là **tính năng mới** hoặc **major fix**, gọi `post_update()`
+3. Commit và push lên GitHub

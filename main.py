@@ -106,6 +106,15 @@ async def on_ready():
         print(f"✓ Found category: {clans_category.name}")
     bot_utils.set_clans_category(clans_category)
     
+    # Update-bot channel (optional, don't create if not found)
+    update_channel = discord.utils.get(guild.text_channels, name=config.CHANNEL_UPDATE_BOT)
+    if update_channel:
+        bot_utils.set_update_channel(update_channel)
+        print(f"✓ Found update channel: #{update_channel.name}")
+    else:
+        print(f"⚠ Update channel '{config.CHANNEL_UPDATE_BOT}' not found. Updates will not be posted.")
+
+    
     # ==========================================================================
     # LOAD COGS & SYNC COMMANDS
     # ==========================================================================
