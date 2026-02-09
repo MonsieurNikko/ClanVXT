@@ -80,6 +80,18 @@
 | `/appeal create <case_id> <description> [evidence]` | Appeal a case verdict. | Once within 7 days of resolution. |
 | `/appeal status <case_id>` | View appeal status. | None. |
 
+### Arena Dashboard
+Kênh `#arena` chứa Dashboard với các nút bấm tương tác. User bấm nút → Bot gửi thông tin (ephemeral).
+
+| Button | Mô tả |
+| :--- | :--- |
+| 🏰 Danh sách Clan | Xem top 15 clan active với Elo và số thành viên. |
+| 🏆 Bảng xếp hạng | Top 10 clan theo Elo với huy chương. |
+| ⚔️ Lịch sử Match | 10 trận đấu gần đây với status. |
+| 👤 Thông tin của tôi | Xem thông tin cá nhân: Riot ID, clan, role, cooldown, ban status. |
+
+**Admin Command:** `/arena_refresh` — Làm mới dashboard (xóa và gửi lại).
+
 ## 1.5 Elo System Rules
 
 ### Base Formula

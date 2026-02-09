@@ -5,6 +5,31 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.0] - 2026-02-09
+### ✨ New Features
+- **Arena Dashboard**: Kênh `#arena` với nút bấm tương tác để xem thông tin hệ thống:
+  - 🏰 **Danh sách Clan** - Xem tất cả clan active, Elo và số thành viên
+  - 🏆 **Bảng xếp hạng** - Top 10 clan theo Elo với huy chương 🥇🥈🥉
+  - ⚔️ **Lịch sử Match** - 10 trận đấu gần đây với trạng thái
+  - 👤 **Thông tin cá nhân** - Xem clan, role, Elo, cooldown và ban status
+  - Bot tự động tìm kênh `#arena` khi khởi động và gửi/cập nhật Dashboard
+  - Persistent buttons: nút bấm vẫn hoạt động sau khi bot restart
+  - Lệnh admin: `/arena_refresh` để làm mới dashboard
+
+### 🔧 Bug Fixes
+- Thêm các helper functions vào db.py cho Arena
+- Thêm cooldown/ban helpers: `get_active_cooldown`, `get_all_user_cooldowns`, `is_user_banned`
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| NEW | `cogs/arena.py` |
+| MODIFY | `config.py` — Thêm `CHANNEL_ARENA` |
+| MODIFY | `main.py` — Load arena cog |
+| MODIFY | `services/db.py` — Thêm 6 helper functions |
+
+---
+
 ## [1.1.2] - 2026-02-08
 ### 📝 Documentation Sync
 - **Clan Create Flow**: Sửa documentation - Captain chọn 4 người (bạn + 4 = 5 tổng), không phải 5 người.

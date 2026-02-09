@@ -133,6 +133,9 @@ async def on_ready():
     await bot.load_extension("cogs.moderation")
     print("✓ Loaded cog: cogs.moderation")
     
+    await bot.load_extension("cogs.arena")
+    print("✓ Loaded cog: cogs.arena")
+    
     # Sync commands to the specific guild (instant)
     guild_obj = discord.Object(id=config.GUILD_ID)
     bot.tree.copy_global_to(guild=guild_obj)
@@ -177,14 +180,12 @@ async def expire_requests_task():
             clan_id = row[0]
             clan_name = row[1]
             
-            # Hard delete the clan and its requests
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+            # Safe hard delete the clan and all its relates
+            await db.hard_delete_clan(clan_id)
             
             await bot_utils.log_event("CLAN_EXPIRED", f"Clan '{clan_name}' creation expired (48h timeout) and deleted")
         
-        await conn.commit()
+        # No need for conn.commit() here as hard_delete_clan handles it
 
 
 @tasks.loop(minutes=10)

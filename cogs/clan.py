@@ -685,12 +685,8 @@ class ClanCog(commands.Cog):
         # Decline the request
         await db.decline_create_request(clan_id, user_id)
         
-        # Delete the entire clan creation
-        async with db.get_connection() as conn:
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
-            await conn.commit()
+        # Safe hard delete the entire clan creation
+        await db.hard_delete_clan(clan_id)
         
         await interaction.response.edit_message(
             content=f"❌ Bạn đã **từ chối** lời mời tham gia **{clan_name}**.\n"
@@ -1554,12 +1550,8 @@ class ClanCog(commands.Cog):
             )
             return
         
-        # Hard delete the clan
-        async with db.get_connection() as conn:
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
-            await conn.commit()
+        # Safe hard delete the clan
+        await db.hard_delete_clan(clan_id)
         
         # Log
         await bot_utils.log_event(
@@ -1620,30 +1612,8 @@ class ClanCog(commands.Cog):
             except Exception:
                 pass
         
-        # Remove all members and delete clan from DB
-        async with db.get_connection() as conn:
-            # Delete related data to avoid IntegrityError (FK constraints)
-            # Order matters: child tables first
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM invite_requests WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM clan_flags WHERE clan_id = ?", (clan_id,))
-            await conn.execute("DELETE FROM elo_history WHERE clan_id = ?", (clan_id,))
-            
-            # Matches, loans, transfers can reference the clan on either side
-            await conn.execute("DELETE FROM matches WHERE clan_a_id = ? OR clan_b_id = ?", (clan_id, clan_id))
-            await conn.execute("DELETE FROM loans WHERE lending_clan_id = ? OR borrowing_clan_id = ?", (clan_id, clan_id))
-            await conn.execute("DELETE FROM transfers WHERE source_clan_id = ? OR dest_clan_id = ?", (clan_id, clan_id))
-            
-            # Unified cooldowns table
-            await conn.execute("DELETE FROM cooldowns WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
-            
-            # Cases targeting this clan
-            await conn.execute("DELETE FROM cases WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
-            
-            # Finally delete the clan
-            await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
-            await conn.commit()
+        # Safe hard delete clan from DB
+        await db.hard_delete_clan(clan_id)
         
         await bot_utils.log_event(
             "CLAN_DELETED_BY_MOD",

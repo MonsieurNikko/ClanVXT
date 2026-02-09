@@ -184,10 +184,8 @@ async def create_clan(name: str, captain_id: int) -> int:
         
         if existing:
             old_id = existing["id"]
-            # Hard delete the old clan and its related data
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (old_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (old_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (old_id,))
+            # Safe hard delete the old clan and its related data
+            await hard_delete_clan(old_id)
             
         # Now insert the new clan
         cursor = await conn.execute(
@@ -1327,4 +1325,113 @@ async def mark_match_elo_rolled_back(match_id: int) -> None:
             (match_id,)
         )
         await conn.commit()
+
+
+async def hard_delete_clan(clan_id: int) -> None:
+    """
+    Completely remove a clan and all its related data (matches, loans, transfers, etc.)
+    from the database. This is used when a mod deletes a clan or creation fails.
+    """
+    async with get_connection() as conn:
+        # 1. Delete basic relations (ON DELETE CASCADE in schema would handle some, 
+        # but we do it manually to be safe and clear)
+        await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM invite_requests WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM clan_flags WHERE clan_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM elo_history WHERE clan_id = ?", (clan_id,))
+        
+        # 2. Delete complex relations (these have ON DELETE RESTRICT in schema)
+        await conn.execute("DELETE FROM matches WHERE clan_a_id = ? OR clan_b_id = ?", (clan_id, clan_id))
+        await conn.execute("DELETE FROM loans WHERE lending_clan_id = ? OR borrowing_clan_id = ?", (clan_id, clan_id))
+        await conn.execute("DELETE FROM transfers WHERE source_clan_id = ? OR dest_clan_id = ?", (clan_id, clan_id))
+        
+        # 3. Delete metadata
+        await conn.execute("DELETE FROM cooldowns WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
+        await conn.execute("DELETE FROM cases WHERE target_type = 'clan' AND target_id = ?", (clan_id,))
+        
+        # 4. Finally delete the clan itself
+        await conn.execute("DELETE FROM clans WHERE id = ?", (clan_id,))
+        await conn.commit()
+
+
+# =============================================================================
+# ARENA DASHBOARD HELPERS
+# =============================================================================
+
+async def get_all_active_clans() -> List[Dict[str, Any]]:
+    """Get all clans with status 'active'."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM clans WHERE status = 'active' ORDER BY elo DESC"
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def count_clan_members(clan_id: int) -> int:
+    """Count number of members in a clan."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT COUNT(*) as cnt FROM clan_members WHERE clan_id = ?",
+            (clan_id,)
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+
+async def get_recent_matches(limit: int = 10) -> List[Dict[str, Any]]:
+    """Get recent matches, ordered by created_at descending."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT * FROM matches 
+               ORDER BY created_at DESC 
+               LIMIT ?""",
+            (limit,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+# =============================================================================
+# COOLDOWN & BAN HELPERS (for Arena Dashboard)
+# =============================================================================
+
+async def get_active_cooldown(target_id: int, target_type: str, kind: str) -> Optional[Dict[str, Any]]:
+    """Get an active cooldown for a target. Returns None if no active cooldown exists."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT * FROM cooldowns 
+               WHERE target_id = ? AND target_type = ? AND kind = ? 
+               AND until > datetime('now')""",
+            (target_id, target_type, kind)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def get_all_user_cooldowns(user_id: int) -> List[Dict[str, Any]]:
+    """Get all active cooldowns for a user."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT * FROM cooldowns 
+               WHERE target_id = ? AND target_type = 'user' 
+               AND until > datetime('now')""",
+            (user_id,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def is_user_banned(user_id: int) -> Optional[Dict[str, Any]]:
+    """Check if a user is system-banned. Returns ban info or None."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT * FROM system_bans 
+               WHERE entity_type = 'user' AND entity_id = ?
+               AND (expires_at IS NULL OR expires_at > datetime('now'))""",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
