@@ -35,5 +35,9 @@ Tất cả các Agent (AI coding assistant) khi tham gia phát triển dự án 
 ## 6. Ghi Nhật Ký (Logging)
 - Sử dụng `await bot_utils.log_event(event_type, message)` cho tất cả các hành động quan trọng để lưu vào nhật ký hệ thống và hiển thị cho Mod.
 
+## 7. Console Logging & Ưu Tiên Tên (Priority)
+- **Console Logs**: Luôn in ra console (`print`) các bước thực hiện quan trọng để dễ dàng theo dõi quá trình chạy thực tế (ví dụ: `[ARENA] User X clicked button Y`).
+- **Tên thay vì ID**: Luôn ưu tiên hiển thị và log bằng **Tên** (Username, Clan Name, Guild Name) thay vì chỉ dùng ID số. ID chỉ nên dùng để truy vấn database hoặc xử lý logic ngầm. Trải nghiệm người dùng và Mod cần thông tin dễ đọc.
+
 ---
 *Tài liệu này được tạo tự động bởi Antigravity Agent dựa trên quá trình phát triển hệ thống.*
