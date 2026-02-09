@@ -5,6 +5,22 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.2] - 2026-02-09
+### 📝 Rules & Rewards Overhaul
+- **Balanced Personalization**: Kết hợp lời mở đầu tâm huyết của Nikko với các quy định thi đấu chuyên nghiệp, gọn nhẹ trong `ANNOUNCEMENT_SERVER.md`.
+- **Elo System Updates**: Thêm quy định reset Elo theo mỗi mùa giải của **Valorant**.
+- **Seasonal Rewards**: Công bố phần thưởng **05 Battle Pass** cho Clan đứng đầu mỗi mùa.
+- **Help Command Upgrade**: Nâng cấp lệnh `/clan help` với giao diện gold premium và tích hợp thông tin mùa giải.
+- **Rulebook Intact**: Giữ nguyên `RULEBOOK.md` gốc để đảm bảo tính chi tiết.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `ANNOUNCEMENT_SERVER.md` |
+| MODIFY | `RULEBOOK.md` |
+| MODIFY | `cogs/clan.py` |
+| MODIFY | `historyUpdate.md` |
+
 ## [1.2.1] - 2026-02-09
 ### 📝 Documentation & Personalization
 - **ANNOUNCEMENT_SERVER.md Overhaul**: Cập nhật lại toàn bộ nội dung thông báo server với văn phong cá nhân của Nikko.

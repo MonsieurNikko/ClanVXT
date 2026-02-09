@@ -12,52 +12,29 @@ Một trong những sản phẩm đầu tiên của tụi tôi chính là **@Vê
 
 ---
 
-### 🔹 Bot VXT có gì?
-Không chỉ là một con bot vô hồn, VXT là trái tim của hệ thống đấu Trường:
-*   🏰 **Tạo Clan riêng:** Nơi anh em hội quân, có Role và kênh chat riêng biệt.
-*   📈 **Hệ thống Elo:** Đánh giá trình độ Clan dựa trên thực lực.
-*   🏆 **Bảng xếp hạng:** Minh bạch, vinh danh những người đứng đầu.
-*   ⚖️ **Công bằng:** Chống farm Elo, chống clone, hướng tới môi trường Competitive vui vẻ, không toxic.
+### 🛡️ QUY TRÌNH THỦ TỤC
+1.  **Thành lập Clan:** Dùng lệnh `/clan create`. Yêu cầu có tối thiểu **5 thành viên** (Bạn + 4 đồng đội). 
+2.  **Duyệt Clan:** Sau khi đủ thành viên xác nhận qua DM, Moderator sẽ phê duyệt Clan của bạn.
+3.  **Hội quân:** Clan sẽ có Role và kênh chat riêng ngay khi được kích hoạt. Để xem tất cả lệnh, dùng: 👉 **/clan help**
 
 ---
 
-### 📖 CẨM NANG SỬ DỤNG (DÀNH CHO TÂN THỦ)
-
-#### 1️⃣ Thành lập Clan (Quy tắc 5 người)
-Để tạo một đế chế, bạn không thể đi một mình:
-*   Sử dụng lệnh: `/clan create`
-*   **Quy tắc:** Bạn + chọn thêm 4 thành viên (Tổng cộng ít nhất 5 người).
-*   **Xác nhận:** Bot sẽ gửi tin nhắn riêng (DM) cho 4 người bạn chọn. Họ có **48h** để bấm **[Accept]**. Đủ 5 người đồng ý thì Clan mới được gửi lên Mod duyệt.
-*   **Lưu ý:** Chỉ Captain và Vice Captain mới có quyền mời thêm thành viên sau này bằng lệnh `/clan invite`.
-
-#### 2️⃣ Đấu Trường (Arena)
-Bạn không cần gõ lệnh để xem thông tin. Hãy ghé kênh **#arena**:
-*   🏰 **Danh sách Clan:** Xem tất cả Clan đang hoạt động.
-*   🏆 **Bảng xếp hạng:** Top 10 Clan hàng đầu.
-*   ⚔️ **Lịch sử Match:** Các trận đấu gần đây.
-*   👤 **Thông tin của tôi:** Xem Profile, Clan, Role và cả Cooldown/Ban status của bạn.
-
-#### 3️⃣ Thi đấu Custom Match
-*   Dùng `/match create <ClanĐốiThủ>` để mở kèo.
-*   Sau khi đánh xong, bên Thắng báo kết quả -> Bên Thua bấm **[Xác nhận]** -> Elo sẽ tự cập nhật.
+### ⚔️ THI ĐẤU & THỨ HẠNG (ELO)
+*   **Hệ thống Elo:** Đánh giá sức mạnh Clan qua các trận Custom Match.
+*   **Reset Mùa Giải:** Điểm Elo sẽ được **reset theo mỗi mùa của game Valorant**.
+*   **🎁 PHẦN THƯỞNG:** Kết thúc mỗi mùa giải, Clan đứng đầu bảng xếp hạng Elo sẽ được trao tặng **05 Battle Pass** dành cho 5 thành viên nòng cốt.
 
 ---
 
-### ⚖️ QUY LUẬT VÀ KỶ LUẬT (CỰC KỲ NGHIÊM TÚC)
-
-Để giữ "chất" cho server, chúng ta phải có luật chơi sòng phẳng:
-
-1.  **Mỗi người chỉ 1 tài khoản:** Phát hiện dùng Clone/Smurf để lách luật hoặc farm Elo sẽ ăn **System Ban** (Vĩnh biệt hệ thống Clan).
-2.  **Cooldown 14 ngày:** Nếu bạn rời Clan hoặc bị Kick, bạn phải chờ **14 ngày** mới được gia nhập Clan mới. Hãy trung thành!
-3.  **Transfer Sickness:** Khi chuyển nhượng sang Clan mới, bạn bị cấm thi đấu **3 ngày** để làm quen đồng đội mới.
-4.  **Anti-Farm:** Đánh với cùng một Clan quá nhiều lần trong 24h sẽ bị giảm điểm Elo nhận được.
-5.  **Tôn trọng đối thủ:** Mọi hành vi báo kết quả giả, toxic, lách luật đều sẽ được Mod xử lý qua hệ thống **Case & Appeal**.
+### ⚖️ QUY TẮC DANH DỰ (GỌN & DỄ HIỂU)
+*   **Cooldown 14 ngày:** Nếu rời hoặc bị kick khỏi Clan, bạn phải chờ 14 ngày mới có thể gia nhập Clan mới.
+*   **Chống gian lận:** Nghiêm cấm dùng tài khoản clone/smurf để farm Elo hoặc né cooldown. Mọi hành vi gian lận sẽ bị **Ban vĩnh viễn**.
+*   **Công bằng:** Kết quả trận đấu phải được bên đối thủ xác nhận qua nút bấm của Bot.
 
 ---
 
-### 🔥 LỜI KẾT
-Dự án này là tâm huyết của mình, vận hành theo kiểu **"Vừa chạy vừa sửa"**. Nếu gặp lỗi, anh em đừng ngại báo cho **@nikkosaigon**.
+🔥 **Tầm nhìn:** Tạo ra một sân chơi Competitive chuyên nghiệp, minh bạch và gắn kết cho anh em người Việt tại EU.
 
-Chúng ta là những "đứa trẻ thiểu năng", nhưng chúng ta làm ra những thứ có giá trị. Chúc anh em có những giờ phút leo rank Clan thật cháy!
+Nếu gặp bất kỳ lỗi kỹ thuật nào, vui lòng báo cho **@nikkosaigon**. Chúc anh em leo rank cháy máy!
 
 **Hội đồng Quản trị Quốc Hội Thiểu Năng** 🏛️

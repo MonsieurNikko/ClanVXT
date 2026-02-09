@@ -722,62 +722,69 @@ class ClanCog(commands.Cog):
                 clan_role = clan_data.get("member_role")
         
         embed = discord.Embed(
-            title="🏰 Hệ Thống Clan - Hướng Dẫn",
-            color=discord.Color.blue()
+            title="🏰 Hệ Thống Clan VXT - Hướng Dẫn",
+            description="Chào mừng bạn đến với đấu trường Clan VXT. Dưới đây là các lệnh bạn có thể sử dụng:",
+            color=discord.Color.gold()
         )
         
+        # Season info
+        season_info = """
+• **Reset:** Elo sẽ reset theo mỗi mùa giải của **Valorant**.
+• **🎁 Phần thưởng:** Top 1 Clan mỗi mùa nhận **05 Battle Pass**.
+"""
+        embed.add_field(name="📅 Thông Tin Mùa Giải", value=season_info, inline=False)
+
         # Basic commands (everyone)
         basic_cmds = """
-`/clan info [tên]` - Xem thông tin của một clan
-`/clan help` - Hiển thị hướng dẫn này
+`/clan info [tên]` - Xem thông tin chi tiết một clan
+`/clan help` - Hiển thị bảng hướng dẫn này
 """
         embed.add_field(name="📋 Lệnh Cơ Bản", value=basic_cmds, inline=False)
         
         # Verified user commands
         if is_verified:
             user_cmds = """
-`/clan create` - Tạo clan mới (mở modal, chọn 4 người)
-`/clan leave` - Rời khỏi clan hiện tại (cooldown 14 ngày)
-• **Lời mời clan**: Nhận và phản hồi qua **DM** (nút Accept/Decline)
+`/clan create` - Thành lập clan mới (Yêu cầu ít nhất 5 người)
+`/clan leave` - Rời clan hiện tại (Chịu cooldown 14 ngày)
+• **Lời mời:** Phản hồi qua nút bấm trong **DM** của Bot.
 """
             embed.add_field(name="👤 Lệnh Thành Viên", value=user_cmds, inline=False)
         
         # Match commands (any clan member)
         if clan_role:
             match_cmds = """
-`/match create <tên_clan_đối_thủ> [ghi_chú]` - Tạo trận đấu
-• Nút **Báo Thắng**: Chỉ người tạo trận mới có thể bấm
-• Nút **Hủy**: Hủy trận (trước khi báo kết quả)
-• Sau khi báo: Clan đối thủ bấm **Xác Nhận** hoặc **Tranh Chấp**
+`/match create <đối_thủ>` - Khởi tạo trận đấu Custom
+• Sau khi thi đấu: Bên Thắng báo kết quả -> Bên Thua xác nhận.
+• Elo chỉ được tính khi cả hai bên đồng thuận.
 """
             embed.add_field(name="⚔️ Lệnh Trận Đấu", value=match_cmds, inline=False)
         
         # Captain/Vice commands
         if clan_role in ("captain", "vice"):
             capvice_cmds = """
-`/clan invite @member` - Mời người vào clan (gửi DM)
+`/clan invite @user` - Gửi lời mời gia nhập clan (qua DM)
 """
-            embed.add_field(name="⚔️ Lệnh Captain/Vice", value=capvice_cmds, inline=False)
+            embed.add_field(name="🛡️ Lệnh Captain/Vice", value=capvice_cmds, inline=False)
         
         # Captain only commands
         if clan_role == "captain":
             captain_cmds = """
-`/clan promote_vice @member` - Thăng cấp thành viên lên Đội Phó
-`/clan demote_vice @member` - Giáng cấp Đội Phó xuống Thành Viên
-`/clan kick @member` - Kick thành viên khỏi clan
-`/clan disband` - Giải tán clan (yêu cầu xác nhận)
+`/clan promote_vice @user` - Bổ nhiệm Đội Phó
+`/clan demote_vice @user` - Bãi nhiệm Đội Phó
+`/clan kick @user` - Trục xuất thành viên khỏi clan
+`/clan disband` - Giải tán clan (Xóa toàn bộ dữ liệu clan)
 """
             embed.add_field(name="👑 Lệnh Đội Trưởng", value=captain_cmds, inline=False)
         
         # Mod commands
         if is_mod:
             mod_cmds = """
-`/mod clan approve <tên>` - Duyệt clan đang chờ
-`/mod clan reject <tên> <lý_do>` - Từ chối clan
-`/mod clan delete <tên>` - Xóa vĩnh viễn một clan
-`/matchadmin match resolve <id> <clan_thắng> <lý_do>` - Xử lý tranh chấp
+`/mod clan approve <id>` - Phê duyệt clan mới
+`/mod clan reject <id> <lý_do>` - Từ chối phê duyệt
+`/mod clan delete <tên>` - Xóa clan vĩnh viễn
+`/matchadmin match resolve <id> <thắng> <lý_do>` - Xử lý tranh chấp
 """
-            embed.add_field(name="🛡️ Lệnh Mod", value=mod_cmds, inline=False)
+            embed.add_field(name="⚖️ Lệnh Quản Trị", value=mod_cmds, inline=False)
         
         # Elo info (show if in clan)
         if clan_role:
