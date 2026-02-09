@@ -5,6 +5,21 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.1] - 2026-02-09
+### 📝 Documentation & Personalization
+- **ANNOUNCEMENT_SERVER.md Overhaul**: Cập nhật lại toàn bộ nội dung thông báo server với văn phong cá nhân của Nikko.
+- **Improved Guides**: Thêm hướng dẫn chi tiết từng bước cho người mới (Register -> Create -> Arena -> Match).
+- **Rule Consistency**: Đồng bộ hóa quy tắc 5 người (Captain + 4 members) trên tất cả tài liệu.
+- **Arena Documentation**: Cập nhật cách sử dụng Arena Dashboard vào `SPEC.md`.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `ANNOUNCEMENT_SERVER.md` |
+| MODIFY | `historyUpdate.md` |
+| MODIFY | `SPEC.md` |
+| MODIFY | `RULEBOOK.md` |
+
 ## [1.2.0] - 2026-02-09
 ### ✨ New Features
 - **Arena Dashboard**: Kênh `#arena` với nút bấm tương tác để xem thông tin hệ thống:
