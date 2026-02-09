@@ -40,11 +40,15 @@ Hãy ghé thăm kênh **#arena** – Trung tâm thông tin của server:
 *   **Cooldown 14 ngày:** Nếu rời hoặc bị kick khỏi Clan, bạn phải chờ 14 ngày mới có thể gia nhập Clan mới.
 *   **Chống gian lận:** Nghiêm cấm dùng tài khoản clone/smurf để farm Elo hoặc né cooldown. Mọi hành vi gian lận sẽ bị **Ban vĩnh viễn**.
 *   **Công bằng:** Kết quả trận đấu phải được bên đối thủ xác nhận qua nút bấm của Bot.
+*   **Transfer (Chuyển nhượng):** Khi chuyển sang Clan mới, bạn bị cấm thi đấu **3 ngày** để làm quen đồng đội.
+*   **Loan (Mượn quân):** Cho phép mượn tối đa 1 thành viên từ Clan khác (thời hạn tối đa 7 ngày).
 
 ---
 
 🔥 **Tầm nhìn:** Tạo ra một sân chơi Competitive chuyên nghiệp, minh bạch và gắn kết cho anh em người Việt tại EU.
 
-Nếu gặp bất kỳ lỗi kỹ thuật nào, vui lòng báo cho **@nikkosaigon**. Chúc anh em leo rank cháy máy!
+> [!TIP]
+> **Tâm tình từ người làm bot:** 
+> Thú thật là tôi vẫn còn thiếu kinh nghiệm, nhưng tôi cực kỳ muốn tạo ra một nơi vui vẻ cho anh em và cũng là nơi để tôi thỏa sức sáng tạo. Vì hệ thống này rất khó để giả lập test một mình nên tôi chọn cách **"vừa dùng vừa test"**. Nếu có lỗi gì phát sinh, mong anh em thông cảm và báo lại cho **@nikkosaigon** nhé. Chúc anh em leo rank cháy máy!
 
 **Hội đồng Quản trị Quốc Hội Thiểu Năng** 🏛️

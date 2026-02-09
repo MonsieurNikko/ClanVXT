@@ -576,6 +576,23 @@ class ClanCog(commands.Cog):
                 user_id = int(parts[2])
                 await self.handle_clan_decline(interaction, clan_id, user_id)
                 return
+        
+        # Handle active clan invites (invite_accept/invite_decline)
+        if custom_id.startswith("invite_accept:"):
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                invite_id = int(parts[1])
+                user_id = int(parts[2])
+                await self.handle_invite_accept(interaction, invite_id, user_id)
+                return
+        
+        if custom_id.startswith("invite_decline:"):
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                invite_id = int(parts[1])
+                user_id = int(parts[2])
+                await self.handle_invite_decline(interaction, invite_id, user_id)
+                return
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan accept button click."""
@@ -697,6 +714,124 @@ class ClanCog(commands.Cog):
         await bot_utils.log_event(
             "CLAN_CANCELLED",
             f"Clan '{clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
+        )
+    
+    async def handle_invite_accept(self, interaction: discord.Interaction, invite_id: int, user_id: int):
+        """Handle invite accept button click for active clan invites."""
+        discord_user = interaction.user
+        print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm ACCEPT cho Invite ID {invite_id}")
+        
+        # Check if invite still exists and is pending
+        invite = await db.get_invite_by_id(invite_id)
+        if not invite or invite["status"] != "pending":
+            await interaction.response.edit_message(
+                content="Lời mời này đã hết hạn hoặc bị hủy.",
+                view=None
+            )
+            return
+        
+        clan_id = invite["clan_id"]
+        
+        # Get user record (auto-register if needed)
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await db.create_user(str(interaction.user.id), f"{interaction.user.name}#0000")
+            user = await db.get_user(str(interaction.user.id))
+        
+        # Check if user is already in a clan
+        existing_clan = await db.get_user_clan(user["id"])
+        if existing_clan:
+            await interaction.response.edit_message(
+                content=f"❌ Bạn đã ở trong clan **{existing_clan['name']}** rồi. Hãy rời clan trước khi tham gia clan khác.",
+                view=None
+            )
+            return
+        
+        # Check cooldown
+        if user.get("cooldown_until"):
+            cooldown = datetime.fromisoformat(user["cooldown_until"].replace('Z', '+00:00'))
+            if cooldown > datetime.now(timezone.utc):
+                await interaction.response.edit_message(
+                    content=f"❌ Bạn đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
+                    view=None
+                )
+                return
+        
+        # Accept the invite
+        success = await db.accept_invite(invite_id)
+        if not success:
+            await interaction.response.edit_message(
+                content="Không thể xử lý lời mời. Vui lòng thử lại.",
+                view=None
+            )
+            return
+        
+        # Add user to clan
+        await db.add_member(user["id"], clan_id, "member")
+        
+        # Assign Discord role if exists
+        clan = await db.get_clan_by_id(clan_id)
+        clan_name = clan["name"] if clan else "Unknown"
+        
+        if clan and clan.get("discord_role_id") and interaction.guild:
+            try:
+                role = interaction.guild.get_role(int(clan["discord_role_id"]))
+                if role:
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if member:
+                        await member.add_roles(role)
+            except Exception as e:
+                print(f"[DEBUG] Failed to assign role: {e}")
+        
+        await interaction.response.edit_message(
+            content=f"✅ Bạn đã tham gia clan **{clan_name}** thành công!",
+            view=None
+        )
+        
+        # Get inviter name for log
+        inviter = await db.get_user_by_id(invite.get("invited_by_user_id"))
+        inviter_name = inviter["riot_id"] if inviter else "Unknown"
+        
+        await bot_utils.log_event(
+            "MEMBER_JOINED",
+            f"{interaction.user.mention} joined clan '{clan_name}' via invite from {inviter_name}"
+        )
+    
+    async def handle_invite_decline(self, interaction: discord.Interaction, invite_id: int, user_id: int):
+        """Handle invite decline button click for active clan invites."""
+        discord_user = interaction.user
+        print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm DECLINE cho Invite ID {invite_id}")
+        
+        # Check if invite still exists and is pending
+        invite = await db.get_invite_by_id(invite_id)
+        if not invite or invite["status"] != "pending":
+            await interaction.response.edit_message(
+                content="Lời mời này đã hết hạn hoặc bị hủy.",
+                view=None
+            )
+            return
+        
+        clan_id = invite["clan_id"]
+        clan = await db.get_clan_by_id(clan_id)
+        clan_name = clan["name"] if clan else "Unknown"
+        
+        # Decline the invite
+        success = await db.decline_invite(invite_id)
+        if not success:
+            await interaction.response.edit_message(
+                content="Không thể xử lý lời mời. Vui lòng thử lại.",
+                view=None
+            )
+            return
+        
+        await interaction.response.edit_message(
+            content=f"❌ Bạn đã **từ chối** lời mời tham gia clan **{clan_name}**.",
+            view=None
+        )
+        
+        await bot_utils.log_event(
+            "INVITE_DECLINED",
+            f"{interaction.user.mention} declined clan invite for '{clan_name}'"
         )
     
     # =========================================================================

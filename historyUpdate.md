@@ -5,6 +5,14 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.3] - 2026-02-09
+### 📝 Refinements & Personal Touch
+- **Expanded Rules**: Thêm quy tắc về **Transfer (Chuyển nhượng)** và **Loan (Mượn quân)** vào thông báo server.
+- **Nikko's Note**: Thêm lời tâm tình về việc thiếu kinh nghiệm, khao khát sáng tạo và trạng thái **"vừa dùng vừa test"** của bot.
+- **Reward Flexibility**: Làm rõ việc phần thưởng Battle Pass có thể chia sẻ linh hoạt trong Clan.
+
+---
+
 ## [1.2.2] - 2026-02-09
 ### 📝 Rules & Rewards Overhaul
 - **Balanced Personalization**: Kết hợp lời mở đầu tâm huyết của Nikko với các quy định thi đấu chuyên nghiệp, gọn nhẹ trong `ANNOUNCEMENT_SERVER.md`.
