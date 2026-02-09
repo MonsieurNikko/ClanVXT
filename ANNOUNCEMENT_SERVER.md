@@ -22,7 +22,10 @@ Một trong những sản phẩm đầu tiên của tụi tôi chính là **@Vê
 ### ⚔️ THI ĐẤU & THỨ HẠNG (ELO)
 *   **Hệ thống Elo:** Đánh giá sức mạnh Clan qua các trận Custom Match.
 *   **Reset Mùa Giải:** Điểm Elo sẽ được **reset theo mỗi mùa của game Valorant**.
-*   **🎁 PHẦN THƯỞNG:** Kết thúc mỗi mùa giải, Clan đứng đầu bảng xếp hạng Elo sẽ được trao tặng **05 Battle Pass** dành cho 5 thành viên nòng cốt.
+*   **🎁 PHẦN THƯỞNG:** Kết thúc mỗi mùa giải, Clan đứng đầu bảng xếp hạng Elo sẽ được trao tặng **05 Battle Pass**. Phần thưởng này Clan có thể tự do chia cho bất kỳ thành viên nào tùy ý.
+  
+  > [!NOTE]
+  > Thú thật là tài chính của bọn tôi cũng không nhiều, nhưng "của ít lòng nhiều". Bọn tôi muốn tạo ra một sân chơi thực thực sự vui vẻ và có chút phần thưởng khích lệ cho anh em đã tâm huyết cùng server.
 
 ---
 
