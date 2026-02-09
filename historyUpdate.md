@@ -5,6 +5,19 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.4] - 2026-02-09
+### 🐛 Bug Fix: Invitation Persistence
+- **Fixed**: Lời mời gia nhập Clan hoạt động (active clan invite) không thể accept sau khi bot restart.
+- **Root Cause**: `InviteAcceptDeclineView` sử dụng custom ID không được xử lý trong `on_interaction`.
+- **Solution**: Thêm handlers `handle_invite_accept` và `handle_invite_decline` vào `ClanCog`.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `cogs/clan.py` |
+
+---
+
 ## [1.2.3] - 2026-02-09
 ### 📝 Refinements & Personal Touch
 - **Expanded Rules**: Thêm quy tắc về **Transfer (Chuyển nhượng)** và **Loan (Mượn quân)** vào thông báo server.
