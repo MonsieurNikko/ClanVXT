@@ -5,6 +5,20 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.10] - 2026-02-09
+### 🎨 UI Improvement: Compact Clan List
+
+#### 📢 Discord Update
+> **[v1.2.10] Danh sách Clan gọn gàng hơn!**
+> Giờ hiển thị Captain + 3 members inline, tiết kiệm không gian màn hình.
+
+#### 🔧 Technical Details
+- Thay đổi format từ list dọc sang inline với bullet separator (•)
+- Hiển thị: 👑 Captain + 👤 3 members đầu + "...+X khác"
+- Files: `cogs/arena.py`
+
+---
+
 ## [1.2.9] - 2026-02-09
 ### 🐛 Bug Fix: Role Assignment on Invite Accept
 

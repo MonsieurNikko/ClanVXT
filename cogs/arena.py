@@ -57,16 +57,35 @@ class ArenaView(discord.ui.View):
                 members = await db.get_clan_members(clan["id"])
                 member_count = len(members)
                 
-                # Build member list with roles
-                member_lines = []
+                # Build compact member list (inline, limited to first 4)
+                member_parts = []
+                captain = None
+                others = []
+                
                 for m in members:
-                    role_emoji = "👑" if m["role"] == "captain" else ("⚔️" if m["role"] == "vice" else "👤")
                     # Try to get Discord member for display name
                     discord_member = interaction.guild.get_member(int(m["discord_id"])) if interaction.guild else None
                     display_name = discord_member.display_name if discord_member else m["riot_id"]
-                    member_lines.append(f"{role_emoji} {display_name}")
+                    
+                    if m["role"] == "captain":
+                        captain = f"👑 {display_name}"
+                    else:
+                        others.append(display_name)
                 
-                members_text = "\n".join(member_lines) if member_lines else "Không có thành viên"
+                # Format: Captain + first 3 others inline
+                if captain:
+                    member_parts.append(captain)
+                
+                # Show max 3 other members
+                for name in others[:3]:
+                    member_parts.append(f"👤 {name}")
+                
+                # If more than 3 others, show +X
+                remaining = len(others) - 3
+                if remaining > 0:
+                    member_parts.append(f"*...+{remaining} khác*")
+                
+                members_text = " • ".join(member_parts) if member_parts else "Không có thành viên"
                 
                 embed.add_field(
                     name=f"{i}. {clan['name']} | Elo: `{clan.get('elo', 1000)}` | 👥 {member_count}",
