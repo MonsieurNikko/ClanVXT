@@ -5,6 +5,23 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.13] - 2026-02-09
+### ✨ Feature: Đổi Tên Clan (Captain Only)
+
+#### 📢 Discord Update
+> **[v1.2.13] Captain đã có thể đổi tên Clan!**
+> Bấm nút 🏷️ **Đổi Tên Clan** trong Arena để thay đổi tên clan của bạn.
+> Hệ thống sẽ tự động cập nhật: Database, Role Discord và Kênh Discord.
+
+#### 🔧 Technical Details
+- Thêm `update_clan_name()` vào `services/db.py`
+- Thêm `ClanRenameModal` vào `cogs/arena.py` để xử lý input và validation
+- Tự động rename Discord Role và Text Channel tương ứng
+- Thêm log event `CLAN_RENAMED`
+- Files: `services/db.py`, `cogs/arena.py`
+
+---
+
 ## [1.2.12] - 2026-02-09
 ### ✨ Feature: Nút Luật Lệ trong Arena
 

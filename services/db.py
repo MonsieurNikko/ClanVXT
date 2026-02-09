@@ -258,6 +258,21 @@ async def set_clan_discord_ids(clan_id: int, role_id: str, channel_id: str) -> N
         await conn.commit()
 
 
+async def update_clan_name(clan_id: int, new_name: str) -> bool:
+    """Update clan name. Returns True if successful, False if name already exists."""
+    async with get_connection() as conn:
+        try:
+            await conn.execute(
+                "UPDATE clans SET name = ?, updated_at = datetime('now') WHERE id = ?",
+                (new_name, clan_id)
+            )
+            await conn.commit()
+            return True
+        except aiosqlite.IntegrityError:
+            # Name already exists (UNIQUE constraint)
+            return False
+
+
 # =============================================================================
 # CLAN MEMBERS CRUD
 # =============================================================================

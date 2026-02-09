@@ -85,6 +85,85 @@ class ClanDetailSelectView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+class ClanRenameModal(discord.ui.Modal, title="🏷️ Đổi Tên Clan"):
+    """Modal for captains to rename their clan."""
+    
+    new_name = discord.ui.TextInput(
+        label="Tên Clan Mới",
+        placeholder="Nhập tên clan mới (3-32 ký tự)...",
+        min_length=3,
+        max_length=32,
+        required=True
+    )
+    
+    def __init__(self, clan: Dict[str, Any]):
+        super().__init__()
+        self.clan = clan
+        self.new_name.default = clan["name"]
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle new name submission."""
+        new_name = self.new_name.value.strip()
+        clan_id = self.clan["id"]
+        old_name = self.clan["name"]
+        
+        # 1. Validate name
+        import re
+        if not re.match(r"^[a-zA-Z0-9\sÀ-ỹ]+$", new_name):
+            await interaction.response.send_message(
+                "❌ Tên clan chỉ được chứa chữ cái, số và khoảng trắng.", 
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        
+        # 2. Update Database
+        success = await db.update_clan_name(clan_id, new_name)
+        if not success:
+            await interaction.followup.send(
+                f"❌ Tên clan **{new_name}** đã tồn tại hoặc không hợp lệ.",
+                ephemeral=True
+            )
+            return
+            
+        # 3. Rename Discord Role
+        role_updated = False
+        if self.clan.get("discord_role_id"):
+            try:
+                role = interaction.guild.get_role(int(self.clan["discord_role_id"]))
+                if role:
+                    await role.edit(name=new_name, reason=f"Clan Rename: {old_name} -> {new_name}")
+                    role_updated = True
+            except Exception as e:
+                print(f"[ARENA] Failed to rename role for clan {clan_id}: {e}")
+                
+        # 4. Rename Discord Channel
+        channel_updated = False
+        if self.clan.get("discord_channel_id"):
+            try:
+                channel = interaction.guild.get_channel(int(self.clan["discord_channel_id"]))
+                if channel:
+                    new_channel_name = new_name.lower().replace(" ", "-")
+                    await channel.edit(name=new_channel_name, reason=f"Clan Rename: {old_name} -> {new_name}")
+                    channel_updated = True
+            except Exception as e:
+                print(f"[ARENA] Failed to rename channel for clan {clan_id}: {e}")
+                
+        # 5. Log and Notify
+        await bot_utils.log_event(
+            "CLAN_RENAMED",
+            f"Captain {interaction.user.mention} renamed clan: **{old_name}** ➡️ **{new_name}**"
+        )
+        
+        msg = f"✅ Đã đổi tên clan thành **{new_name}** thành công!\n"
+        if role_updated: msg += "- Đã đổi tên Role Discord 🎭\n"
+        if channel_updated: msg += "- Đã đổi tên Kênh Discord 💬\n"
+        
+        await interaction.followup.send(msg, ephemeral=True)
+        print(f"[ARENA] Clan {old_name} (ID: {clan_id}) renamed to {new_name} by {interaction.user}")
+
+
 # =============================================================================
 # ARENA VIEW (Persistent Buttons)
 # =============================================================================
@@ -533,6 +612,36 @@ class ArenaView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         print(f"[ARENA] Sent rules to {interaction.user}")
 
+    @discord.ui.button(
+        label="Đổi Tên Clan", 
+        style=discord.ButtonStyle.secondary,
+        emoji="🏷️",
+        custom_id="arena:rename_clan",
+        row=1
+    )
+    async def rename_clan_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Allow captain to rename their clan."""
+        print(f"[ARENA] User {interaction.user} clicked: Rename Clan")
+        
+        # 1. Get user and clan
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await interaction.response.send_message("❌ Bạn chưa có trong hệ thống.", ephemeral=True)
+            return
+            
+        clan = await db.get_user_clan(user["id"])
+        if not clan:
+            await interaction.response.send_message("❌ Bạn không ở trong clan nào.", ephemeral=True)
+            return
+            
+        # 2. Check if Captain
+        if clan["member_role"] != "captain":
+            await interaction.response.send_message("❌ Chỉ **Captain** mới có quyền đổi tên clan.", ephemeral=True)
+            return
+            
+        # 3. Open Modal
+        await interaction.response.send_modal(ClanRenameModal(clan))
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -550,7 +659,8 @@ def create_arena_embed() -> discord.Embed:
             "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
             "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n\n"
             "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội\n"
-            "📜 **Luật Lệ** — Xem quy định hệ thống Clan"
+            "📜 **Luật Lệ** — Xem quy định hệ thống Clan\n"
+            "🏷️ **Đổi Tên Clan** — Captain đổi tên clan mình"
         ),
         color=discord.Color.dark_gold()
     )
