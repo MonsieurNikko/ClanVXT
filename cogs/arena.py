@@ -14,6 +14,78 @@ import config
 
 
 # =============================================================================
+# CLAN DETAIL SELECT VIEW
+# =============================================================================
+
+class ClanDetailSelectView(discord.ui.View):
+    """View with dropdown to select a clan and view full member details."""
+    
+    def __init__(self, clans: List[Dict[str, Any]]):
+        super().__init__(timeout=120)  # 2 min timeout
+        self.clans = {str(c["id"]): c for c in clans}
+        
+        # Build select options
+        options = [
+            discord.SelectOption(
+                label=clan["name"][:25],  # Discord limit
+                value=str(clan["id"]),
+                description=f"Elo: {clan.get('elo', 1000)}",
+                emoji="🏰"
+            )
+            for clan in clans[:25]
+        ]
+        
+        select = discord.ui.Select(
+            placeholder="🔍 Chọn clan để xem chi tiết...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+    
+    async def on_select(self, interaction: discord.Interaction):
+        """Handle clan selection."""
+        clan_id = int(interaction.data["values"][0])
+        clan = await db.get_clan_by_id(clan_id)
+        
+        if not clan:
+            await interaction.response.send_message("❌ Không tìm thấy clan.", ephemeral=True)
+            return
+        
+        # Get full member list
+        members = await db.get_clan_members(clan_id)
+        
+        embed = discord.Embed(
+            title=f"🏰 {clan['name']}",
+            color=discord.Color.dark_gold()
+        )
+        embed.add_field(name="📊 Elo", value=f"`{clan.get('elo', 1000)}`", inline=True)
+        embed.add_field(name="👥 Thành viên", value=f"`{len(members)}`", inline=True)
+        embed.add_field(name="📅 Trạng thái", value=f"`{clan.get('status', 'active')}`", inline=True)
+        
+        # Full member list with roles
+        member_lines = []
+        for m in members:
+            role_emoji = "👑" if m["role"] == "captain" else ("⚔️" if m["role"] == "vice" else "👤")
+            discord_member = interaction.guild.get_member(int(m["discord_id"])) if interaction.guild else None
+            display_name = discord_member.display_name if discord_member else m["riot_id"]
+            role_text = "Captain" if m["role"] == "captain" else ("Vice Captain" if m["role"] == "vice" else "Member")
+            member_lines.append(f"{role_emoji} **{display_name}** — {role_text}")
+        
+        embed.add_field(
+            name="📋 Danh sách thành viên",
+            value="\n".join(member_lines) if member_lines else "Không có thành viên",
+            inline=False
+        )
+        
+        if clan.get("description"):
+            embed.add_field(name="📝 Mô tả", value=clan["description"], inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# =============================================================================
 # ARENA VIEW (Persistent Buttons)
 # =============================================================================
 
@@ -96,7 +168,9 @@ class ArenaView(discord.ui.View):
             if len(clans) > 10:
                 embed.set_footer(text=f"...và {len(clans) - 10} clan khác")
             
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            # Add dropdown to select clan for detailed view
+            view = ClanDetailSelectView(clans_sorted[:25])  # Discord limit 25 options
+            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
             print(f"[ARENA] Sent clan list with members to {interaction.user}")
             
         except Exception as e:
