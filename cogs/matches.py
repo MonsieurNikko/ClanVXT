@@ -13,7 +13,7 @@ import config
 from services import db
 from services import permissions
 from services import elo
-from services import elo
+from services import cooldowns
 from services import bot_utils
 
 

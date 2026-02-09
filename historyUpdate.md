@@ -5,6 +5,20 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.14] - 2026-02-09
+### 🐛 Fix: NameError `cooldowns` trong `/match create`
+
+#### 📢 Discord Update
+> **[v1.2.14] Sửa lỗi không tạo được trận đấu**
+> Lệnh `/match create` đã hoạt động bình thường trở lại.
+
+#### 🔧 Technical Details
+- `cogs/matches.py` thiếu `from services import cooldowns` → gây `NameError` tại dòng 656 khi gọi `cooldowns.check_cooldown()`
+- Bỏ dòng `from services import elo` bị duplicate
+- Files: `cogs/matches.py`
+
+---
+
 ## [1.2.13] - 2026-02-09
 ### ✨ Feature: Đổi Tên Clan (Captain Only)
 
