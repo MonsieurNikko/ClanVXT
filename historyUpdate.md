@@ -5,6 +5,20 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.5] - 2026-02-09
+### ✨ Feature: Clan Members in Arena Dashboard
+- **Enhanced Clan List**: Nút "Danh sách Clan" trong Arena Dashboard giờ hiển thị danh sách thành viên của mỗi clan.
+- **Role Indicators**: 👑 Captain | ⚔️ Vice Captain | 👤 Member.
+- **Display Names**: Hiển thị Discord display name (fallback: Riot ID).
+- **Limit Adjustment**: Giới hạn từ 15 clan xuống 10 clan để embed không quá dài.
+
+### 📁 Files Changed
+| Action | File |
+|--------|------|
+| MODIFY | `cogs/arena.py` |
+
+---
+
 ## [1.2.4] - 2026-02-09
 ### 🐛 Bug Fix: Invitation Persistence
 - **Fixed**: Lời mời gia nhập Clan hoạt động (active clan invite) không thể accept sau khi bot restart.
