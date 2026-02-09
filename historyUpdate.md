@@ -5,6 +5,21 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.11] - 2026-02-09
+### 🐛 Bug Fix: Interaction Already Acknowledged Error
+
+#### 📢 Discord Update
+> **[v1.2.11] Sửa lỗi Accept/Decline Invite!**
+> Các nút Accept/Decline lời mời Clan giờ hoạt động ổn định hơn.
+
+#### 🔧 Technical Details
+- Bug: `Interaction has already been acknowledged` khi click nút trong DM
+- Fix: Kiểm tra `interaction.response.is_done()` trước khi respond
+- Dùng `defer()` + `followup.send()` thay vì `edit_message()`
+- Files: `cogs/clan.py`
+
+---
+
 ## [1.2.10] - 2026-02-09
 ### 🎨 UI Improvement: Compact Clan List + Detail Dropdown
 

@@ -721,12 +721,16 @@ class ClanCog(commands.Cog):
         discord_user = interaction.user
         print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm ACCEPT cho Invite ID {invite_id}")
         
+        # Defer to prevent timeout - use followup instead of edit_message
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        
         # Check if invite still exists and is pending
         invite = await db.get_invite_by_id(invite_id)
         if not invite or invite["status"] != "pending":
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 content="Lời mời này đã hết hạn hoặc bị hủy.",
-                view=None
+                ephemeral=True
             )
             return
         
@@ -741,9 +745,9 @@ class ClanCog(commands.Cog):
         # Check if user is already in a clan
         existing_clan = await db.get_user_clan(user["id"])
         if existing_clan:
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 content=f"❌ Bạn đã ở trong clan **{existing_clan['name']}** rồi. Hãy rời clan trước khi tham gia clan khác.",
-                view=None
+                ephemeral=True
             )
             return
         
@@ -751,18 +755,18 @@ class ClanCog(commands.Cog):
         if user.get("cooldown_until"):
             cooldown = datetime.fromisoformat(user["cooldown_until"].replace('Z', '+00:00'))
             if cooldown > datetime.now(timezone.utc):
-                await interaction.response.edit_message(
+                await interaction.followup.send(
                     content=f"❌ Bạn đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
-                    view=None
+                    ephemeral=True
                 )
                 return
         
         # Accept the invite
         success = await db.accept_invite(invite_id)
         if not success:
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 content="Không thể xử lý lời mời. Vui lòng thử lại.",
-                view=None
+                ephemeral=True
             )
             return
         
@@ -793,9 +797,9 @@ class ClanCog(commands.Cog):
             except Exception as e:
                 print(f"[DEBUG] Failed to assign role: {e}")
         
-        await interaction.response.edit_message(
+        await interaction.followup.send(
             content=f"✅ Bạn đã tham gia clan **{clan_name}** thành công!",
-            view=None
+            ephemeral=True
         )
         
         # Get inviter name for log
@@ -812,12 +816,16 @@ class ClanCog(commands.Cog):
         discord_user = interaction.user
         print(f"[DEBUG] @{discord_user.name} (DB ID: {user_id}) bấm DECLINE cho Invite ID {invite_id}")
         
+        # Defer to prevent timeout
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        
         # Check if invite still exists and is pending
         invite = await db.get_invite_by_id(invite_id)
         if not invite or invite["status"] != "pending":
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 content="Lời mời này đã hết hạn hoặc bị hủy.",
-                view=None
+                ephemeral=True
             )
             return
         
@@ -828,15 +836,15 @@ class ClanCog(commands.Cog):
         # Decline the invite
         success = await db.decline_invite(invite_id)
         if not success:
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 content="Không thể xử lý lời mời. Vui lòng thử lại.",
-                view=None
+                ephemeral=True
             )
             return
         
-        await interaction.response.edit_message(
+        await interaction.followup.send(
             content=f"❌ Bạn đã **từ chối** lời mời tham gia clan **{clan_name}**.",
-            view=None
+            ephemeral=True
         )
         
         await bot_utils.log_event(
