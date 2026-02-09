@@ -415,6 +415,85 @@ class ArenaView(discord.ui.View):
         from cogs.clan import ClanCreateModal
         await interaction.response.send_modal(ClanCreateModal())
         print(f"[ARENA] Opened ClanCreateModal for {interaction.user}")
+    
+    @discord.ui.button(
+        label="Luật Lệ", 
+        style=discord.ButtonStyle.secondary,
+        emoji="📜",
+        custom_id="arena:rules",
+        row=1
+    )
+    async def rules_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show clan system rules."""
+        print(f"[ARENA] User {interaction.user} clicked: Rules")
+        
+        embed = discord.Embed(
+            title="📜 Luật Lệ Hệ Thống Clan",
+            color=discord.Color.dark_gold()
+        )
+        
+        # Section 1: Tổng quan
+        embed.add_field(
+            name="🏰 Tổng Quan",
+            value=(
+                "• Mỗi người chỉ được **1 tài khoản** Discord\n"
+                "• Mỗi người chỉ thuộc **1 clan** tại 1 thời điểm\n"
+                "• **Elo** là điểm của **clan**, không có Elo cá nhân\n"
+                "• Mọi clan mới phải qua **Mod duyệt**"
+            ),
+            inline=False
+        )
+        
+        # Section 2: Tạo Clan
+        embed.add_field(
+            name="🆕 Tạo Clan",
+            value=(
+                "• Captain phải có role **Thiểu Năng Con**\n"
+                "• Cần **5 người** ngay từ đầu (Captain + 4)\n"
+                "• 4 người phải **Accept** qua DM trong **48h**\n"
+                "• Tên clan **duy nhất**, không được nhái/giả mạo"
+            ),
+            inline=False
+        )
+        
+        # Section 3: Cooldown & Rời Clan
+        embed.add_field(
+            name="⏳ Cooldown",
+            value=(
+                "• Rời clan/bị kick → chờ **14 ngày** mới vào clan khác\n"
+                "• Captain rời clan → phải **chuyển Captain** trước\n"
+                "• Clan < 5 người → **tạm khóa** tính năng thi đấu"
+            ),
+            inline=False
+        )
+        
+        # Section 4: Trận đấu
+        embed.add_field(
+            name="⚔️ Trận Đấu",
+            value=(
+                "• Tối thiểu **5 người** để report match\n"
+                "• Clan **thắng** được **+25 Elo**\n"
+                "• Clan **thua** bị **-15 Elo**\n"
+                "• Mod sẽ xác nhận kết quả trận đấu"
+            ),
+            inline=False
+        )
+        
+        # Section 5: Cấm
+        embed.add_field(
+            name="🚫 Vi Phạm",
+            value=(
+                "• Dùng nhiều acc → **ban hệ thống**\n"
+                "• Gian lận Elo/match → **ban vĩnh viễn**\n"
+                "• Tên clan tục tĩu/kỳ thị → **reject**"
+            ),
+            inline=False
+        )
+        
+        embed.set_footer(text="💡 Liên hệ Mod nếu có thắc mắc!")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"[ARENA] Sent rules to {interaction.user}")
 
 
 # =============================================================================
@@ -432,7 +511,8 @@ def create_arena_embed() -> discord.Embed:
             "🏆 **Bảng xếp hạng** — Top clan theo điểm Elo\n"
             "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
             "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n\n"
-            "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội"
+            "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội\n"
+            "📜 **Luật Lệ** — Xem quy định hệ thống Clan"
         ),
         color=discord.Color.dark_gold()
     )

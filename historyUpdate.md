@@ -5,6 +5,20 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.12] - 2026-02-09
+### ✨ Feature: Nút Luật Lệ trong Arena
+
+#### 📢 Discord Update
+> **[v1.2.12] Xem luật lệ ngay trong Arena!**
+> Bấm nút 📜 **Luật Lệ** để xem tóm tắt các quy định quan trọng.
+
+#### 🔧 Technical Details
+- Thêm `rules_button` vào `ArenaView` với 5 section: Tổng Quan, Tạo Clan, Cooldown, Trận Đấu, Vi Phạm
+- Cập nhật `create_arena_embed()` thêm mô tả nút Luật Lệ
+- Files: `cogs/arena.py`
+
+---
+
 ## [1.2.11] - 2026-02-09
 ### 🐛 Bug Fix: Interaction Already Acknowledged Error
 
