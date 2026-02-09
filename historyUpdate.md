@@ -8,6 +8,7 @@ This document provides a cumulative history of all technical improvements, fixes
 ## [1.2.2] - 2026-02-09
 ### 📝 Rules & Rewards Overhaul
 - **Balanced Personalization**: Kết hợp lời mở đầu tâm huyết của Nikko với các quy định thi đấu chuyên nghiệp, gọn nhẹ trong `ANNOUNCEMENT_SERVER.md`.
+- **Arena Integration**: Tích hợp hướng dẫn sử dụng kênh `#arena` Dashboard vào thông báo server.
 - **Elo System Updates**: Thêm quy định reset Elo theo mỗi mùa giải của **Valorant**.
 - **Seasonal Rewards**: Công bố phần thưởng **05 Battle Pass** cho Clan đứng đầu mỗi mùa.
 - **Help Command Upgrade**: Nâng cấp lệnh `/clan help` với giao diện gold premium và tích hợp thông tin mùa giải.
