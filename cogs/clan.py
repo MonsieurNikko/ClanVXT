@@ -80,7 +80,7 @@ async def ensure_user_registered(interaction: discord.Interaction) -> Optional[d
     if not user:
         # Auto-register the user
         discord_id = str(interaction.user.id)
-        await db.create_user(discord_id, f"{interaction.user.name}#0000")
+        await db.create_user(discord_id, interaction.user.display_name)
         user = await get_user_db(discord_id)
     return user
 
@@ -180,7 +180,7 @@ class MemberSelectView(discord.ui.View):
             # Auto-register member if not registered
             user = await db.get_user(str(member.id))
             if not user:
-                await db.create_user(str(member.id), f"{member.name}#0000")
+                await db.create_user(str(member.id), member.display_name)
                 user = await db.get_user(str(member.id))
             
             # Check if member is already in a clan
@@ -237,7 +237,7 @@ class ConfirmCreateButton(discord.ui.Button):
         # Get captain from DB (auto-register if needed)
         captain = await db.get_user(str(interaction.user.id))
         if not captain:
-            await db.create_user(str(interaction.user.id), f"{interaction.user.name}#0000")
+            await db.create_user(str(interaction.user.id), interaction.user.display_name)
             captain = await db.get_user(str(interaction.user.id))
         
         # Create clan in waiting_accept status
@@ -251,7 +251,7 @@ class ConfirmCreateButton(discord.ui.Button):
         for member in self.members:
             user = await db.get_user(str(member.id))
             if not user:
-                await db.create_user(str(member.id), f"{member.name}#0000")
+                await db.create_user(str(member.id), member.display_name)
                 user = await db.get_user(str(member.id))
             
             # Create request in DB
@@ -616,7 +616,7 @@ class ClanCog(commands.Cog):
         # Get user record (auto-register if needed)
         user = await db.get_user(str(interaction.user.id))
         if not user:
-            await db.create_user(str(interaction.user.id), f"{interaction.user.name}#0000")
+            await db.create_user(str(interaction.user.id), interaction.user.display_name)
             user = await db.get_user(str(interaction.user.id))
         
         # Check if user is already in a clan
@@ -1204,7 +1204,7 @@ class ClanCog(commands.Cog):
         # Get or create target user
         target_user = await db.get_user(str(member.id))
         if not target_user:
-            await db.create_user(str(member.id), f"{member.name}#0000")
+            await db.create_user(str(member.id), member.display_name)
             target_user = await db.get_user(str(member.id))
         
         # Check if target is already in a clan
@@ -1689,7 +1689,7 @@ class ClanCog(commands.Cog):
         # Get target user from DB
         target_user = await db.get_user(str(member.id))
         if not target_user:
-            await db.create_user(str(member.id), f"{member.name}#0000")
+            await db.create_user(str(member.id), member.display_name)
             target_user = await db.get_user(str(member.id))
         
         # Check if user is in this clan

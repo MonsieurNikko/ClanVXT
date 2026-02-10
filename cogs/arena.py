@@ -406,7 +406,7 @@ class ArenaView(discord.ui.View):
                 embed.add_field(name="Vai trò", value=membership["member_role"].capitalize(), inline=True)
                 embed.add_field(name="Elo Clan", value=f"`{membership.get('elo', 1000)}`", inline=True)
             else:
-                embed.add_field(name="Clan", value="Chưa tham gia clan nào", inline=False)
+                embed.add_field(name="Clan", value="🎯 Lính đánh thuê tự do", inline=False)
             
             # Cooldown info - always show status
             cooldowns = await db.get_all_user_cooldowns(user["id"])

@@ -5,6 +5,30 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.18] - 2026-02-10
+### 🔧 Fix: User Display & #0000 Deprecation
+
+#### 📢 Discord Update
+> **[v1.2.18] Cải thiện hiển thị thông tin người dùng!**
+> - Admin Dashboard giờ hiển thị đầy đủ thông tin: Discord mention, trạng thái ban/cooldown
+> - Người chưa có clan hiển thị "🎯 Lính đánh thuê tự do" thay vì text cũ
+> - Riot ID không còn hiện #0000 (Discord đã bỏ discriminator)
+
+#### 🔧 Technical Details
+- **Fix 1**: Xóa deprecated `#0000` placeholder trong 8 locations
+  - `cogs/clan.py` (7 chỗ): Thay `f"{member.name}#0000"` → `member.display_name`
+  - `services/permissions.py` (1 chỗ): Thay `f"{username}#0000"` → `username`
+- **Fix 2**: Nâng cấp `get_members_embed()` trong `cogs/admin.py`
+  - Thêm query cooldowns count
+  - Hiển thị Discord mention `<@id>` thay vì chỉ Riot ID
+  - Thêm status indicators: 🚫 (banned), ⏰ (cooldown)
+  - Hiển thị "🎯 Tự do" cho user chưa có clan
+- **Fix 3**: Cập nhật `my_info_button()` trong `cogs/arena.py`
+  - "Chưa tham gia clan nào" → "🎯 Lính đánh thuê tự do"
+- Files: `cogs/clan.py`, `cogs/admin.py`, `cogs/arena.py`, `services/permissions.py`
+
+---
+
 ## [1.2.17] - 2026-02-10
 ### 🐛 Fix: Dual-handler 40060 + FK error trong Clan Create Flow
 

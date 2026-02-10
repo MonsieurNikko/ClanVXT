@@ -771,7 +771,8 @@ class DashboardView(discord.ui.View):
         """Get members list with clan info."""
         async with db.get_connection() as conn:
             cursor = await conn.execute("""
-                SELECT u.discord_id, u.riot_id, u.is_banned, cm.role, c.name as clan_name
+                SELECT u.discord_id, u.riot_id, u.is_banned, cm.role, c.name as clan_name,
+                       (SELECT COUNT(*) FROM cooldowns cd WHERE cd.user_id = u.id AND cd.until > datetime('now')) as has_cooldown
                 FROM users u
                 LEFT JOIN clan_members cm ON u.id = cm.user_id
                 LEFT JOIN clans c ON cm.clan_id = c.id AND c.status IN ('active', 'inactive', 'frozen')
@@ -792,18 +793,35 @@ class DashboardView(discord.ui.View):
             embed.description = "No members found."
             return embed
         
-        description = "```\n"
-        description += f"{'Name (Riot ID)':<20} {'Role':<8} {'Clan':<15}\n"
-        description += "-" * 45 + "\n"
+        lines = []
         for m in members:
-            role_icon = {"captain": "👑", "vice": "⚔️", "member": "👤"}.get(m[3], "–")
-            clan = (m[4][:13] + "..") if m[4] and len(m[4]) > 15 else (m[4] or "–")
-            # Show Riot ID instead of Discord ID
-            name = (m[1][:17] + "..") if len(m[1]) > 19 else m[1]
-            description += f"{name:<20} {role_icon}{(m[3] or '–'):<6} {clan}\n"
-        description += "```"
-        embed.description = description
-        embed.set_footer(text=f"Total: {total} users")
+            discord_id = m[0]
+            riot_id = m[1] or "N/A"
+            is_banned = m[2]
+            role = m[3]
+            clan_name = m[4]
+            has_cooldown = m[5] > 0
+            
+            # Status indicators
+            status = ""
+            if is_banned:
+                status += "🚫"
+            if has_cooldown:
+                status += "⏰"
+            
+            # Role icon
+            role_icon = {"captain": "👑", "vice": "⚔️", "member": "👤"}.get(role, "")
+            
+            # Clan display
+            clan_display = f"**{clan_name}**" if clan_name else "🎯 Tự do"
+            
+            # Riot ID (truncated if needed)
+            riot_display = (riot_id[:15] + "..") if len(riot_id) > 17 else riot_id
+            
+            lines.append(f"{status} <@{discord_id}> — `{riot_display}` {role_icon} {clan_display}")
+        
+        embed.description = "\n".join(lines)
+        embed.set_footer(text=f"Total: {total} users | 🚫=Banned ⏰=Cooldown")
         
         self.total_pages = max(1, (total + 14) // 15)
         return embed

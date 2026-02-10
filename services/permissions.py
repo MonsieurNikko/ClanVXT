@@ -56,7 +56,7 @@ async def ensure_user_exists(discord_id: str, username: str) -> Dict[str, Any]:
     """
     user = await db.get_user(discord_id)
     if not user:
-        await db.create_user(discord_id, f"{username}#0000")
+        await db.create_user(discord_id, username)
         user = await db.get_user(discord_id)
     return user
 
