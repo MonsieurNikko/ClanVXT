@@ -5,6 +5,24 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.17] - 2026-02-10
+### 🐛 Fix: Dual-handler 40060 + FK error trong Clan Create Flow
+
+#### 📢 Discord Update
+> **[v1.2.17] Sửa lỗi Accept/Decline khi tạo Clan & Invite!**
+> Các nút Accept/Decline trong DM giờ hoạt động ổn định. Sửa lỗi crash khi tạo clan mới.
+
+#### 🔧 Technical Details
+- **Bug 1**: `Interaction already acknowledged` (40060) trong `handle_clan_accept`/`handle_clan_decline` — cả `AcceptDeclineView.callback` VÀ `on_interaction` đều fire
+  - Fix: Callbacks trong `AcceptDeclineView` và `InviteAcceptDeclineView` giờ là `pass` (no-op)
+  - `handle_clan_accept` và `handle_clan_decline` dùng `is_done()` check + try/except fallback
+- **Bug 2**: `FOREIGN KEY constraint failed` trong `create_create_request` khi tạo clan
+  - Fix: Wrap `create_create_request` trong try/except, skip member nếu FK lỗi, log error
+- Dọn leftover code từ old decline_callback trong AcceptDeclineView
+- Files: `cogs/clan.py`
+
+---
+
 ## [1.2.16] - 2026-02-10
 ### 🐛 Fix: Dual-handler bug trong Loans & Transfers
 

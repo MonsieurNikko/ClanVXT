@@ -223,8 +223,16 @@ class ConfirmCreateButton(discord.ui.Button):
         self.members = members
     
     async def callback(self, interaction: discord.Interaction):
-        # Defer first to prevent timeout
-        await interaction.response.defer(ephemeral=True)
+        # Guard against double-click: disable button immediately
+        if self.disabled:
+            return
+        self.disabled = True
+        self.label = "Processing..."
+        self.style = discord.ButtonStyle.grey
+        try:
+            await interaction.response.edit_message(view=self.view)
+        except discord.errors.InteractionResponded:
+            pass
         
         # Get captain from DB (auto-register if needed)
         captain = await db.get_user(str(interaction.user.id))
@@ -247,7 +255,12 @@ class ConfirmCreateButton(discord.ui.Button):
                 user = await db.get_user(str(member.id))
             
             # Create request in DB
-            await db.create_create_request(clan_id, user["id"], expires_at)
+            try:
+                await db.create_create_request(clan_id, user["id"], expires_at)
+            except Exception as e:
+                print(f"[DEBUG] Failed to create request for user {user['id']} in clan {clan_id}: {e}")
+                dm_failures.append(member.mention)
+                continue
             
             # Send DM with accept/decline buttons
             try:
@@ -318,91 +331,12 @@ class AcceptDeclineView(discord.ui.View):
         self.add_item(decline_btn)
     
     async def accept_callback(self, interaction: discord.Interaction):
-        # Check if request still exists and is pending
-        request = await db.get_user_pending_request(self.user_id)
-        if not request or request["clan_id"] != self.clan_id:
-            await interaction.response.edit_message(
-                content="This invitation has expired or been cancelled.",
-                view=None
-            )
-            return
-        
-        # Accept the request
-        await db.accept_create_request(self.clan_id, self.user_id)
-        
-        # Add user to clan_members
-        await db.add_member(self.user_id, self.clan_id, "member")
-        
-        # Check if all 4 accepted
-        all_accepted = await db.check_all_accepted(self.clan_id)
-        
-        await interaction.response.edit_message(
-            content=f"✅ You have **accepted** the invitation to join **{self.clan_name}**!",
-            view=None
-        )
-        
-        if all_accepted:
-            # Update clan status to pending_approval
-            await db.update_clan_status(self.clan_id, "pending_approval")
-            
-            # Notify captain via DM
-            try:
-                clan = await db.get_clan_by_id(self.clan_id)
-                if clan:
-                    # Get captain's discord_id from clan_members
-                    members = await db.get_clan_members(self.clan_id)
-                    captain_member = next((m for m in members if m["role"] == "captain"), None)
-                    if captain_member:
-                        captain_discord_id = captain_member["discord_id"]
-                        # Get discord user
-                        captain_user = interaction.client.get_user(int(captain_discord_id))
-                        if not captain_user:
-                            captain_user = await interaction.client.fetch_user(int(captain_discord_id))
-                        if captain_user:
-                            await captain_user.send(
-                                f"🎉 **Great news!**\n\n"
-                                f"All 4 invited members have **accepted** your clan **{self.clan_name}**!\n\n"
-                                f"Your clan is now **pending mod approval**. A moderator will review and approve it soon."
-                            )
-            except Exception as e:
-                print(f"Failed to DM captain: {e}")
-            
-            # Alert mod-log
-            await bot_utils.log_event(
-                "CLAN_PENDING_APPROVAL",
-                f"Clan '{self.clan_name}' - All 4 invited members accepted. Awaiting mod approval. (ID: {self.clan_id})"
-            )
+        # Handled by ClanCog.on_interaction for persistence
+        pass
     
     async def decline_callback(self, interaction: discord.Interaction):
-        # Check if request still exists
-        request = await db.get_user_pending_request(self.user_id)
-        if not request or request["clan_id"] != self.clan_id:
-            await interaction.response.edit_message(
-                content="This invitation has expired or been cancelled.",
-                view=None
-            )
-            return
-        
-        # Decline the request
-        await db.decline_create_request(self.clan_id, self.user_id)
-        
-        # Delete the entire clan creation
-        async with db.get_connection() as conn:
-            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (self.clan_id,))
-            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (self.clan_id,))
-            await conn.execute("DELETE FROM clans WHERE id = ?", (self.clan_id,))
-            await conn.commit()
-        
-        await interaction.response.edit_message(
-            content=f"❌ You have **declined** the invitation to join **{self.clan_name}**.\n"
-                    f"The clan creation has been cancelled.",
-            view=None
-        )
-        
-        await bot_utils.log_event(
-            "CLAN_CANCELLED",
-            f"Clan '{self.clan_name}' creation cancelled - {interaction.user.mention} declined invitation"
-        )
+        # Handled by ClanCog.on_interaction for persistence
+        pass
 
 
 class PersistentAcceptDeclineView(discord.ui.View):
@@ -450,96 +384,12 @@ class InviteAcceptDeclineView(discord.ui.View):
         self.add_item(decline_btn)
     
     async def accept_callback(self, interaction: discord.Interaction):
-        # Check if invite still exists and is pending
-        invite = await db.get_invite_by_id(self.invite_id)
-        if not invite or invite["status"] != "pending":
-            await interaction.response.edit_message(
-                content="Lời mời này đã hết hạn hoặc bị hủy.",
-                view=None
-            )
-            return
-        
-        # Get user record (auto-register if needed)
-        user = await db.get_user(str(interaction.user.id))
-        if not user:
-            await db.create_user(str(interaction.user.id), f"{interaction.user.name}#0000")
-            user = await db.get_user(str(interaction.user.id))
-        
-        # Check if user is already in a clan
-        existing_clan = await db.get_user_clan(user["id"])
-        if existing_clan:
-            await interaction.response.edit_message(
-                content=f"❌ Bạn đã ở trong clan **{existing_clan['name']}** rồi. Hãy rời clan trước khi tham gia clan khác.",
-                view=None
-            )
-            return
-        
-        # Check cooldown
-        if user.get("cooldown_until"):
-            from datetime import datetime, timezone
-            cooldown = datetime.fromisoformat(user["cooldown_until"].replace('Z', '+00:00'))
-            if cooldown > datetime.now(timezone.utc):
-                await interaction.response.edit_message(
-                    content=f"❌ Bạn đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
-                    view=None
-                )
-                return
-        
-        # Accept the invite
-        success = await db.accept_invite(self.invite_id)
-        if not success:
-            await interaction.response.edit_message(
-                content="Không thể xử lý lời mời. Vui lòng thử lại.",
-                view=None
-            )
-            return
-        
-        # Add user to clan
-        await db.add_member(user["id"], self.clan_id, "member")
-        
-        # Assign Discord role if exists
-        clan = await db.get_clan_by_id(self.clan_id)
-        if clan and clan.get("discord_role_id") and interaction.guild:
-            try:
-                role = interaction.guild.get_role(int(clan["discord_role_id"]))
-                if role:
-                    member = interaction.guild.get_member(interaction.user.id)
-                    if member:
-                        await member.add_roles(role)
-            except Exception as e:
-                print(f"[DEBUG] Failed to assign role: {e}")
-        
-        await interaction.response.edit_message(
-            content=f"✅ Bạn đã tham gia clan **{self.clan_name}** thành công!",
-            view=None
-        )
-        
-        await bot_utils.log_event(
-            "MEMBER_JOINED",
-            f"{interaction.user.mention} joined clan '{self.clan_name}' via invite from {self.invited_by_name}"
-        )
+        # Handled by ClanCog.on_interaction for persistence
+        pass
     
     async def decline_callback(self, interaction: discord.Interaction):
-        # Check if invite still exists and is pending
-        invite = await db.get_invite_by_id(self.invite_id)
-        if not invite or invite["status"] != "pending":
-            await interaction.response.edit_message(
-                content="Lời mời này đã hết hạn hoặc bị hủy.",
-                view=None
-            )
-            return
-        
-        # Decline the invite
-        await db.decline_invite(self.invite_id)
-        
-        await interaction.response.edit_message(
-            content=f"❌ Bạn đã **từ chối** lời mời tham gia **{self.clan_name}**.",
-            view=None
-        )
-        
-        await bot_utils.log_event(
-            "INVITE_DECLINED",
-            f"{interaction.user.mention} declined invite to clan '{self.clan_name}'"
+        # Handled by ClanCog.on_interaction for persistence
+        pass
         )
 
 
@@ -604,10 +454,16 @@ class ClanCog(commands.Cog):
         
         if not request:
             print(f"[DEBUG] Không tìm thấy yêu cầu cho @{discord_user.name} trong clan {clan_id}")
-            await interaction.response.edit_message(
-                content="Yêu cầu ứng tuyển này đã hết hạn hoặc bị hủy.",
-                view=None
-            )
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send("Yêu cầu ứng tuyển này đã hết hạn hoặc bị hủy.", ephemeral=True)
+                else:
+                    await interaction.response.edit_message(
+                        content="Yêu cầu ứng tuyển này đã hết hạn hoặc bị hủy.",
+                        view=None
+                    )
+            except discord.errors.HTTPException:
+                pass
             return
 
         # Get clan name for messages
@@ -626,10 +482,16 @@ class ClanCog(commands.Cog):
             await db.add_member(user_id, clan_id, "member")
         else:
             print(f"[DEBUG] Yêu cầu của @{discord_user.name} đang ở trạng thái: '{request['status']}'.")
-            await interaction.response.edit_message(
-                content=f"Yêu cầu của bạn đang ở trạng thái: **{request['status']}**.",
-                view=None
-            )
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(f"Yêu cầu của bạn đang ở trạng thái: **{request['status']}**.", ephemeral=True)
+                else:
+                    await interaction.response.edit_message(
+                        content=f"Yêu cầu của bạn đang ở trạng thái: **{request['status']}**.",
+                        view=None
+                    )
+            except discord.errors.HTTPException:
+                pass
             return
         
         # Check if all 4 accepted
@@ -688,10 +550,16 @@ class ClanCog(commands.Cog):
         
         if not request:
             print(f"[DEBUG] Không tìm thấy yêu cầu cho @{discord_user.name} trong clan {clan_id}")
-            await interaction.response.edit_message(
-                content="Lời mời này đã hết hạn hoặc đã bị hủy.",
-                view=None
-            )
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send("Lời mời này đã hết hạn hoặc đã bị hủy.", ephemeral=True)
+                else:
+                    await interaction.response.edit_message(
+                        content="Lời mời này đã hết hạn hoặc đã bị hủy.",
+                        view=None
+                    )
+            except discord.errors.HTTPException:
+                pass
             return
         
         # Get clan name for messages
@@ -705,11 +573,21 @@ class ClanCog(commands.Cog):
         # Safe hard delete the entire clan creation
         await db.hard_delete_clan(clan_id)
         
-        await interaction.response.edit_message(
-            content=f"❌ Bạn đã **từ chối** lời mời tham gia **{clan_name}**.\n"
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    f"❌ Bạn đã **từ chối** lời mời tham gia **{clan_name}**.\n"
                     f"Việc tạo clan đã bị hủy bỏ.",
-            view=None
-        )
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.edit_message(
+                    content=f"❌ Bạn đã **từ chối** lời mời tham gia **{clan_name}**.\n"
+                            f"Việc tạo clan đã bị hủy bỏ.",
+                    view=None
+                )
+        except discord.errors.HTTPException:
+            pass
         
         await bot_utils.log_event(
             "CLAN_CANCELLED",

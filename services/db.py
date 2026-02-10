@@ -184,8 +184,19 @@ async def create_clan(name: str, captain_id: int) -> int:
         
         if existing:
             old_id = existing["id"]
-            # Safe hard delete the old clan and its related data
-            await hard_delete_clan(old_id)
+            # Inline hard delete within the SAME connection to avoid
+            # opening a second connection (which deadlocks SQLite).
+            await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (old_id,))
+            await conn.execute("DELETE FROM create_requests WHERE clan_id = ?", (old_id,))
+            await conn.execute("DELETE FROM invite_requests WHERE clan_id = ?", (old_id,))
+            await conn.execute("DELETE FROM clan_flags WHERE clan_id = ?", (old_id,))
+            await conn.execute("DELETE FROM elo_history WHERE clan_id = ?", (old_id,))
+            await conn.execute("DELETE FROM matches WHERE clan_a_id = ? OR clan_b_id = ?", (old_id, old_id))
+            await conn.execute("DELETE FROM loans WHERE lending_clan_id = ? OR borrowing_clan_id = ?", (old_id, old_id))
+            await conn.execute("DELETE FROM transfers WHERE source_clan_id = ? OR dest_clan_id = ?", (old_id, old_id))
+            await conn.execute("DELETE FROM cooldowns WHERE target_type = 'clan' AND target_id = ?", (old_id,))
+            await conn.execute("DELETE FROM cases WHERE target_type = 'clan' AND target_id = ?", (old_id,))
+            await conn.execute("DELETE FROM clans WHERE id = ?", (old_id,))
             
         # Now insert the new clan
         cursor = await conn.execute(
