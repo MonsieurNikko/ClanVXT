@@ -956,6 +956,9 @@ class ClanCog(commands.Cog):
             )
             return
 
+        # Defer to prevent interaction timeout during heavy operations
+        await interaction.response.defer(ephemeral=True)
+
         clan_name = clan_data["name"]
         clan_id = clan_data["id"]
         
@@ -1024,7 +1027,7 @@ class ClanCog(commands.Cog):
             f"{interaction.user.mention} left clan '{clan_name}'. Cooldown: {config.COOLDOWN_DAYS} days."
         )
         
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ Bạn đã rời clan **{clan_name}**.\n"
             f"⏳ Bạn hiện đang trong thời gian chờ **{config.COOLDOWN_DAYS} ngày** trước khi có thể gia nhập clan khác.",
             ephemeral=True
@@ -1050,6 +1053,9 @@ class ClanCog(commands.Cog):
         if clan_data["member_role"] != "captain":
             await interaction.response.send_message(ERRORS["NOT_CAPTAIN"], ephemeral=True)
             return
+        
+        # Defer to prevent interaction timeout during heavy operations
+        await interaction.response.defer(ephemeral=True)
         
         clan_name = clan_data["name"]
         clan_id = clan_data["id"]
@@ -1086,7 +1092,7 @@ class ClanCog(commands.Cog):
             f"Clan '{clan_name}' disbanded by captain {interaction.user.mention}"
         )
         
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ Clan **{clan_name}** đã được giải tán.\n"
             f"Tất cả thành viên đã bị xóa. Không áp dụng thời gian chờ.",
             ephemeral=True
@@ -1352,6 +1358,9 @@ class ClanCog(commands.Cog):
             await interaction.response.send_message(ERRORS["TARGET_NOT_IN_CLAN"], ephemeral=True)
             return
         
+        # Defer to prevent interaction timeout during heavy operations
+        await interaction.response.defer(ephemeral=True)
+        
         clan_name = clan_data["name"]
         clan_id = clan_data["id"]
         
@@ -1420,7 +1429,7 @@ class ClanCog(commands.Cog):
             f"{member.mention} kicked from '{clan_name}' by {interaction.user.mention}. Cooldown: {config.COOLDOWN_DAYS} days."
         )
         
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n"
             f"Họ hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày.",
             ephemeral=True
