@@ -164,17 +164,6 @@ class ClanRenameModal(discord.ui.Modal, title="🏷️ Đổi Tên Clan"):
         print(f"[ARENA] Clan {old_name} (ID: {clan_id}) renamed to {new_name} by {interaction.user}")
 
 
-def _extract_user_id(raw: str) -> Optional[int]:
-    raw = raw.strip()
-    if raw.startswith("<@") and raw.endswith(">"):
-        raw = raw[2:-1]
-        if raw.startswith("!"):
-            raw = raw[1:]
-    if raw.isdigit():
-        return int(raw)
-    return None
-
-
 async def _build_user_info_embed(member: discord.Member, user: Dict[str, Any]) -> discord.Embed:
     membership = await db.get_user_clan(user["id"])
 
@@ -227,44 +216,21 @@ async def _build_user_info_embed(member: discord.Member, user: Dict[str, Any]) -
     return embed
 
 
-class UserInfoModal(discord.ui.Modal, title="🔎 Tra cứu người dùng"):
-    """Modal for checking another user's info."""
+class UserInfoSelectView(discord.ui.View):
+    """View with user picker to select a member and view info."""
 
-    user_input = discord.ui.TextInput(
-        label="Nhập ID hoặc mention",
-        placeholder="Ví dụ: 123456789012345678 hoặc @User",
-        required=True
-    )
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.select = discord.ui.UserSelect(
+            placeholder="Chọn hoặc gõ tên để xem thông tin...",
+            min_values=1,
+            max_values=1
+        )
+        self.select.callback = self.on_select
+        self.add_item(self.select)
 
-    async def on_submit(self, interaction: discord.Interaction):
-        user_id = _extract_user_id(self.user_input.value)
-        if not user_id:
-            await interaction.response.send_message(
-                "❌ Vui lòng nhập ID hoặc mention hợp lệ.",
-                ephemeral=True
-            )
-            return
-
-        if not interaction.guild:
-            await interaction.response.send_message(
-                "❌ Không tìm thấy guild để tra cứu.",
-                ephemeral=True
-            )
-            return
-
-        member = interaction.guild.get_member(user_id)
-        if not member:
-            try:
-                member = await interaction.guild.fetch_member(user_id)
-            except Exception:
-                member = None
-
-        if not member:
-            await interaction.response.send_message(
-                "❌ Không tìm thấy người dùng trong server.",
-                ephemeral=True
-            )
-            return
+    async def on_select(self, interaction: discord.Interaction):
+        member = self.select.values[0]
 
         user = await db.get_user(str(member.id))
         if not user:
@@ -518,7 +484,19 @@ class ArenaView(discord.ui.View):
     async def other_info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Open modal to check another user's info."""
         print(f"[ARENA] User {interaction.user} clicked: Other User Info")
-        await interaction.response.send_modal(UserInfoModal())
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "❌ Không tìm thấy guild để tra cứu.",
+                ephemeral=True
+            )
+            return
+
+        view = UserInfoSelectView()
+        await interaction.response.send_message(
+            "🔎 Chọn hoặc gõ tên để xem thông tin người dùng:",
+            view=view,
+            ephemeral=True
+        )
     
     @discord.ui.button(
         label="Tạo Clan", 
@@ -732,7 +710,7 @@ def create_arena_embed() -> discord.Embed:
             "🏆 **Bảng xếp hạng** — Top clan theo điểm Elo\n"
             "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
             "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n\n"
-            "🔎 **Tra cứu người khác** — Xem thông tin clan của một người bất kỳ\n\n"
+            "🔎 **Tra cứu người khác** — Chọn hoặc gõ tên để xem thông tin\n\n"
             "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội\n"
             "📜 **Luật Lệ** — Xem quy định hệ thống Clan\n"
             "🏷️ **Đổi Tên Clan** — Captain đổi tên clan mình"

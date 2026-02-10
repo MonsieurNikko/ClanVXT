@@ -985,6 +985,62 @@ async def clear_cooldown(target_type: str, target_id: int, kind: Optional[str] =
         await conn.commit()
 
 
+async def pop_expired_cooldowns() -> List[Dict[str, Any]]:
+    """Return and clear expired cooldowns from the new cooldowns table."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM cooldowns WHERE until <= datetime('now')"
+        )
+        rows = await cursor.fetchall()
+        if not rows:
+            return []
+
+        ids = [row["id"] for row in rows]
+        placeholders = ",".join(["?"] * len(ids))
+        await conn.execute(
+            f"DELETE FROM cooldowns WHERE id IN ({placeholders})",
+            ids
+        )
+        await conn.commit()
+        return [dict(row) for row in rows]
+
+
+async def pop_expired_user_cooldowns() -> List[Dict[str, Any]]:
+    """Return and clear expired legacy join/leave cooldowns from users table."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT id, discord_id, cooldown_until FROM users WHERE cooldown_until IS NOT NULL"
+        )
+        rows = await cursor.fetchall()
+
+        expired_ids = []
+        expired_rows = []
+        now = datetime.now(timezone.utc)
+
+        for row in rows:
+            try:
+                until_str = row["cooldown_until"].replace("Z", "+00:00")
+                until_dt = datetime.fromisoformat(until_str)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+
+            if until_dt <= now:
+                expired_ids.append(row["id"])
+                expired_rows.append(dict(row))
+
+        if expired_ids:
+            placeholders = ",".join(["?"] * len(expired_ids))
+            await conn.execute(
+                f"UPDATE users SET cooldown_until = NULL, updated_at = datetime('now') WHERE id IN ({placeholders})",
+                expired_ids
+            )
+            await conn.commit()
+
+        return expired_rows
+
+
 async def cancel_user_pending_requests(user_id: int) -> None:
     """Cancel all pending loan/transfer requests initiated by or involving this user."""
     async with get_connection() as conn:

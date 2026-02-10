@@ -155,6 +155,7 @@ async def on_ready():
     expire_requests_task.start()
     check_loans_task.start()
     check_transfers_task.start()
+    check_cooldowns_task.start()
     print("✓ Started background tasks")
     
     print("-" * 50)
@@ -261,6 +262,67 @@ async def check_transfers_task():
         await conn.commit()
 
 
+@tasks.loop(minutes=10)
+async def check_cooldowns_task():
+    """Check for expired cooldowns and notify users."""
+    expired = await db.pop_expired_cooldowns()
+    expired_users = await db.pop_expired_user_cooldowns()
+
+    kind_labels = {
+        "join_leave": "Tham gia Clan",
+        "loan": "Cho mượn",
+        "transfer_sickness": "Transfer Sickness",
+        "transfer": "Chuyển nhượng",
+        "match_create": "Tạo trận đấu"
+    }
+
+    notified = set()
+
+    for cd in expired:
+        if cd.get("target_type") != "user":
+            continue
+        db_user = await db.get_user_by_id(cd["target_id"])
+        if not db_user:
+            continue
+        discord_id = int(db_user["discord_id"])
+        key = (discord_id, cd.get("kind"))
+        if key in notified:
+            continue
+        notified.add(key)
+
+        label = kind_labels.get(cd.get("kind"), cd.get("kind", "Cooldown"))
+        user_obj = bot.get_user(discord_id)
+        if not user_obj:
+            try:
+                user_obj = await bot.fetch_user(discord_id)
+            except Exception:
+                user_obj = None
+        if user_obj:
+            try:
+                await user_obj.send(f"✅ Cooldown **{label}** của bạn đã hết. Bạn có thể tiếp tục tham gia hoạt động clan.")
+            except Exception:
+                pass
+
+    for row in expired_users:
+        discord_id = int(row["discord_id"])
+        key = (discord_id, "join_leave")
+        if key in notified:
+            continue
+        notified.add(key)
+
+        user_obj = bot.get_user(discord_id)
+        if not user_obj:
+            try:
+                user_obj = await bot.fetch_user(discord_id)
+            except Exception:
+                user_obj = None
+        if user_obj:
+            try:
+                await user_obj.send("✅ Cooldown **Tham gia Clan** của bạn đã hết. Bạn có thể gia nhập clan mới.")
+            except Exception:
+                pass
+
+
 @expire_requests_task.before_loop
 async def before_expire_task():
     """Wait until bot is ready before starting task."""
@@ -273,6 +335,12 @@ async def before_check_loans():
 
 @check_transfers_task.before_loop
 async def before_check_transfers():
+    """Wait until bot is ready before starting task."""
+    await bot.wait_until_ready()
+
+
+@check_cooldowns_task.before_loop
+async def before_check_cooldowns():
     """Wait until bot is ready before starting task."""
     await bot.wait_until_ready()
 

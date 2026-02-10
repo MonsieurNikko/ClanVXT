@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional, Literal
+from datetime import datetime, timezone, timedelta
 import json
 
 import config
@@ -123,6 +124,13 @@ class AdminCog(commands.Cog):
             target_name = clan["name"]
             
         await cooldowns.apply_cooldown(target_type, target_id, kind, duration_days, reason)
+
+        if target_type == "user" and kind == cooldowns.KIND_JOIN_LEAVE:
+            if duration_days == 0:
+                await db.update_user_cooldown(target_id, None)
+            else:
+                until = (datetime.now(timezone.utc) + timedelta(days=duration_days)).isoformat()
+                await db.update_user_cooldown(target_id, until)
         
         await interaction.response.send_message(f"✅ Đã đặt cooldown **{kind}** cho **{target_name}** trong {duration_days} ngày.\nLý do: {reason}")
         
@@ -164,9 +172,21 @@ class AdminCog(commands.Cog):
             target_name = clan["name"]
             
         await cooldowns.clear_cooldown(target_type, target_id, kind)
+
+        if target_type == "user" and (kind is None or kind == cooldowns.KIND_JOIN_LEAVE):
+            await db.update_user_cooldown(target_id, None)
         
         msg = f"✅ Đã xóa **{kind if kind else 'TẤT CẢ'}** cooldown cho **{target_name}**."
         await interaction.response.send_message(msg)
+
+        if target_type == "user" and user:
+            try:
+                kind_text = kind if kind else "TẤT CẢ"
+                await user.send(
+                    f"✅ Cooldown **{kind_text}** của bạn đã được xóa. Bạn có thể tiếp tục tham gia hoạt động clan."
+                )
+            except Exception:
+                pass
         
         await bot_utils.log_event(
             "ADMIN_COOLDOWN_CLEAR",

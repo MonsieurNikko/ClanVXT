@@ -809,10 +809,20 @@ class ClanCog(commands.Cog):
         # Mod commands
         if is_mod:
             mod_cmds = """
-`/mod clan approve <id>` - Phê duyệt clan mới
-`/mod clan reject <id> <lý_do>` - Từ chối phê duyệt
+`/mod clan approve <tên>` - Phê duyệt clan mới
+`/mod clan reject <tên> <lý_do>` - Từ chối phê duyệt
 `/mod clan delete <tên>` - Xóa clan vĩnh viễn
+`/mod clan set_captain <tên> @user` - Đặt Captain mới
+`/mod clan kick @user` - Kick bất kỳ thành viên khỏi clan
 `/matchadmin match resolve <id> <thắng> <lý_do>` - Xử lý tranh chấp
+
+`/admin dashboard` - Tổng quan hệ thống
+`/admin cooldown view|set|clear` - Quản lý cooldown
+`/admin ban user|clan` - Ban hệ thống
+`/admin unban user|clan` - Gỡ ban hệ thống
+`/admin freeze clan` - Đóng băng clan
+`/admin unfreeze <tên>` - Bỏ đóng băng clan
+`/admin case list|view|action|close` - Quản lý case
 """
             embed.add_field(name="⚖️ Lệnh Quản Trị", value=mod_cmds, inline=False)
         
@@ -1670,6 +1680,142 @@ class ClanCog(commands.Cog):
             f"✅ Clan **{clan_name}** (ID: {clan_id}) đã bị xóa vĩnh viễn khỏi database.",
             ephemeral=True
         )
+
+    @mod_clan_group.command(name="kick", description="Kick a member from any clan (Mod only)")
+    @app_commands.describe(member="The member to kick", reason="Reason for kick")
+    async def mod_clan_kick(self, interaction: discord.Interaction, member: discord.Member, reason: Optional[str] = None):
+        """Kick a member from any clan (Mod only)."""
+        if not await check_mod(interaction):
+            return
+
+        if member.id == interaction.user.id:
+            await interaction.response.send_message(ERRORS["CANNOT_KICK_SELF"], ephemeral=True)
+            return
+
+        # Get target user
+        target_user = await db.get_user(str(member.id))
+        if not target_user:
+            await interaction.response.send_message(ERRORS["TARGET_NOT_IN_CLAN"], ephemeral=True)
+            return
+
+        # Check target clan
+        target_clan = await db.get_user_clan(target_user["id"])
+        if not target_clan:
+            await interaction.response.send_message(ERRORS["TARGET_NOT_IN_CLAN"], ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        clan_name = target_clan["name"]
+        clan_id = target_clan["id"]
+
+        # If target is captain, ensure a replacement exists
+        if target_clan.get("member_role") == "captain":
+            members = await db.get_clan_members(clan_id)
+            candidates = [m for m in members if m["user_id"] != target_user["id"]]
+            if not candidates:
+                await interaction.followup.send(
+                    "❌ Không thể kick Captain khi clan chỉ còn 1 thành viên. Hãy set Captain khác hoặc xóa clan.",
+                    ephemeral=True
+                )
+                return
+
+            vice = next((m for m in candidates if m["role"] == "vice"), None)
+            new_captain = vice or candidates[0]
+
+            async with db.get_connection() as conn:
+                await conn.execute(
+                    "UPDATE clan_members SET role = 'member' WHERE clan_id = ? AND role = 'captain'",
+                    (clan_id,)
+                )
+                await conn.execute(
+                    "UPDATE clan_members SET role = 'captain' WHERE clan_id = ? AND user_id = ?",
+                    (clan_id, new_captain["user_id"])
+                )
+                await conn.execute(
+                    "UPDATE clans SET captain_id = ? WHERE id = ?",
+                    (new_captain["user_id"], clan_id)
+                )
+                await conn.commit()
+
+        # Cleanup active loans and pending requests
+        active_loan = await db.get_active_loan_for_member(target_user["id"])
+        if active_loan:
+            await db.end_loan(active_loan["id"])
+            await cooldowns.apply_loan_cooldowns(active_loan["lending_clan_id"], active_loan["borrowing_clan_id"], target_user["id"])
+            await bot_utils.log_event("LOAN_ENDED", f"Loan {active_loan['id']} ended due to member kick by mod.")
+
+        await db.cancel_user_pending_requests(target_user["id"])
+
+        # Remove from clan
+        await db.remove_member(target_user["id"], clan_id)
+
+        # Apply cooldown to kicked member
+        cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
+        await db.update_user_cooldown(target_user["id"], cooldown_until)
+
+        # Remove Discord role if exists
+        if target_clan.get("discord_role_id"):
+            try:
+                role = interaction.guild.get_role(int(target_clan["discord_role_id"]))
+                if role:
+                    await member.remove_roles(role)
+            except Exception:
+                pass
+
+        # Check if clan drops below 5 members - AUTO DISBAND
+        member_count = await db.count_clan_members(clan_id)
+        if member_count < config.MIN_MEMBERS_ACTIVE and target_clan["status"] == "active":
+            if target_clan.get("discord_role_id"):
+                try:
+                    role = interaction.guild.get_role(int(target_clan["discord_role_id"]))
+                    if role:
+                        await role.delete(reason="Clan auto-disbanded (members < 5)")
+                except Exception:
+                    pass
+
+            if target_clan.get("discord_channel_id"):
+                try:
+                    channel = interaction.guild.get_channel(int(target_clan["discord_channel_id"]))
+                    if channel:
+                        await channel.delete(reason="Clan auto-disbanded (members < 5)")
+                except Exception:
+                    pass
+
+            from services import loan_service
+            await loan_service.end_all_clan_loans(clan_id, interaction.guild)
+
+            async with db.get_connection() as conn:
+                await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
+                await conn.execute("UPDATE clans SET status = 'disbanded', updated_at = datetime('now') WHERE id = ?", (clan_id,))
+                await conn.commit()
+
+            await bot_utils.log_event(
+                "CLAN_AUTO_DISBANDED",
+                f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE}) after mod kick"
+            )
+
+        reason_text = reason or "N/A"
+        await bot_utils.log_event(
+            "MEMBER_KICK_BY_MOD",
+            f"{member.mention} kicked from '{clan_name}' by mod {interaction.user.mention}. Reason: {reason_text}"
+        )
+
+        await interaction.followup.send(
+            f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n"
+            f"Lý do: {reason_text}\n"
+            f"Cooldown: {config.COOLDOWN_DAYS} ngày.",
+            ephemeral=True
+        )
+
+        try:
+            await member.send(
+                f"⚠️ Bạn đã bị **kick** khỏi clan **{clan_name}** bởi Moderator.\n"
+                f"Lý do: {reason_text}\n"
+                f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác."
+            )
+        except Exception:
+            pass
     
     @mod_clan_group.command(name="set_captain", description="Set a new captain for a clan (Mod only)")
     @app_commands.describe(clan_name="The clan name", member="The member to make captain")

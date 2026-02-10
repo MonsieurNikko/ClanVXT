@@ -5,6 +5,51 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.23] - 2026-02-10
+### ✨ Feat: Mod kick + Help update + DM cooldown
+
+#### 📢 Discord Update
+> **[v1.2.23] Nâng cấp quyền Mod & thông báo cooldown!**
+> - Mod/Admin có thể kick bất kỳ người trong clan khác
+> - `/clan help` hiển thị đầy đủ lệnh admin/mod theo role
+> - Khi cooldown được xóa hoặc hết hạn, người dùng sẽ nhận DM thông báo
+
+#### 🔧 Technical Details
+- Thêm `/mod clan kick` (kick mọi clan, có xử lý captain và auto-disband nếu cần)
+- Cập nhật help để hiển thị đầy đủ lệnh admin/mod
+- Thêm task kiểm tra cooldown hết hạn và DM người dùng
+- Khi admin clear cooldown, gửi DM thông báo và đồng bộ users table
+- Files: `cogs/clan.py`, `cogs/admin.py`, `services/db.py`, `main.py`
+
+---
+
+## [1.2.22] - 2026-02-10
+### 🔧 Fix: Tra cứu user bằng picker (gõ tìm)
+
+#### 📢 Discord Update
+> **[v1.2.22] Tra cứu user có thể gõ tên!**
+> Nút tra cứu ở Arena giờ dùng UserSelect picker, vừa gõ tìm vừa chọn được.
+
+#### 🔧 Technical Details
+- Dùng `discord.ui.UserSelect` để cho phép search theo tên trong dropdown
+- Files: `cogs/arena.py`
+
+---
+
+## [1.2.21] - 2026-02-10
+### 🔧 Fix: Tra cứu user bằng danh sách chọn
+
+#### 📢 Discord Update
+> **[v1.2.21] Tra cứu user bằng dropdown!**
+> Nút tra cứu ở Arena giờ cho chọn user từ danh sách, không cần gõ tay.
+
+#### 🔧 Technical Details
+- Thay modal nhập ID/mention bằng dropdown select 25 user trong server
+- Cập nhật text hướng dẫn trong Arena Dashboard
+- Files: `cogs/arena.py`
+
+---
+
 ## [1.2.20] - 2026-02-10
 ### ✨ Feat: Arena tra cứu thông tin người khác
 
