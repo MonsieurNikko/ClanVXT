@@ -5,6 +5,36 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.20] - 2026-02-10
+### ✨ Feat: Arena tra cứu thông tin người khác
+
+#### 📢 Discord Update
+> **[v1.2.20] Thêm nút tra cứu thông tin người khác!**
+> Arena giờ có nút mới để xem thông tin clan, cooldown và ban của bất kỳ người dùng nào.
+
+#### 🔧 Technical Details
+- Thêm `UserInfoModal` để nhập ID/mention và trả về embed thông tin
+- Tái sử dụng `_build_user_info_embed()` cho cả "Thông tin của tôi" và tra cứu người khác
+- Cập nhật mô tả Arena Dashboard có nút mới
+- Files: `cogs/arena.py`
+
+---
+
+## [1.2.19] - 2026-02-10
+### 🐛 Fix: Admin Dashboard cooldown query
+
+#### 📢 Discord Update
+> **[v1.2.19] Sửa lỗi Dashboard Admin!**
+> Tab Members không còn crash khi hiển thị cooldown.
+
+#### 🔧 Technical Details
+- Sửa query cooldowns trong `get_members_embed()`
+  - Dùng `target_type='user'` và `target_id` theo schema mới
+  - Tránh lỗi `no such column: cd.user_id`
+- Files: `cogs/admin.py`
+
+---
+
 ## [1.2.18] - 2026-02-10
 ### 🔧 Fix: User Display & #0000 Deprecation
 

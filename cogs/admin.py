@@ -772,7 +772,10 @@ class DashboardView(discord.ui.View):
         async with db.get_connection() as conn:
             cursor = await conn.execute("""
                 SELECT u.discord_id, u.riot_id, u.is_banned, cm.role, c.name as clan_name,
-                       (SELECT COUNT(*) FROM cooldowns cd WHERE cd.user_id = u.id AND cd.until > datetime('now')) as has_cooldown
+                       (SELECT COUNT(*) FROM cooldowns cd
+                        WHERE cd.target_type = 'user'
+                          AND cd.target_id = u.id
+                          AND cd.until > datetime('now')) as has_cooldown
                 FROM users u
                 LEFT JOIN clan_members cm ON u.id = cm.user_id
                 LEFT JOIN clans c ON cm.clan_id = c.id AND c.status IN ('active', 'inactive', 'frozen')
