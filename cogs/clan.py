@@ -390,7 +390,6 @@ class InviteAcceptDeclineView(discord.ui.View):
     async def decline_callback(self, interaction: discord.Interaction):
         # Handled by ClanCog.on_interaction for persistence
         pass
-        )
 
 
 # =============================================================================

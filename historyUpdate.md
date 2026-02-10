@@ -11,7 +11,46 @@ This document provides a cumulative history of all technical improvements, fixes
 #### 📢 Discord Update
 > **[v1.2.17] Sửa lỗi Accept/Decline khi tạo Clan & Invite!**
 > Các nút Accept/Decline trong DM giờ hoạt động ổn định. Sửa lỗi crash khi tạo clan mới.
+==================================================
+2026-02-10 00:45:36 INFO     discord.client logging in using static token
+2026-02-10 00:45:37 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 89399bf58c4d5ffeb74eadfb6a21d8ae).
+Logged in as Vê Xê Tê#4969 (ID: 1465685214134276096)
+--------------------------------------------------
+Target guild: Quốc Hội Thiểu Năng
+✓ Found verified role: Thiểu Năng Con
+✓ Found mod role: Hội đồng quản trị
+✓ Found log channel: #log
+✓ Found category: CLANS
+✓ Found update channel: #update-bot
+Database initialized at /home/container/data/clan.db
+  ✓ Schema up to date (15 tables)
+✓ Database initialized
+2026-02-10 00:45:39 ERROR    discord.client Ignoring exception in on_ready
+Traceback (most recent call last):
+  File "/home/container/.local/lib/python3.14/site-packages/discord/ext/commands/bot.py", line 962, in _load_from_module_spec
+    spec.loader.exec_module(lib)  # type: ignore
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 893, in get_code
+  File "<frozen importlib._bootstrap_external>", line 823, in source_to_code
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/home/container/cogs/clan.py", line 393
+    )
+    ^
+SyntaxError: unmatched ')'
 
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/container/.local/lib/python3.14/site-packages/discord/client.py", line 504, in _run_event
+    await coro(*args, **kwargs)
+  File "/home/container/main.py", line 127, in on_ready
+    await bot.load_extension("cogs.clan")
+  File "/home/container/.local/lib/python3.14/site-packages/discord/ext/commands/bot.py", line 1040, in load_extension
+    await self._load_from_module_spec(spec, name)
+  File "/home/container/.local/lib/python3.14/site-packages/discord/ext/commands/bot.py", line 965, in _load_from_module_spec
+    raise errors.ExtensionFailed(key, e) from e
+discord.ext.commands.errors.ExtensionFailed: Extension 'cogs.clan' raised an error: SyntaxError: unmatched ')' (clan.py, line 393)
 #### 🔧 Technical Details
 - **Bug 1**: `Interaction already acknowledged` (40060) trong `handle_clan_accept`/`handle_clan_decline` — cả `AcceptDeclineView.callback` VÀ `on_interaction` đều fire
   - Fix: Callbacks trong `AcceptDeclineView` và `InviteAcceptDeclineView` giờ là `pass` (no-op)
