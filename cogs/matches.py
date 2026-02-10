@@ -39,6 +39,28 @@ ERRORS = {
 # HELPER FUNCTIONS
 # =============================================================================
 
+async def safe_send(interaction: discord.Interaction, content: str, ephemeral: bool = True):
+    """Send a message safely, falling back to followup if already acknowledged."""
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(content, ephemeral=ephemeral)
+        else:
+            await interaction.response.send_message(content, ephemeral=ephemeral)
+    except discord.errors.HTTPException:
+        pass
+
+
+async def safe_edit(interaction: discord.Interaction, embed: discord.Embed, view=None):
+    """Edit message safely, falling back to edit_original_response if already acknowledged."""
+    try:
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=view)
+        else:
+            await interaction.response.edit_message(embed=embed, view=view)
+    except discord.errors.HTTPException:
+        pass
+
+
 def create_match_embed(match: dict, status_text: str, color: discord.Color) -> discord.Embed:
     """Create a standard match embed."""
     embed = discord.Embed(
@@ -109,48 +131,7 @@ class ReportWinButton(discord.ui.Button):
         self.clan_name = clan_name
         self.creator_id = creator_id
     
-    async def callback(self, interaction: discord.Interaction):
-        # Only match creator can report
-        if str(interaction.user.id) != self.creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
-            return
-        
-        # Try to report (atomic check for status = 'created')
-        success = await db.report_match_v2(self.match_id, self.winner_clan_id)
-        
-        if not success:
-            await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
-            return
-        
-        # Get updated match data
-        match = await db.get_match_with_clans(self.match_id)
-        
-        # Determine opponent clan for Confirm/Dispute
-        if self.winner_clan_id == match["clan_a_id"]:
-            opponent_clan_id = match["clan_b_id"]
-            opponent_name = match["clan_b_name"]
-            winner_name = match["clan_a_name"]
-        else:
-            opponent_clan_id = match["clan_a_id"]
-            opponent_name = match["clan_a_name"]
-            winner_name = match["clan_b_name"]
-        
-        # Update embed
-        embed = create_match_embed(
-            match,
-            f"📝 Đã báo cáo: **{winner_name}** thắng\nChờ {opponent_name} xác nhận...",
-            discord.Color.yellow()
-        )
-        
-        # New view with Confirm/Dispute buttons
-        view = MatchReportedView(self.match_id, opponent_clan_id, self.winner_clan_id)
-        
-        await interaction.response.edit_message(embed=embed, view=view)
-        
-        await bot_utils.log_event(
-            "MATCH_REPORTED",
-            f"Match #{self.match_id}: {interaction.user.mention} báo cáo {winner_name} thắng"
-        )
+    # callback handled by MatchesCog.on_interaction for persistence
 
 
 class CancelMatchButton(discord.ui.Button):
@@ -166,32 +147,7 @@ class CancelMatchButton(discord.ui.Button):
         self.match_id = match_id
         self.creator_id = creator_id
     
-    async def callback(self, interaction: discord.Interaction):
-        # Only match creator can cancel
-        if str(interaction.user.id) != self.creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
-            return
-        
-        # Try to cancel (atomic check for status = 'created')
-        success = await db.cancel_match(self.match_id)
-        
-        if not success:
-            await interaction.response.send_message(ERRORS["CANNOT_CANCEL"], ephemeral=True)
-            return
-        
-        # Update message
-        embed = discord.Embed(
-            title=f"⚔️ Match #{self.match_id}",
-            description="❌ **Match đã bị hủy**",
-            color=discord.Color.dark_grey()
-        )
-        
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        await bot_utils.log_event(
-            "MATCH_CANCELLED",
-            f"Match #{self.match_id} bị hủy bởi {interaction.user.mention}"
-        )
+    # callback handled by MatchesCog.on_interaction for persistence
 
 
 # =============================================================================
@@ -225,71 +181,7 @@ class ConfirmButton(discord.ui.Button):
         self.opponent_clan_id = opponent_clan_id
         self.winner_clan_id = winner_clan_id
     
-    async def callback(self, interaction: discord.Interaction):
-        # Check user is still in opponent clan
-        is_member = await permissions.is_user_in_clan(str(interaction.user.id), self.opponent_clan_id)
-        if not is_member:
-            await interaction.response.send_message(ERRORS["NOT_OPPONENT_CLAN"], ephemeral=True)
-            return
-        
-        # Get user internal ID
-        user_id = await permissions.get_user_internal_id(str(interaction.user.id))
-        if not user_id:
-            await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
-            return
-        
-        # Try to confirm (atomic check for status = 'reported')
-        success = await db.confirm_match_v2(self.match_id, user_id)
-        
-        if not success:
-            await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
-            return
-        
-        # Apply Elo
-        elo_result = await elo.apply_match_result(self.match_id, self.winner_clan_id)
-        
-        # Get updated match data
-        match = await db.get_match_with_clans(self.match_id)
-        
-        # Build result message
-        if elo_result["success"]:
-            winner_name = elo_result["clan_a_name"] if self.winner_clan_id == match["clan_a_id"] else elo_result["clan_b_name"]
-            
-            delta_a = elo_result["final_delta_a"]
-            delta_b = elo_result["final_delta_b"]
-            delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
-            delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
-            
-            status_text = (
-                f"✅ **Đã xác nhận!** {winner_name} thắng\n\n"
-                f"**Elo thay đổi:**\n"
-                f"• {elo_result['clan_a_name']}: {elo_result['elo_a_old']} → {elo_result['elo_a_new']} ({delta_a_str})\n"
-                f"• {elo_result['clan_b_name']}: {elo_result['elo_b_old']} → {elo_result['elo_b_new']} ({delta_b_str})\n\n"
-                f"📊 Multiplier: {elo_result['multiplier']}x (match {elo_result['match_count_24h']}/ngày)"
-            )
-            color = discord.Color.green()
-        else:
-            if elo_result["reason"] == "CLANS_INACTIVE":
-                inactive = ", ".join(elo_result["inactive_clans"])
-                status_text = f"✅ **Đã xác nhận!**\n\n⚠️ **Clan không active:** {inactive}\n\n❌ Elo không được áp dụng."
-            elif elo_result["reason"] == "CLANS_FROZEN":
-                frozen = ", ".join(elo_result["frozen_clans"])
-                status_text = f"✅ **Đã xác nhận!**\n\n🥶 **Clan bị đóng băng:** {frozen}\n\n❌ Elo không được áp dụng."
-            elif elo_result["reason"] == "CLANS_BANNED":
-                banned = ", ".join(elo_result["banned_clans"])
-                status_text = f"✅ **Đã xác nhận!**\n\n🚫 **Clan bị cấm hệ thống:** {banned}\n\n❌ Elo không được áp dụng."
-            else:
-                status_text = f"✅ **Đã xác nhận!**\n\n⚠️ Không thể áp dụng Elo: {elo_result['reason']}"
-            color = discord.Color.orange()
-        
-        embed = create_match_embed(match, status_text, color)
-        
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        await bot_utils.log_event(
-            "MATCH_CONFIRMED",
-            f"Match #{self.match_id} xác nhận bởi {interaction.user.mention}. Elo applied: {elo_result['success']}"
-        )
+    # callback handled by MatchesCog.on_interaction for persistence
 
 
 class DisputeButton(discord.ui.Button):
@@ -305,16 +197,7 @@ class DisputeButton(discord.ui.Button):
         self.match_id = match_id
         self.opponent_clan_id = opponent_clan_id
     
-    async def callback(self, interaction: discord.Interaction):
-        # Check user is still in opponent clan
-        is_member = await permissions.is_user_in_clan(str(interaction.user.id), self.opponent_clan_id)
-        if not is_member:
-            await interaction.response.send_message(ERRORS["NOT_OPPONENT_CLAN"], ephemeral=True)
-            return
-        
-        # Show modal for reason
-        modal = DisputeReasonModal(self.match_id, self.opponent_clan_id)
-        await interaction.response.send_modal(modal)
+    # callback handled by MatchesCog.on_interaction for persistence
 
 
 class DisputeReasonModal(discord.ui.Modal, title="Lý do tranh chấp"):
@@ -344,7 +227,7 @@ class DisputeReasonModal(discord.ui.Modal, title="Lý do tranh chấp"):
         success = await db.dispute_match(self.match_id, user_id, self.reason.value)
         
         if not success:
-            await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
+            await safe_send(interaction, ERRORS["MATCH_ALREADY_PROCESSED"])
             return
         
         # Get match data
@@ -358,7 +241,7 @@ class DisputeReasonModal(discord.ui.Modal, title="Lý do tranh chấp"):
         )
         
         # Update original message
-        await interaction.response.edit_message(embed=embed, view=None)
+        await safe_edit(interaction, embed=embed, view=None)
         
         # Ping mod-log
         log_channel = bot_utils.get_log_channel()
@@ -465,19 +348,14 @@ class MatchesCog(commands.Cog):
     async def handle_match_report(self, interaction: discord.Interaction, match_id: int, winner_clan_id: int, creator_id: str):
         # Only match creator can report
         if str(interaction.user.id) != creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
+            await safe_send(interaction, ERRORS["NOT_MATCH_CREATOR"])
             return
         
         # Try to report (atomic check for status = 'created')
         success = await db.report_match_v2(match_id, winner_clan_id)
         
         if not success:
-            # If failed, check if it was because it's already reported (might be double click or race)
-            # We fail silently or standard error
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
-            except Exception: pass
+            await safe_send(interaction, ERRORS["MATCH_ALREADY_PROCESSED"])
             return
         
         # Get updated match data
@@ -503,7 +381,7 @@ class MatchesCog(commands.Cog):
         # New view with Confirm/Dispute buttons
         view = MatchReportedView(match_id, opponent_clan_id, winner_clan_id)
         
-        await interaction.response.edit_message(embed=embed, view=view)
+        await safe_edit(interaction, embed=embed, view=view)
         
         await bot_utils.log_event(
             "MATCH_REPORTED",
@@ -513,17 +391,14 @@ class MatchesCog(commands.Cog):
     async def handle_match_cancel(self, interaction: discord.Interaction, match_id: int, creator_id: str):
         # Only match creator can cancel
         if str(interaction.user.id) != creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
+            await safe_send(interaction, ERRORS["NOT_MATCH_CREATOR"])
             return
         
         # Try to cancel
         success = await db.cancel_match(match_id)
         
         if not success:
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(ERRORS["CANNOT_CANCEL"], ephemeral=True)
-            except Exception: pass
+            await safe_send(interaction, ERRORS["CANNOT_CANCEL"])
             return
         
         # Update message
@@ -533,7 +408,7 @@ class MatchesCog(commands.Cog):
             color=discord.Color.dark_grey()
         )
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        await safe_edit(interaction, embed=embed, view=None)
         
         await bot_utils.log_event(
             "MATCH_CANCELLED",
@@ -544,23 +419,20 @@ class MatchesCog(commands.Cog):
         # Check user is still in opponent clan
         is_member = await permissions.is_user_in_clan(str(interaction.user.id), opponent_clan_id)
         if not is_member:
-            await interaction.response.send_message(ERRORS["NOT_OPPONENT_CLAN"], ephemeral=True)
+            await safe_send(interaction, ERRORS["NOT_OPPONENT_CLAN"])
             return
         
         # Get user internal ID
         user_id = await permissions.get_user_internal_id(str(interaction.user.id))
         if not user_id:
-            await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
+            await safe_send(interaction, "Bạn chưa đăng ký trong hệ thống.")
             return
         
         # Try to confirm
         success = await db.confirm_match_v2(match_id, user_id)
         
         if not success:
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
-            except Exception: pass
+            await safe_send(interaction, ERRORS["MATCH_ALREADY_PROCESSED"])
             return
         
         # Apply Elo
@@ -602,7 +474,7 @@ class MatchesCog(commands.Cog):
         
         embed = create_match_embed(match, status_text, color)
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        await safe_edit(interaction, embed=embed, view=None)
         
         await bot_utils.log_event(
             "MATCH_CONFIRMED",
@@ -613,12 +485,16 @@ class MatchesCog(commands.Cog):
         # Check user is still in opponent clan
         is_member = await permissions.is_user_in_clan(str(interaction.user.id), opponent_clan_id)
         if not is_member:
-            await interaction.response.send_message(ERRORS["NOT_OPPONENT_CLAN"], ephemeral=True)
+            await safe_send(interaction, ERRORS["NOT_OPPONENT_CLAN"])
             return
         
         # Show modal for reason
         modal = DisputeReasonModal(match_id, opponent_clan_id)
-        await interaction.response.send_modal(modal)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_modal(modal)
+        except discord.errors.HTTPException:
+            pass
     
     # =========================================================================
     # MATCH COMMANDS

@@ -5,6 +5,39 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.16] - 2026-02-10
+### 🐛 Fix: Dual-handler bug trong Loans & Transfers
+
+#### 📢 Discord Update
+> **[v1.2.16] Sửa lỗi tiềm ẩn trong Loan & Transfer!**
+> Các nút Accept cho Loan và Transfer giờ hoạt động ổn định hơn, không còn risk lỗi "Interaction already acknowledged".
+
+#### 🔧 Technical Details
+- Áp dụng cùng pattern đã fix ở matches.py cho loans.py và transfers.py
+- Button callbacks trong `LoanAcceptView` và `TransferAcceptView` giờ là `pass` (no-op)
+- Toàn bộ logic xử lý qua `on_interaction` → `handle_loan_accept` / `handle_transfer_accept`
+- Xóa duplicate imports (`from services import db, permissions, cooldowns...` x2)
+- Files: `cogs/loans.py`, `cogs/transfers.py`
+
+---
+
+## [1.2.15] - 2026-02-10
+### 🐛 Fix: Interaction Already Acknowledged (Error 40060) trong Matches
+
+#### 📢 Discord Update
+> **[v1.2.15] Sửa lỗi crash khi bấm nút trong Match!**
+> Các nút Report, Confirm, Dispute, Cancel giờ hoạt động ổn định. Không còn lỗi "Interaction has already been acknowledged".
+
+#### 🔧 Technical Details
+- Root cause: Cả button `callback` method VÀ `on_interaction` listener đều fire cho cùng 1 interaction → double-acknowledge → HTTPException 40060
+- Fix: Thêm `safe_send()` và `safe_edit()` helpers kiểm tra `is_done()` trước khi respond
+- Button callbacks (`ReportWinButton`, `CancelMatchButton`, `ConfirmButton`, `DisputeButton`) giờ là `pass`
+- Toàn bộ logic xử lý qua `on_interaction` → `handle_match_report/cancel/confirm/dispute`
+- `DisputeReasonModal.on_submit` cũng dùng safe helpers
+- Files: `cogs/matches.py`
+
+---
+
 ## [1.2.14] - 2026-02-09
 ### 🐛 Fix: NameError `cooldowns` trong `/match create`
 

@@ -11,7 +11,6 @@ from typing import Optional, List
 
 import config
 from services import db, permissions, cooldowns
-from services import db, permissions, cooldowns
 from services import bot_utils
 
 class TransferAcceptView(discord.ui.View):
@@ -168,44 +167,18 @@ class TransferAcceptView(discord.ui.View):
 
     @discord.ui.button(label="Clan Gốc Chấp Nhận", style=discord.ButtonStyle.primary, custom_id="transfer_accept_source_placeholder")
     async def accept_source(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is captain/vice of source clan
-        user = await db.get_user(str(interaction.user.id))
-        if not user:
-            return await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
-            
-        clan_data = await db.get_user_clan(user["id"])
-        if not clan_data or clan_data["id"] != self.source_clan_id or clan_data["member_role"] not in ["captain", "vice"]:
-            return await interaction.response.send_message("Chỉ Captain/Vice của clan gốc mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_transfer_acceptance(self.transfer_id, source=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # Handled by TransferCog.on_interaction for persistence
+        pass
 
     @discord.ui.button(label="Clan Đích Chấp Nhận", style=discord.ButtonStyle.primary, custom_id="transfer_accept_dest_placeholder")
     async def accept_dest(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is captain/vice of dest clan
-        user = await db.get_user(str(interaction.user.id))
-        if not user:
-            return await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
-            
-        clan_data = await db.get_user_clan(user["id"])
-        if not clan_data or clan_data["id"] != self.dest_clan_id or clan_data["member_role"] not in ["captain", "vice"]:
-            return await interaction.response.send_message("Chỉ Captain/Vice của clan đích mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_transfer_acceptance(self.transfer_id, dest=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # Handled by TransferCog.on_interaction for persistence
+        pass
 
     @discord.ui.button(label="Thành Viên Chấp Nhận", style=discord.ButtonStyle.success, custom_id="transfer_accept_member_placeholder")
     async def accept_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is the member
-        user = await db.get_user(str(interaction.user.id))
-        if not user or user["id"] != self.member_id:
-            return await interaction.response.send_message("Chỉ member được transfer mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_transfer_acceptance(self.transfer_id, member=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # Handled by TransferCog.on_interaction for persistence
+        pass
 
 
 class TransferCog(commands.Cog):
