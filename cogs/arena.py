@@ -751,8 +751,7 @@ class ArenaView(discord.ui.View):
         embed.add_field(
             name="⚔️ Trận Đấu & Elo",
             value=(
-                "• Elo **thay đổi** dựa trên chênh lệch sức mạnh (K=32)
-"
+                "• Elo **thay đổi** dựa trên chênh lệch sức mạnh (K=32)\n"
                 "• **10 trận đầu** = placement: Elo thay đổi nhanh hơn (K=40)\n"
                 "• Thắng đối thủ **mạnh hơn** → nhận **nhiều Elo hơn**\n"
                 "• **Elo sàn**: không dưới 100 — cùng 2 clan: giảm dần sau mỗi trận/24h"
