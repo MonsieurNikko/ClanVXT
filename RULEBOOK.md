@@ -166,13 +166,16 @@ Một bên báo cáo kết quả, bên còn lại bấm xác nhận. Nếu phả
 Elo khởi điểm của clan là 1000.
 
 
-10 trận đầu là giai đoạn xếp hạng ban đầu: Elo thay đổi nhanh hơn.
+10 trận đầu là giai đoạn xếp hạng ban đầu: Elo thay đổi nhanh hơn (K=40).
 
 
-Sau đó Elo thay đổi ổn định hơn.
+Sau đó Elo thay đổi ổn định hơn (K=32).
 
 
-Để chống farm Elo, giữa cùng 2 clan chỉ được tính Elo tối đa 2 trận trong 24 giờ.
+Elo không thể xuống dưới 100 (để giữ tinh thần thi đấu).
+
+
+Để chống farm Elo, giữa cùng 2 clan, Elo giảm dần sau mỗi trận trong 24 giờ (100% → 70% → 40% → 20%).
 
 
 

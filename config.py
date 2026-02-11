@@ -50,7 +50,11 @@ TRANSFER_COOLDOWN_DAYS: int = 30      # Min time between transfers
 TRANSFER_SICKNESS_HOURS: int = 72     # Match ban after transfer
 MATCH_LIMIT_24H: int = 2              # Max matches between same clans in 24h
 ELO_INITIAL: int = 1000               # Starting Elo
-ELO_PLACEMENT_MATCHES: int = 10       # High K-factor matches
+ELO_K_STABLE: int = 32                # K-factor after placement phase
+ELO_K_PLACEMENT: int = 40             # K-factor during placement phase (first 10 matches)
+ELO_PLACEMENT_MATCHES: int = 10       # Number of placement matches
+ELO_FLOOR: int = 100                  # Minimum Elo (can't drop below)
+CHALLENGE_COOLDOWN_MINUTES: int = 10  # Cooldown between challenges from same clan
 APPEAL_WINDOW_DAYS: int = 7           # Time to appeal a case
 
 # =============================================================================

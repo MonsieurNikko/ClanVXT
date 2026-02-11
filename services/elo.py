@@ -6,11 +6,15 @@ Implements Elo rating formula with anti-farm mechanics
 from typing import Dict, Any, Tuple
 from datetime import datetime, timedelta, timezone
 from services import db
+import config
 
-# Constants
-K_FACTOR = 24
+# Constants — read from config for easy tuning
+K_FACTOR_STABLE = config.ELO_K_STABLE        # 32 (post-placement)
+K_FACTOR_PLACEMENT = config.ELO_K_PLACEMENT   # 40 (first 10 matches)
+PLACEMENT_MATCHES = config.ELO_PLACEMENT_MATCHES  # 10
 RATING_SCALE = 400
-ELO_INITIAL = 1000
+ELO_INITIAL = config.ELO_INITIAL              # 1000
+ELO_FLOOR = config.ELO_FLOOR                  # 100
 
 # Anti-farm multipliers for matches between same clan pair in 24h
 ANTI_FARM_MULTIPLIERS = {
@@ -21,6 +25,16 @@ ANTI_FARM_MULTIPLIERS = {
 DEFAULT_MULTIPLIER = 0.2  # 4th+ match
 
 
+def get_k_factor(matches_played: int) -> int:
+    """
+    Return the K-factor for a clan based on how many matches it has played.
+    During placement phase (< PLACEMENT_MATCHES), K is higher for faster calibration.
+    """
+    if matches_played < PLACEMENT_MATCHES:
+        return K_FACTOR_PLACEMENT
+    return K_FACTOR_STABLE
+
+
 def compute_expected(elo_a: int, elo_b: int) -> float:
     """
     Compute expected score for player/clan A against B.
@@ -29,7 +43,7 @@ def compute_expected(elo_a: int, elo_b: int) -> float:
     return 1.0 / (1.0 + 10 ** ((elo_b - elo_a) / RATING_SCALE))
 
 
-def compute_base_delta(elo_a: int, elo_b: int, score_a: float, k: int = K_FACTOR) -> int:
+def compute_base_delta(elo_a: int, elo_b: int, score_a: float, k: int = K_FACTOR_STABLE) -> int:
     """
     Compute base Elo delta for clan A.
     
@@ -37,7 +51,7 @@ def compute_base_delta(elo_a: int, elo_b: int, score_a: float, k: int = K_FACTOR
         elo_a: Current Elo of clan A
         elo_b: Current Elo of clan B
         score_a: Actual score (1.0 for win, 0.0 for loss)
-        k: K-factor (default 24)
+        k: K-factor (default K_FACTOR_STABLE=32)
     
     Returns:
         Base Elo change (positive for gain, negative for loss)
@@ -205,6 +219,12 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
         
         elo_a = clan_a["elo"]
         elo_b = clan_b["elo"]
+        matches_played_a = clan_a.get("matches_played", 0)
+        matches_played_b = clan_b.get("matches_played", 0)
+        
+        # Per-clan K-factor (placement vs stable)
+        k_a = get_k_factor(matches_played_a)
+        k_b = get_k_factor(matches_played_b)
         
         # Determine scores
         if winner_clan_id == clan_a_id:
@@ -214,9 +234,9 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             score_a = 0.0
             score_b = 1.0
         
-        # Calculate base deltas
-        base_delta_a = compute_base_delta(elo_a, elo_b, score_a)
-        base_delta_b = compute_base_delta(elo_b, elo_a, score_b)
+        # Calculate base deltas (each clan uses its own K-factor)
+        base_delta_a = compute_base_delta(elo_a, elo_b, score_a, k=k_a)
+        base_delta_b = compute_base_delta(elo_b, elo_a, score_b, k=k_b)
         
         # Get anti-farm multiplier
         match_count = await count_elo_matches_between_clans(clan_a_id, clan_b_id)
@@ -226,9 +246,9 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
         final_delta_a = round(base_delta_a * multiplier)
         final_delta_b = round(base_delta_b * multiplier)
         
-        # New Elo values
-        new_elo_a = elo_a + final_delta_a
-        new_elo_b = elo_b + final_delta_b
+        # New Elo values (enforce floor)
+        new_elo_a = max(ELO_FLOOR, elo_a + final_delta_a)
+        new_elo_b = max(ELO_FLOOR, elo_b + final_delta_b)
         
         # Update clan Elos
         await conn.execute(
@@ -282,5 +302,7 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             "elo_b_new": new_elo_b,
             "clan_a_name": clan_a["name"],
             "clan_b_name": clan_b["name"],
-            "match_count_24h": match_count + 1  # Including this match
+            "match_count_24h": match_count + 1,  # Including this match
+            "k_a": k_a,
+            "k_b": k_b,
         }

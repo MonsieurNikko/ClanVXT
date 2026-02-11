@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List, Dict, Any, Optional
 
-from services import db, bot_utils
+from services import db, bot_utils, cooldowns, permissions
 import config
 
 
@@ -242,6 +242,142 @@ class UserInfoSelectView(discord.ui.View):
 
         embed = await _build_user_info_embed(member, user)
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# =============================================================================
+# CHALLENGE SELECT VIEW
+# =============================================================================
+
+class ChallengeSelectView(discord.ui.View):
+    """View with dropdown to select an opponent clan and create a match challenge."""
+
+    def __init__(self, user_clan: Dict[str, Any], all_clans: List[Dict[str, Any]], creator: discord.Member):
+        super().__init__(timeout=120)
+        self.user_clan = user_clan
+        self.creator = creator
+
+        # Filter out own clan, build options
+        options = [
+            discord.SelectOption(
+                label=c["name"][:25],
+                value=str(c["id"]),
+                description=f"Elo: {c.get('elo', 1000)}",
+                emoji="⚔️"
+            )
+            for c in all_clans
+            if c["id"] != user_clan["id"]
+        ][:25]
+
+        select = discord.ui.Select(
+            placeholder="⚔️ Chọn clan đối thủ để thách đấu...",
+            options=options,
+            min_values=1,
+            max_values=1,
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        opponent_clan_id = int(interaction.data["values"][0])
+        opponent = await db.get_clan_by_id(opponent_clan_id)
+
+        if not opponent:
+            await interaction.response.send_message("❌ Không tìm thấy clan đối thủ.", ephemeral=True)
+            return
+
+        if opponent["status"] != "active":
+            await interaction.response.send_message(
+                f"❌ Clan **{opponent['name']}** không ở trạng thái active.", ephemeral=True
+            )
+            return
+
+        # Anti-spam: check challenge cooldown for the clan (10 min)
+        is_cd, cd_until = await cooldowns.check_cooldown("clan", self.user_clan["id"], "match_create")
+        if is_cd:
+            try:
+                from datetime import datetime, timezone as tz
+                until_dt = datetime.fromisoformat(cd_until)
+                diff = until_dt - datetime.now(tz.utc)
+                secs = max(0, int(diff.total_seconds()))
+                mins, s = divmod(secs, 60)
+                time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
+            except Exception:
+                time_str = cd_until
+            await interaction.response.send_message(
+                f"⏳ Clan của bạn vừa tạo lời thách đấu. Vui lòng chờ **{time_str}**.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Get user internal record
+        user = await permissions.ensure_user_exists(str(self.creator.id), self.creator.name)
+
+        # Create match
+        match_id = await db.create_match_v2(
+            clan_a_id=self.user_clan["id"],
+            clan_b_id=opponent["id"],
+            creator_user_id=user["id"],
+            note=f"Thách đấu từ Arena bởi {self.creator.display_name}",
+        )
+
+        # Set cooldown (use config value)
+        await db.set_cooldown_minutes(
+            "clan", self.user_clan["id"], "match_create",
+            config.CHALLENGE_COOLDOWN_MINUTES, "Match challenge created",
+        )
+
+        # Build match embed
+        from cogs.matches import create_match_embed, MatchCreatedView
+        match = await db.get_match_with_clans(match_id)
+
+        embed = create_match_embed(
+            match,
+            "🆕 **Đang chờ kết quả...**\n\nNgười tạo match hãy báo cáo kết quả.",
+            discord.Color.blue(),
+        )
+
+        view = MatchCreatedView(
+            match_id=match_id,
+            creator_id=str(self.creator.id),
+            clan_a_id=self.user_clan["id"],
+            clan_b_id=opponent["id"],
+            clan_a_name=self.user_clan["name"],
+            clan_b_name=opponent["name"],
+        )
+
+        # Find #arena channel to send public match message
+        channel = interaction.channel
+        # Try to send in the same channel (arena)
+        msg = await channel.send(embed=embed, view=view)
+
+        # Store message ID for persistence
+        await db.update_match_message_ids(match_id, str(msg.id), str(channel.id))
+
+        await interaction.followup.send(
+            f"✅ Đã tạo thách đấu **{self.user_clan['name']}** vs **{opponent['name']}**! (Match #{match_id})",
+            ephemeral=True,
+        )
+
+        # Notify opponent clan channel
+        if opponent.get("channel_id"):
+            try:
+                opp_channel = interaction.client.get_channel(int(opponent["channel_id"]))
+                if opp_channel:
+                    opp_role_mention = f"<@&{opponent['role_id']}>" if opponent.get("role_id") else "@everyone"
+                    await opp_channel.send(
+                        f"⚔️ {opp_role_mention}, clan **{self.user_clan['name']}** vừa thách đấu clan bạn!\n"
+                        f"Theo dõi kết quả tại: {channel.mention}"
+                    )
+            except Exception as e:
+                print(f"[ARENA] Error notifying opponent clan: {e}")
+
+        await bot_utils.log_event(
+            "MATCH_CREATED",
+            f"Match #{match_id}: {self.user_clan['name']} vs {opponent['name']} (thách đấu từ Arena bởi {self.creator.mention})",
+        )
+        self.stop()
 
 
 # =============================================================================
@@ -615,10 +751,11 @@ class ArenaView(discord.ui.View):
         embed.add_field(
             name="⚔️ Trận Đấu & Elo",
             value=(
-                "• Clan **thắng**: **+25 Elo** | **thua**: **-15 Elo**\n"
-                "• **Elo khởi điểm**: 1000 | **10 trận đầu**: xếp hạng nhanh\n"
-                "• Cùng 2 clan: tối đa **2 trận/24h** tính Elo\n"
-                "• Tranh chấp → **Mod** quyết định"
+                "• Elo **thay đổi** dựa trên chênh lệch sức mạnh (K=32)
+"
+                "• **10 trận đầu** = placement: Elo thay đổi nhanh hơn (K=40)\n"
+                "• Thắng đối thủ **mạnh hơn** → nhận **nhiều Elo hơn**\n"
+                "• **Elo sàn**: không dưới 100 — cùng 2 clan: giảm dần sau mỗi trận/24h"
             ),
             inline=False
         )
@@ -694,6 +831,89 @@ class ArenaView(discord.ui.View):
         # 3. Open Modal
         await interaction.response.send_modal(ClanRenameModal(clan))
 
+    @discord.ui.button(
+        label="Thách Đấu",
+        style=discord.ButtonStyle.danger,
+        emoji="⚔️",
+        custom_id="arena:challenge",
+        row=2,
+    )
+    async def challenge_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Open clan challenge flow: pick opponent clan → create match."""
+        print(f"[ARENA] User {interaction.user} clicked: Challenge")
+
+        # 1. Must have Verified role
+        user_role_names = [role.name for role in interaction.user.roles]
+        if config.ROLE_VERIFIED not in user_role_names:
+            await interaction.response.send_message(
+                f"❌ Bạn cần role **{config.ROLE_VERIFIED}** để thách đấu.",
+                ephemeral=True,
+            )
+            return
+
+        # 2. Must be in a clan
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await interaction.response.send_message(
+                "❌ Bạn chưa có trong hệ thống. Hãy tham gia clan trước!",
+                ephemeral=True,
+            )
+            return
+
+        user_clan = await db.get_user_clan(user["id"])
+        if not user_clan:
+            await interaction.response.send_message(
+                "❌ Bạn không thuộc clan nào. Hãy tham gia clan trước!",
+                ephemeral=True,
+            )
+            return
+
+        # 3. Clan must be active
+        if user_clan.get("status") != "active":
+            await interaction.response.send_message(
+                f"❌ Clan của bạn đang ở trạng thái **{user_clan.get('status')}**, không thể thách đấu.",
+                ephemeral=True,
+            )
+            return
+
+        # 4. Quick cooldown check (display early instead of after select)
+        is_cd, cd_until = await cooldowns.check_cooldown("clan", user_clan["id"], "match_create")
+        if is_cd:
+            try:
+                from datetime import datetime, timezone as tz
+                until_dt = datetime.fromisoformat(cd_until)
+                diff = until_dt - datetime.now(tz.utc)
+                secs = max(0, int(diff.total_seconds()))
+                mins, s = divmod(secs, 60)
+                time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
+            except Exception:
+                time_str = cd_until
+            await interaction.response.send_message(
+                f"⏳ Clan của bạn vừa tạo match. Vui lòng chờ **{time_str}**.",
+                ephemeral=True,
+            )
+            return
+
+        # 5. Get opponent clan list
+        all_clans = await db.get_all_active_clans()
+        opponents = [c for c in all_clans if c["id"] != user_clan["id"]]
+
+        if not opponents:
+            await interaction.response.send_message(
+                "📭 Không có clan nào khác để thách đấu.",
+                ephemeral=True,
+            )
+            return
+
+        # 6. Show dropdown
+        view = ChallengeSelectView(user_clan, all_clans, interaction.user)
+        await interaction.response.send_message(
+            f"⚔️ **{user_clan['name']}** — Chọn clan đối thủ:",
+            view=view,
+            ephemeral=True,
+        )
+        print(f"[ARENA] Opened challenge select for {interaction.user}")
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -709,11 +929,12 @@ def create_arena_embed() -> discord.Embed:
             "🏰 **Danh sách Clan** — Xem tất cả các clan đang hoạt động\n"
             "🏆 **Bảng xếp hạng** — Top clan theo điểm Elo\n"
             "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
-            "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n\n"
+            "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n"
             "🔎 **Tra cứu người khác** — Chọn hoặc gõ tên để xem thông tin\n\n"
             "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội\n"
             "📜 **Luật Lệ** — Xem quy định hệ thống Clan\n"
-            "🏷️ **Đổi Tên Clan** — Captain đổi tên clan mình"
+            "🏷️ **Đổi Tên Clan** — Captain đổi tên clan mình\n\n"
+            "⚔️ **Thách Đấu** — Chọn clan đối thủ và tạo match ngay!"
         ),
         color=discord.Color.dark_gold()
     )

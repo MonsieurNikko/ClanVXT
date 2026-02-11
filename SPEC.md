@@ -95,9 +95,12 @@ Kênh `#arena` chứa Dashboard với các nút bấm tương tác. User bấm n
 
 ### Base Formula
 - **Starting Elo**: 1000 for all clans
-- **K-Factor**: 24 (constant)
+- **K-Factor (Stable)**: 32 (after 10 matches)
+- **K-Factor (Placement)**: 40 (first 10 matches — faster calibration)
+- **Each clan uses its own K-factor** based on its `matches_played`
 - **Expected Score**: `E = 1 / (1 + 10^((opponent_elo - your_elo) / 400))`
 - **Base Delta**: `round(K * (score - expected))`
+- **Elo Floor**: 100 (Elo cannot drop below this value)
 
 ### Anti-Farm Mechanics
 Diminishing returns for repeated matches between same clan pair in 24h:
