@@ -169,14 +169,16 @@ class CancelMatchButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         # Only match creator can cancel
         if str(interaction.user.id) != self.creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
             return
         
         # Try to cancel (atomic check for status = 'created')
         success = await db.cancel_match(self.match_id)
         
         if not success:
-            await interaction.response.send_message(ERRORS["CANNOT_CANCEL"], ephemeral=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message(ERRORS["CANNOT_CANCEL"], ephemeral=True)
             return
         
         # Update message
