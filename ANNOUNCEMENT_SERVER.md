@@ -32,6 +32,7 @@ Một trong những sản phẩm đầu tiên của tụi tôi chính là **@Vê
 ### 🏰 ĐẤU TRƯỜNG (ARENA)
 Hãy ghé thăm kênh **#arena** – Trung tâm thông tin của server:
 *   📊 **Dashboard tương tác:** Cập nhật thời gian thực danh sách Clan, Bảng xếp hạng, và Lịch sử thi đấu qua các nút bấm tiện lợi.
+*   ⚔️ **Thách đấu:** Bấm nút Thách đấu để gửi lời thách tới clan khác ngay từ Arena. Clan đối thủ sẽ nhận được thông báo trong kênh riêng của họ và quyết định chấp nhận hay từ chối!
 *   👤 **Tra cứu cá nhân:** Xem nhanh Profile, Clan, Role và tình trạng Cooldown/Ban của chính bạn.
 
 ---

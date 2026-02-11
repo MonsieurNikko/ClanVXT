@@ -80,8 +80,18 @@ python main.py
 ## ⚙️ Elo System
 
 - **Starting Elo**: 1000
-- **K-Factor**: 24
+- **K-Factor (Placement)**: 40 (first 10 matches — faster calibration)
+- **K-Factor (Stable)**: 32 (after 10 matches)
+- **Per-clan K-factor**: Each clan uses its own K based on `matches_played`
+- **Elo Floor**: 100 (Elo cannot drop below this)
 - **Anti-farm**: Diminishing returns for repeated matches (100% → 70% → 40% → 20%)
+
+## ⚔️ Challenge System
+
+- Clans can challenge each other via the ⚔️ button on the Arena dashboard
+- Challenge invitation sent to opponent clan's private channel with Accept/Decline buttons
+- Anti-spam: 10-minute cooldown between challenges from the same clan
+- Accept creates a match automatically in #arena
 
 ## 📜 License
 

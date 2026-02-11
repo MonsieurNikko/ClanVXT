@@ -179,6 +179,26 @@ Elo không thể xuống dưới 100 (để giữ tinh thần thi đấu).
 
 
 
+Thách đấu (Challenge)
+Clan có thể thách đấu clan khác thông qua nút ⚔️ Thách đấu trên bảng #arena.
+
+
+Lời thách đấu được gửi vào kênh chat riêng của clan đối thủ, với nút Chấp nhận và Từ chối.
+
+
+Bất kỳ thành viên của clan đối thủ đều có thể chấp nhận hoặc từ chối lời thách.
+
+
+Nếu chấp nhận, trận đấu được tạo tự động trong #arena.
+
+
+Nếu từ chối, clan thách đấu sẽ được thông báo.
+
+
+Cooldown chống spam: 10 phút giữa các lần thách đấu từ cùng một clan.
+
+
+
 Giải đấu (khi server tổ chức)
 Khi server tổ chức giải, mod có thể bật chế độ giải và áp dụng luật giải riêng.
 

@@ -101,3 +101,24 @@ stateDiagram-v2
     - **Transaction Safety**: All member moves are atomic blocks in Python/SQLite to ensure they never end up in zero or two clans.
     - **Acceptance Logic**: Initiator's acceptance is automatically granted if they are a required party.
 - **CANCELLED**: Request cancelled or expired.
+
+## 6. Challenge Workflow
+```mermaid
+stateDiagram-v2
+    [*] --> INITIATED: User clicks ⚔️ Thách đấu
+    INITIATED --> CLAN_SELECTED: User selects opponent clan
+    CLAN_SELECTED --> INVITATION_SENT: Bot sends invite to opponent channel
+    INVITATION_SENT --> ACCEPTED: Opponent clicks Chấp nhận
+    INVITATION_SENT --> DECLINED: Opponent clicks Từ chối
+    ACCEPTED --> MATCH_CREATED: Bot creates match in #arena
+    MATCH_CREATED --> [*]: Normal match lifecycle begins
+    DECLINED --> [*]: Challenger clan notified
+```
+
+### States
+- **INITIATED**: User clicked the challenge button on Arena dashboard.
+- **CLAN_SELECTED**: User chose an opponent clan from dropdown. Bot validates: clan active, not own clan, not in cooldown (10 min).
+- **INVITATION_SENT**: Bot sent challenge embed with Accept/Decline buttons to opponent clan's private channel. Buttons are persistent (survive bot restart).
+- **ACCEPTED**: Any member of opponent clan clicked Accept. Bot creates match in #arena and notifies both clans.
+- **DECLINED**: Any member of opponent clan clicked Decline. Challenger clan is notified.
+- **MATCH_CREATED**: Match follows normal Match Lifecycle (see Section 2).

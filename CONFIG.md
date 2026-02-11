@@ -23,7 +23,11 @@
 | `TRANSFER_SICKNESS_HOURS` | `72h` | Match ban duration after transfer. |
 | `MATCH_LIMIT_24H` | `2` | Max matches between same 2 clans in 24h. |
 | `ELO_INITIAL` | `1000` | Starting Elo for new clans. |
+| `ELO_K_STABLE` | `32` | K-factor after placement matches. |
+| `ELO_K_PLACEMENT` | `40` | K-factor for first 10 matches (faster calibration). |
+| `ELO_FLOOR` | `100` | Minimum Elo value (cannot drop below). |
 | `ELO_PLACEMENT_MATCHES` | `10` | Number of matches with high K-factor. |
+| `CHALLENGE_COOLDOWN_MINUTES` | `10` | Cooldown between challenge invitations from same clan. |
 | `APPEAL_WINDOW` | `7d` | Time window to appeal a case. |
 
 ## 2. Loading Mechanism

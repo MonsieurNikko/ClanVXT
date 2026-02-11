@@ -44,6 +44,15 @@ Bất kỳ ai trong clan đều có thể gõ:
 /match create <tên clan đối thủ>
 ```
 
+### Thách đấu
+Có thể thách đấu clan khác từ bảng **#arena**:
+1. Bấm nút **⚔️ Thách đấu**
+2. Chọn clan đối thủ từ danh sách
+3. Lời thách được gửi vào kênh của clan đối thủ
+4. Họ bấm **Chấp nhận** → Trận được tạo tự động!
+
+⏰ Cooldown 10 phút giữa các lần thách đấu.
+
 ### Sau khi đánh xong
 1. **Người tạo trận** bấm nút ai thắng
 2. **Đối thủ** bấm **Confirm** (đồng ý) hoặc **Dispute** (không đồng ý)
@@ -52,7 +61,8 @@ Bất kỳ ai trong clan đều có thể gõ:
 ### Elo là gì?
 - Điểm xếp hạng của clan (bắt đầu **1000**)
 - Thắng → Elo tăng
-- Thua → Elo giảm
+- Thua → Elo giảm (tối thiểu **100**, không xuống thấp hơn)
+- 10 trận đầu Elo thay đổi nhanh hơn (K=40), sau đó ổn định hơn (K=32)
 - Đánh nhiều trận với cùng 1 clan trong ngày → Elo cộng ít dần (chống farm)
 
 ---

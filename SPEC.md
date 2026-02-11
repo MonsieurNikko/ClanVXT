@@ -27,7 +27,7 @@
 - Sau khi tạo, tin nhắn hiển thị: `[Tên Clan A Thắng]` `[Tên Clan B Thắng]` `[Hủy]`
 - **Report**: Chỉ người tạo trận mới có thể báo cáo kết quả hoặc hủy.
 - **Hủy**: Chỉ được phép trước khi kết quả được báo cáo.
-- **Cooldown**: Có thời gian chờ 5 phút giữa các lần tạo trận tương tự để tránh spam.
+- **Cooldown**: Có thời gian chờ 10 phút giữa các lần tạo trận để tránh spam.
 - Sau khi report, tin nhắn hiển thị: `[Xác Nhận]` `[Tranh Chấp]`
 - **Xác Nhận/Tranh Chấp**: Bất kỳ thành viên nào của clan đối phương đều có thể click (chỉ cần 1 người).
 - **Tranh Chấp**: Nếu có tranh chấp, Mod sẽ nhận được thông báo DM.
@@ -86,10 +86,20 @@ Kênh `#arena` chứa Dashboard với các nút bấm tương tác. User bấm n
 | :--- | :--- |
 | 🏰 Danh sách Clan | Xem top 15 clan active với Elo và số thành viên. |
 | 🏆 Bảng xếp hạng | Top 10 clan theo Elo với huy chương. |
-| ⚔️ Lịch sử Match | 10 trận đấu gần đây với status. |
+| ⚔️ Lịch sử Match | 10 trận đấu gần đây với winner/loser, Elo thay đổi (+/-), ngày tháng, và status chi tiết. |
 | 👤 Thông tin của tôi | Xem thông tin cá nhân: Riot ID, clan, role, cooldown, ban status. |
+| ⚔️ Thách đấu | Gửi lời thách đấu tới clan khác. Chọn clan đối thủ từ dropdown → Lời thách đấu được gửi vào kênh riêng của clan đối thủ với nút Accept/Decline. |
 
 **Admin Command:** `/arena_refresh` — Làm mới dashboard (xóa và gửi lại).
+
+### Challenge Workflow (Thách đấu)
+- User bấm nút **⚔️ Thách đấu** trên Arena Dashboard.
+- Bot hiển thị dropdown chọn clan đối thủ (chỉ clan active, không phải clan mình).
+- Sau khi chọn, bot gửi **embed thách đấu** vào kênh chat riêng của clan đối thủ (cùng tên với clan).
+- Embed chứa nút **Chấp nhận** và **Từ chối** (persistent — hoạt động sau bot restart).
+- **Chấp nhận**: Bất kỳ thành viên clan đối thủ bấm → Bot tạo match trong #arena, thông báo cả 2 clan.
+- **Từ chối**: Bất kỳ thành viên clan đối thủ bấm → Bot thông báo cho clan thách đấu.
+- **Anti-spam**: Cooldown 10 phút giữa các lần thách đấu từ cùng 1 clan.
 
 ## 1.5 Elo System Rules
 

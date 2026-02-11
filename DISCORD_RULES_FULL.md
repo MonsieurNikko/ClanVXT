@@ -150,7 +150,9 @@ Bước 5: Mod duyệt
 | Thông số | Giá trị |
 |----------|---------|
 | Elo khởi điểm | 1000 |
-| K-Factor | 24 |
+| K-Factor (Placement) | 40 (10 trận đầu) |
+| K-Factor (Stable) | 32 (sau 10 trận) |
+| Elo Floor | 100 (không thể xuống dưới) |
 | Placement matches | 10 trận đầu |
 
 ### 6.2. Công thức tính
@@ -162,14 +164,17 @@ Expected = 1 / (1 + 10^((Elo_đối_thủ - Elo_mình) / 400))
 
 **Bước 2:** Tính Elo thay đổi
 ```
-Delta = round(24 × (Kết_quả - Expected))
+Delta = round(K × (Kết_quả - Expected))
+K = 40 (10 trận đầu) hoặc 32 (sau đó)
+Mỗi clan sử dụng K-factor riêng dựa trên số trận của clan đó
 ```
 - Kết_quả = 1 nếu thắng, 0 nếu thua
+- Elo không thể xuống dưới 100 (Elo Floor)
 
 **Ví dụ:**
-- Clan A (1000 Elo) thắng Clan B (1200 Elo)
+- Clan A (1000 Elo, đã chơi 15 trận → K=32) thắng Clan B (1200 Elo)
 - Expected A = 1 / (1 + 10^(200/400)) = 0.24
-- Delta = round(24 × (1 - 0.24)) = +18 Elo
+- Delta = round(32 × (1 - 0.24)) = +24 Elo
 
 ### 6.3. Cơ chế Anti-Farm
 
@@ -177,10 +182,10 @@ Delta = round(24 × (Kết_quả - Expected))
 
 | Trận # (trong 24h) | Hệ số | Elo thực nhận |
 |--------------------|-------|---------------|
-| Trận 1 | 100% | +18 → +18 |
-| Trận 2 | 70% | +18 → +13 |
-| Trận 3 | 40% | +18 → +7 |
-| Trận 4+ | 20% | +18 → +4 |
+| Trận 1 | 100% | +24 → +24 |
+| Trận 2 | 70% | +24 → +17 |
+| Trận 3 | 40% | +24 → +10 |
+| Trận 4+ | 20% | +24 → +5 |
 
 ### 6.4. Điều kiện áp dụng Elo
 Elo CHỈ được tính khi:
@@ -198,6 +203,17 @@ Elo CHỈ được tính khi:
 ```
 - Ai cũng có thể tạo (Captain, Vice, Member)
 - Trận được tạo nhân danh clan của người tạo
+
+### 7.1b. Thách đấu (Challenge)
+Ngoài lệnh `/match create`, bạn có thể thách đấu từ bảng **#arena**:
+
+1. Bấm nút **⚔️ Thách đấu** trên Arena Dashboard
+2. Chọn clan đối thủ từ dropdown
+3. Lời thách đấu được gửi vào kênh riêng của clan đối thủ
+4. Clan đối thủ bấm **Chấp nhận** hoặc **Từ chối**
+5. Nếu chấp nhận → Trận được tạo tự động trong #arena
+
+**Cooldown:** 10 phút giữa các lần thách đấu từ cùng 1 clan.
 
 ### 7.2. Luồng xử lý
 
@@ -374,7 +390,10 @@ Chuyển vĩnh viễn thành viên từ clan này sang clan khác.
 | Cooldown transfer | 30 ngày |
 | Transfer sickness | 72 giờ |
 | Elo khởi điểm | 1000 |
-| K-Factor | 24 |
+| K-Factor (Placement) | 40 (10 trận đầu) |
+| K-Factor (Stable) | 32 (sau 10 trận) |
+| Elo Floor | 100 |
+| Challenge Cooldown | 10 phút |
 | Thời hạn kháng cáo | 7 ngày |
 
 ---
