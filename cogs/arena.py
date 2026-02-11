@@ -248,13 +248,179 @@ class UserInfoSelectView(discord.ui.View):
 # CHALLENGE SELECT VIEW
 # =============================================================================
 
-class ChallengeSelectView(discord.ui.View):
-    """View with dropdown to select an opponent clan and create a match challenge."""
+class ChallengeAcceptView(discord.ui.View):
+    """Persistent view sent to opponent clan channel: Accept or Decline a challenge."""
 
-    def __init__(self, user_clan: Dict[str, Any], all_clans: List[Dict[str, Any]], creator: discord.Member):
+    def __init__(self, challenger_clan: Dict[str, Any], opponent_clan: Dict[str, Any],
+                 creator_id: str, arena_channel_id: int):
+        super().__init__(timeout=None)  # Persistent across restarts
+        self.challenger_clan = challenger_clan
+        self.opponent_clan = opponent_clan
+        self.creator_id = creator_id
+        self.arena_channel_id = arena_channel_id
+
+        chal_id = challenger_clan["id"]
+        opp_id = opponent_clan["id"]
+
+        accept_btn = discord.ui.Button(
+            label="✅ Chấp nhận",
+            style=discord.ButtonStyle.success,
+            custom_id=f"challenge_accept:{chal_id}:{opp_id}:{creator_id}:{arena_channel_id}",
+        )
+        accept_btn.callback = self._accept
+        self.add_item(accept_btn)
+
+        decline_btn = discord.ui.Button(
+            label="❌ Từ chối",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"challenge_decline:{chal_id}:{opp_id}:{creator_id}",
+        )
+        decline_btn.callback = self._decline
+        self.add_item(decline_btn)
+
+    async def _accept(self, interaction: discord.Interaction):
+        # Must be member of opponent clan
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await interaction.response.send_message("❌ Bạn chưa có trong hệ thống.", ephemeral=True)
+            return
+        membership = await db.get_user_clan(user["id"])
+        if not membership or membership["id"] != self.opponent_clan["id"]:
+            await interaction.response.send_message("❌ Chỉ thành viên clan được thách mới có thể chấp nhận.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        # Re-fetch clans to ensure still active
+        challenger = await db.get_clan_by_id(self.challenger_clan["id"])
+        opponent = await db.get_clan_by_id(self.opponent_clan["id"])
+        if not challenger or challenger["status"] != "active":
+            await interaction.followup.send("❌ Clan thách đấu không còn active.")
+            return
+        if not opponent or opponent["status"] != "active":
+            await interaction.followup.send("❌ Clan của bạn không còn active.")
+            return
+
+        # Get creator user record
+        creator_user = await db.get_user(self.creator_id)
+        if not creator_user:
+            creator_user = await permissions.ensure_user_exists(self.creator_id, "Unknown")
+
+        # Create the match
+        match_id = await db.create_match_v2(
+            clan_a_id=challenger["id"],
+            clan_b_id=opponent["id"],
+            creator_user_id=creator_user["id"],
+            note=f"Thách đấu từ Arena — chấp nhận bởi {interaction.user.display_name}",
+        )
+
+        # Build match embed
+        from cogs.matches import create_match_embed, MatchCreatedView
+        match = await db.get_match_with_clans(match_id)
+
+        embed = create_match_embed(
+            match,
+            "🆕 **Đang chờ kết quả...**\n\nNgười tạo match hãy báo cáo kết quả.",
+            discord.Color.blue(),
+        )
+        view = MatchCreatedView(
+            match_id=match_id,
+            creator_id=self.creator_id,
+            clan_a_id=challenger["id"],
+            clan_b_id=opponent["id"],
+            clan_a_name=challenger["name"],
+            clan_b_name=opponent["name"],
+        )
+
+        # Send match message to arena channel
+        arena_channel = interaction.client.get_channel(self.arena_channel_id)
+        if arena_channel:
+            msg = await arena_channel.send(embed=embed, view=view)
+            await db.update_match_message_ids(match_id, str(msg.id), str(arena_channel.id))
+        else:
+            # Fallback: send in current channel
+            msg = await interaction.channel.send(embed=embed, view=view)
+            await db.update_match_message_ids(match_id, str(msg.id), str(interaction.channel_id))
+
+        # Update challenge message to show accepted
+        accepted_embed = discord.Embed(
+            title="⚔️ Thách Đấu Đã Được Chấp Nhận!",
+            description=(
+                f"**{challenger['name']}** vs **{opponent['name']}**\n\n"
+                f"✅ Chấp nhận bởi {interaction.user.mention}\n"
+                f"📋 Match #{match_id} đã được tạo"
+            ),
+            color=discord.Color.green(),
+        )
+        await interaction.message.edit(embed=accepted_embed, view=None)
+
+        # Notify challenger clan channel
+        if challenger.get("discord_channel_id"):
+            try:
+                chal_channel = interaction.client.get_channel(int(challenger["discord_channel_id"]))
+                if chal_channel:
+                    await chal_channel.send(
+                        f"✅ Clan **{opponent['name']}** đã **chấp nhận** lời thách đấu!\n"
+                        f"Match #{match_id} đã được tạo. Xem tại {arena_channel.mention if arena_channel else '#arena'}"
+                    )
+            except Exception as e:
+                print(f"[ARENA] Error notifying challenger clan: {e}")
+
+        await bot_utils.log_event(
+            "MATCH_CREATED",
+            f"Match #{match_id}: {challenger['name']} vs {opponent['name']} "
+            f"(thách đấu chấp nhận bởi {interaction.user.mention})",
+        )
+
+    async def _decline(self, interaction: discord.Interaction):
+        # Must be member of opponent clan
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            await interaction.response.send_message("❌ Bạn chưa có trong hệ thống.", ephemeral=True)
+            return
+        membership = await db.get_user_clan(user["id"])
+        if not membership or membership["id"] != self.opponent_clan["id"]:
+            await interaction.response.send_message("❌ Chỉ thành viên clan được thách mới có thể từ chối.", ephemeral=True)
+            return
+
+        declined_embed = discord.Embed(
+            title="⚔️ Thách Đấu Đã Bị Từ Chối",
+            description=(
+                f"**{self.challenger_clan['name']}** vs **{self.opponent_clan['name']}**\n\n"
+                f"❌ Từ chối bởi {interaction.user.mention}"
+            ),
+            color=discord.Color.dark_grey(),
+        )
+        await interaction.response.edit_message(embed=declined_embed, view=None)
+
+        # Notify challenger clan channel
+        challenger = await db.get_clan_by_id(self.challenger_clan["id"])
+        if challenger and challenger.get("discord_channel_id"):
+            try:
+                chal_channel = interaction.client.get_channel(int(challenger["discord_channel_id"]))
+                if chal_channel:
+                    await chal_channel.send(
+                        f"❌ Clan **{self.opponent_clan['name']}** đã **từ chối** lời thách đấu."
+                    )
+            except Exception as e:
+                print(f"[ARENA] Error notifying challenger clan: {e}")
+
+        await bot_utils.log_event(
+            "CHALLENGE_DECLINED",
+            f"{self.opponent_clan['name']} từ chối thách đấu từ {self.challenger_clan['name']} "
+            f"(bởi {interaction.user.mention})",
+        )
+
+
+class ChallengeSelectView(discord.ui.View):
+    """View with dropdown to select an opponent clan and send a challenge invitation."""
+
+    def __init__(self, user_clan: Dict[str, Any], all_clans: List[Dict[str, Any]],
+                 creator: discord.Member, arena_channel_id: int):
         super().__init__(timeout=120)
         self.user_clan = user_clan
         self.creator = creator
+        self.arena_channel_id = arena_channel_id
 
         # Filter out own clan, build options
         options = [
@@ -291,6 +457,14 @@ class ChallengeSelectView(discord.ui.View):
             )
             return
 
+        # Check opponent has a private channel
+        if not opponent.get("discord_channel_id"):
+            await interaction.response.send_message(
+                f"❌ Clan **{opponent['name']}** chưa có kênh chat riêng. Không thể gửi lời thách đấu.",
+                ephemeral=True,
+            )
+            return
+
         # Anti-spam: check challenge cooldown for the clan (10 min)
         is_cd, cd_until = await cooldowns.check_cooldown("clan", self.user_clan["id"], "match_create")
         if is_cd:
@@ -304,78 +478,74 @@ class ChallengeSelectView(discord.ui.View):
             except Exception:
                 time_str = cd_until
             await interaction.response.send_message(
-                f"⏳ Clan của bạn vừa tạo lời thách đấu. Vui lòng chờ **{time_str}**.",
+                f"⏳ Clan của bạn vừa gửi lời thách đấu. Vui lòng chờ **{time_str}**.",
                 ephemeral=True,
             )
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Get user internal record
-        user = await permissions.ensure_user_exists(str(self.creator.id), self.creator.name)
-
-        # Create match
-        match_id = await db.create_match_v2(
-            clan_a_id=self.user_clan["id"],
-            clan_b_id=opponent["id"],
-            creator_user_id=user["id"],
-            note=f"Thách đấu từ Arena bởi {self.creator.display_name}",
-        )
-
-        # Set cooldown (use config value)
+        # Set cooldown
         await db.set_cooldown_minutes(
             "clan", self.user_clan["id"], "match_create",
-            config.CHALLENGE_COOLDOWN_MINUTES, "Match challenge created",
+            config.CHALLENGE_COOLDOWN_MINUTES, "Challenge sent",
         )
 
-        # Build match embed
-        from cogs.matches import create_match_embed, MatchCreatedView
-        match = await db.get_match_with_clans(match_id)
+        # Send challenge invitation to opponent clan channel
+        opp_channel = interaction.client.get_channel(int(opponent["discord_channel_id"]))
+        if not opp_channel:
+            await interaction.followup.send(
+                f"❌ Không tìm thấy kênh chat của clan **{opponent['name']}**.",
+                ephemeral=True,
+            )
+            return
 
-        embed = create_match_embed(
-            match,
-            "🆕 **Đang chờ kết quả...**\n\nNgười tạo match hãy báo cáo kết quả.",
-            discord.Color.blue(),
+        challenge_embed = discord.Embed(
+            title="⚔️ Lời Thách Đấu!",
+            description=(
+                f"Clan **{self.user_clan['name']}** (Elo: `{self.user_clan.get('elo', 1000)}`) "
+                f"thách đấu clan **{opponent['name']}** (Elo: `{opponent.get('elo', 1000)}`)!\n\n"
+                f"📩 Gửi bởi: {self.creator.mention}\n\n"
+                f"Thành viên clan **{opponent['name']}** hãy bấm nút bên dưới để trả lời!"
+            ),
+            color=discord.Color.orange(),
         )
+        challenge_embed.set_footer(text="Lời thách đấu này không hết hạn cho đến khi có người trả lời.")
 
-        view = MatchCreatedView(
-            match_id=match_id,
+        opp_role_mention = f"<@&{opponent['role_id']}>" if opponent.get("role_id") else ""
+
+        challenge_view = ChallengeAcceptView(
+            challenger_clan=self.user_clan,
+            opponent_clan=opponent,
             creator_id=str(self.creator.id),
-            clan_a_id=self.user_clan["id"],
-            clan_b_id=opponent["id"],
-            clan_a_name=self.user_clan["name"],
-            clan_b_name=opponent["name"],
+            arena_channel_id=self.arena_channel_id,
         )
 
-        # Find #arena channel to send public match message
-        channel = interaction.channel
-        # Try to send in the same channel (arena)
-        msg = await channel.send(embed=embed, view=view)
+        await opp_channel.send(
+            f"{opp_role_mention}" if opp_role_mention else None,
+            embed=challenge_embed,
+            view=challenge_view,
+        )
 
-        # Store message ID for persistence
-        await db.update_match_message_ids(match_id, str(msg.id), str(channel.id))
+        # Also notify challenger's own clan channel
+        if self.user_clan.get("discord_channel_id"):
+            try:
+                own_channel = interaction.client.get_channel(int(self.user_clan["discord_channel_id"]))
+                if own_channel:
+                    await own_channel.send(
+                        f"📨 Lời thách đấu đã được gửi đến clan **{opponent['name']}**! Đang chờ phản hồi..."
+                    )
+            except Exception:
+                pass
 
         await interaction.followup.send(
-            f"✅ Đã tạo thách đấu **{self.user_clan['name']}** vs **{opponent['name']}**! (Match #{match_id})",
+            f"📨 Đã gửi lời thách đấu đến kênh của clan **{opponent['name']}**! Đang chờ họ phản hồi.",
             ephemeral=True,
         )
 
-        # Notify opponent clan channel
-        if opponent.get("channel_id"):
-            try:
-                opp_channel = interaction.client.get_channel(int(opponent["channel_id"]))
-                if opp_channel:
-                    opp_role_mention = f"<@&{opponent['role_id']}>" if opponent.get("role_id") else "@everyone"
-                    await opp_channel.send(
-                        f"⚔️ {opp_role_mention}, clan **{self.user_clan['name']}** vừa thách đấu clan bạn!\n"
-                        f"Theo dõi kết quả tại: {channel.mention}"
-                    )
-            except Exception as e:
-                print(f"[ARENA] Error notifying opponent clan: {e}")
-
         await bot_utils.log_event(
-            "MATCH_CREATED",
-            f"Match #{match_id}: {self.user_clan['name']} vs {opponent['name']} (thách đấu từ Arena bởi {self.creator.mention})",
+            "CHALLENGE_SENT",
+            f"{self.user_clan['name']} thách đấu {opponent['name']} (bởi {self.creator.mention})",
         )
         self.stop()
 
@@ -905,7 +1075,7 @@ class ArenaView(discord.ui.View):
             return
 
         # 6. Show dropdown
-        view = ChallengeSelectView(user_clan, all_clans, interaction.user)
+        view = ChallengeSelectView(user_clan, all_clans, interaction.user, interaction.channel_id)
         await interaction.response.send_message(
             f"⚔️ **{user_clan['name']}** — Chọn clan đối thủ:",
             view=view,
@@ -958,6 +1128,41 @@ class ArenaCog(commands.Cog):
         """Register persistent view when cog loads."""
         self.bot.add_view(ArenaView())
         print("[ARENA] Registered ArenaView as persistent view")
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Handle persistent challenge accept/decline buttons after bot restart."""
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = interaction.data.get("custom_id", "")
+        if not custom_id.startswith("challenge_"):
+            return
+        if interaction.response.is_done():
+            return
+
+        # challenge_accept:{chal_id}:{opp_id}:{creator_id}:{arena_channel_id}
+        if custom_id.startswith("challenge_accept:"):
+            parts = custom_id.split(":")
+            if len(parts) == 5:
+                chal_id, opp_id, creator_id, arena_ch_id = int(parts[1]), int(parts[2]), parts[3], int(parts[4])
+                challenger = await db.get_clan_by_id(chal_id)
+                opponent = await db.get_clan_by_id(opp_id)
+                if challenger and opponent:
+                    view = ChallengeAcceptView(challenger, opponent, creator_id, arena_ch_id)
+                    await view._accept(interaction)
+                    return
+
+        # challenge_decline:{chal_id}:{opp_id}:{creator_id}
+        if custom_id.startswith("challenge_decline:"):
+            parts = custom_id.split(":")
+            if len(parts) == 4:
+                chal_id, opp_id, creator_id = int(parts[1]), int(parts[2]), parts[3]
+                challenger = await db.get_clan_by_id(chal_id)
+                opponent = await db.get_clan_by_id(opp_id)
+                if challenger and opponent:
+                    view = ChallengeAcceptView(challenger, opponent, creator_id, 0)
+                    await view._decline(interaction)
+                    return
     
     @commands.Cog.listener()
     async def on_ready(self):
