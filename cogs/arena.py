@@ -725,24 +725,51 @@ class ArenaView(discord.ui.View):
                 status_emoji = {
                     "confirmed": "✅",
                     "reported": "⏳",
-                    "disputed": "⚠️",
-                    "resolved": "🔒",
+                    "dispute": "⚠️",
+                    "resolved": "⚖️",
                     "cancelled": "❌",
+                    "created": "🆕",
                     "voided": "🚫"
                 }.get(match["status"], "❓")
                 
-                # Winner info
-                winner_text = ""
-                if match.get("winner_clan_id"):
-                    winner = await db.get_clan_by_id(match["winner_clan_id"])
-                    winner_text = f" 🏆 {winner['name']}" if winner else ""
+                # Date (short format)
+                date_str = match["created_at"][:10] if match.get("created_at") else ""
                 
-                match_lines.append(
-                    f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}**{winner_text}"
-                )
+                # Build line based on match state
+                if match.get("winner_clan_id") and match["status"] in ("confirmed", "resolved"):
+                    winner_id = match["winner_clan_id"]
+                    winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
+                    loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
+                    
+                    # Elo change info
+                    elo_text = ""
+                    if match.get("elo_applied"):
+                        delta_a = match.get("final_delta_a", 0)
+                        delta_b = match.get("final_delta_b", 0)
+                        w_delta = delta_a if winner_id == match["clan_a_id"] else delta_b
+                        l_delta = delta_b if winner_id == match["clan_a_id"] else delta_a
+                        w_str = f"+{w_delta}" if w_delta >= 0 else str(w_delta)
+                        l_str = f"+{l_delta}" if l_delta >= 0 else str(l_delta)
+                        elo_text = f" (`{w_str}`/`{l_str}`)"
+                    
+                    line = f"{status_emoji} 🏆 **{winner_name}** thắng **{loser_name}**{elo_text}"
+                elif match["status"] in ("cancelled", "voided"):
+                    line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *{match['status']}*"
+                else:
+                    status_text = {
+                        "created": "đang chờ kết quả",
+                        "reported": "chờ xác nhận",
+                        "dispute": "tranh chấp — chờ Mod",
+                    }.get(match["status"], match["status"])
+                    line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
+                
+                if date_str:
+                    line += f"  `{date_str}`"
+                
+                match_lines.append(line)
             
             embed.description = "\n".join(match_lines)
-            embed.set_footer(text="10 trận gần nhất")
+            embed.set_footer(text="10 trận gần nhất • Elo: (thắng/thua)")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
             print(f"[ARENA] Sent match history to {interaction.user}")
