@@ -6,15 +6,16 @@ This document provides a cumulative history of all technical improvements, fixes
 ---
 
 ## [1.2.24] - 2026-02-11
-### ✨ Feat: Elo system overhaul + Arena Challenge button
+### ✨ Feat: Elo system overhaul + Arena Challenge + Match history
 
 #### 📢 Discord Update
-> **[v1.2.24] Cải thiện hệ thống Elo & Thách đấu từ Arena!**
+> **[v1.2.24] Cải thiện hệ thống Elo, Thách đấu & Lịch sử trận!**
 > - Elo giờ chính xác hơn: K=40 cho 10 trận đầu (placement), K=32 sau đó
 > - Mỗi clan có K-factor riêng — clan mới leo nhanh hơn
 > - Elo sàn = 100, không thể xuống thấp hơn
-> - Nút **Thách Đấu** mới trong Arena: chọn clan đối thủ và tạo match ngay!
+> - Nút **Thách Đấu** mới trong Arena: gửi lời thách đấu vào kênh clan đối thủ, họ bấm Chấp nhận/Từ chối
 > - Chống spam: cooldown 10 phút giữa các lần thách đấu
+> - **Lịch sử Match** hiển thị rõ hơn: ai thắng ai thua, Elo thay đổi bao nhiêu, ngày tạo, trạng thái chi tiết
 
 #### 🔧 Technical Details
 - `services/elo.py`: thêm `get_k_factor(matches_played)` → K=40 (placement <10 matches) / K=32 (stable)
@@ -22,12 +23,16 @@ This document provides a cumulative history of all technical improvements, fixes
 - `services/elo.py`: enforce `ELO_FLOOR=100` → `new_elo = max(ELO_FLOOR, elo + delta)`
 - `services/elo.py`: import config thay vì hardcode constants
 - `config.py`: thêm `ELO_K_STABLE=32`, `ELO_K_PLACEMENT=40`, `ELO_FLOOR=100`, `CHALLENGE_COOLDOWN_MINUTES=10`
-- `cogs/arena.py`: thêm nút **Thách Đấu** (row=2) với `ChallengeSelectView` dropdown chọn clan đối thủ
+- `cogs/arena.py`: thêm nút **Thách Đấu** (row=2) — gửi lời thách đấu vào kênh riêng clan đối thủ
+- `cogs/arena.py`: thêm `ChallengeAcceptView` (persistent) với nút Chấp nhận/Từ chối cho clan bị thách
+- `cogs/arena.py`: khi chấp nhận → tạo match trong #arena, thông báo cả 2 kênh clan
+- `cogs/arena.py`: khi từ chối → thông báo kênh clan thách đấu
+- `cogs/arena.py`: lịch sử match hiển thị: thắng/thua, Elo (+/-), ngày, trạng thái chi tiết
 - `cogs/arena.py`: fix rules embed — thay text cứng "+25/-15 Elo" bằng mô tả dynamic K-factor
-- `cogs/arena.py`: cập nhật dashboard description
-- `SPEC.md`: cập nhật Elo section (K=32/40, Elo floor, per-clan K)
-- `RULEBOOK.md`: cập nhật mô tả Elo (K=40/32, floor 100, diminishing multiplier)
-- Files: `services/elo.py`, `config.py`, `cogs/arena.py`, `SPEC.md`, `RULEBOOK.md`
+- `cogs/arena.py`: persistent handler cho challenge buttons qua `on_interaction`
+- `cogs/matches.py`: fix `CancelMatchButton` guard `is_done()` tránh lỗi 400
+- `SPEC.md`, `RULEBOOK.md`: cập nhật Elo section
+- Files: `services/elo.py`, `config.py`, `cogs/arena.py`, `cogs/matches.py`, `SPEC.md`, `RULEBOOK.md`
 
 ---
 
