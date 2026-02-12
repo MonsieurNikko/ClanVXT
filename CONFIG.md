@@ -18,6 +18,7 @@
 | `MIN_MEMBERS_ACTIVE` | `5` | Minimum members to keep clan active. |
 | `COOLDOWN_DAYS` | `14d` | Cooldown after leaving/kick (join/leave cooldown). |
 | `LOAN_DAYS_MAX` | `7d` | Maximum duration for a member loan. |
+| `LOAN_MAX_PER_CLAN` | `2` | Max concurrent loans per clan (lending or borrowing). |
 | `LOAN_COOLDOWN_DAYS` | `14d` | Cooldown after loan ends. |
 | `TRANSFER_COOLDOWN_DAYS` | `14d` | Min time between transfers (reusing join/leave). |
 | `TRANSFER_SICKNESS_HOURS` | `72h` | Match ban duration after transfer. |

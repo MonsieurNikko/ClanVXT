@@ -42,7 +42,7 @@ Hãy ghé thăm kênh **#arena** – Trung tâm thông tin của server:
 *   **Chống gian lận:** Nghiêm cấm dùng tài khoản clone/smurf để farm Elo hoặc né cooldown. Mọi hành vi gian lận sẽ bị **Ban vĩnh viễn**.
 *   **Công bằng:** Kết quả trận đấu phải được bên đối thủ xác nhận qua nút bấm của Bot.
 *   **Transfer (Chuyển nhượng):** Khi chuyển sang Clan mới, bạn bị cấm thi đấu **3 ngày** để làm quen đồng đội.
-*   **Loan (Mượn quân):** Cho phép mượn tối đa 1 thành viên từ Clan khác (thời hạn tối đa 7 ngày).
+*   **Loan (Mượn quân):** Cho phép mượn tối đa 2 thành viên từ Clan khác (thời hạn tối đa 7 ngày). Thông báo công khai tại `#chat-arena`.
 
 ---
 

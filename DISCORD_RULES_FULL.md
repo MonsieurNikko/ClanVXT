@@ -218,18 +218,18 @@ Ngoài lệnh `/match create`, bạn có thể thách đấu từ bảng **#aren
 ### 7.2. Luồng xử lý
 
 ```
-CREATED ──[Report winner]──► REPORTED ──[Confirm]──► CONFIRMED ──► Elo áp dụng
-    │                            │
-    │                            └──[Dispute]──► DISPUTE ──[Mod resolve]──► RESOLVED
+CREATED ──[Report winner + score]──► REPORTED ──[Confirm]──► CONFIRMED ──► Elo áp dụng
+    │                                    │
+    │                                    └──[Dispute]──► DISPUTE ──[Mod resolve]──► RESOLVED
     │
-    └──[Cancel]──► CANCELLED
+    └──[Cancel (cần 2 bên đồng ý)]──► CANCELLED
 ```
 
 ### 7.3. Quyền thao tác
 | Hành động | Ai được làm |
-|-----------|-------------|
-| Report kết quả | CHỈ người tạo trận |
-| Cancel trận | CHỈ người tạo (trước khi report) |
+|-----------|--------------|
+| Report kết quả (kèm tỉ số) | Bất kỳ thành viên của cả 2 clan |
+| Cancel trận | Yêu cầu đồng thuận cả 2 bên |
 | Confirm kết quả | Bất kỳ thành viên clan đối thủ |
 | Dispute kết quả | Bất kỳ thành viên clan đối thủ |
 | Resolve dispute | CHỈ Mod |
@@ -246,9 +246,11 @@ Cho phép clan mượn tạm thành viên từ clan khác để đủ người �
 | Điều kiện | Chi tiết |
 |-----------|----------|
 | Sự đồng ý | 3 bên: Clan cho mượn + Clan mượn + Thành viên |
-| Giới hạn | Mỗi clan chỉ cho mượn/mượn 1 người cùng lúc |
+| Giới hạn | Mỗi clan cho mượn/mượn tối đa 2 người cùng lúc |
 | Thời hạn | Tối đa 7 ngày |
 | Thời gian chờ accept | 48 giờ |
+| Ai gửi yêu cầu | Captain/Vice của clan mượn |
+| Thông báo | Yêu cầu gửi vào kênh riêng clan cho mượn; khi thành công công bố tại `#chat-arena` |
 
 ### 8.3. Luồng xử lý
 
@@ -265,7 +267,7 @@ REQUESTED ──[3 bên Accept]──► ACTIVE ──[Hết hạn/Hủy]──�
 ### 8.5. Lệnh
 | Lệnh | Mô tả |
 |------|-------|
-| `/loan request <@member> <clan> <days>` | Tạo yêu cầu |
+| `/loan request <@member> <days> [note]` | Tạo yêu cầu (clan mượn gửi) |
 | `/loan status [id]` | Xem trạng thái |
 | `/loan cancel <id>` | Hủy yêu cầu |
 
@@ -386,6 +388,7 @@ Chuyển vĩnh viễn thành viên từ clan này sang clan khác.
 | Số thành viên tối thiểu | 5 người |
 | Cooldown join/leave | 14 ngày |
 | Thời hạn loan tối đa | 7 ngày |
+| Loan tối đa mỗi clan | 2 người |
 | Cooldown loan | 14 ngày |
 | Cooldown transfer | 30 ngày |
 | Transfer sickness | 72 giờ |

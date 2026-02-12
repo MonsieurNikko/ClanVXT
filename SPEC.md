@@ -25,10 +25,9 @@
 
 **Match Button Workflow:**
 - Sau khi tạo, tin nhắn hiển thị: `[Tên Clan A Thắng]` `[Tên Clan B Thắng]` `[Hủy]`
-- **Report**: Chỉ người tạo trận mới có thể báo cáo kết quả hoặc hủy.
-- **Hủy**: Chỉ được phép trước khi kết quả được báo cáo.
+- **Report**: Cả hai clan tham gia trận đều có thể bấm nút báo cáo kết quả (nhập tỉ số cụ thể VD: 2-1). Sau khi một bên báo, bot gửi tin nhắn kèm tỉ số vào **kênh chat riêng của đối phương** để xác nhận.
+- **Hủy Match đồng thuận**: Một bên yêu cầu hủy → Bên kia phải xác nhận hủy. Chỉ được phép trước khi kết quả được báo cáo.
 - **Cooldown**: Có thời gian chờ 10 phút giữa các lần tạo trận để tránh spam.
-- Sau khi report, bot gửi tin nhắn kèm tỉ số vào **kênh chat riêng của đối phương**.
 - **Xác Nhận/Tranh Chấp**: Bất kỳ thành viên nào (Captain/Vice) của clan đối phương đều có thể click để chốt kết quả.
 - **Tranh Chấp**: Nếu có tranh chấp, Mod sẽ nhận được thông báo DM.
 
@@ -70,6 +69,7 @@
 | `/admin unban <user\|clan> <target>` | Remove system ban. | Mod Role. |
 | `/admin freeze clan <clan_name> <reason>` | Freeze clan (no Elo applied). | Mod Role. |
 | `/admin unfreeze <clan_name>` | Unfreeze a clan. | Mod Role. |
+| `/admin clan set_elo <clan_name> <value>` | Manually set Elo for a clan. | Mod Role. |
 
 ### Report & Appeal Commands
 | Command | Description | Requirements |

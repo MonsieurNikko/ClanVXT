@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS loans (
     updated_at TEXT DEFAULT (datetime('now')),
     cancelled_by_user_id INTEGER,
     cancelled_reason TEXT,
+    note TEXT,
     FOREIGN KEY (lending_clan_id) REFERENCES clans(id) ON DELETE RESTRICT,
     FOREIGN KEY (borrowing_clan_id) REFERENCES clans(id) ON DELETE RESTRICT,
     FOREIGN KEY (member_user_id) REFERENCES users(id) ON DELETE RESTRICT,

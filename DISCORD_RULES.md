@@ -54,9 +54,11 @@ Có thể thách đấu clan khác từ bảng **#arena**:
 ⏰ Cooldown 10 phút giữa các lần thách đấu.
 
 ### Sau khi đánh xong
-1. **Người tạo trận** bấm nút ai thắng
-2. **Đối thủ** bấm **Confirm** (đồng ý) hoặc **Dispute** (không đồng ý)
+1. **Bất kỳ thành viên của 2 clan** bấm nút ai thắng và nhập tỉ số (VD: 2-1)
+2. **Đối thủ** nhận thông báo vào kênh clan riêng → bấm **Confirm** hoặc **Dispute**
 3. Nếu đồng ý → Elo được cộng/trừ tự động!
+
+❌ Muốn hủy trận? Cần **cả 2 bên đồng ý** mới hủy được.
 
 ### Elo là gì?
 - Điểm xếp hạng của clan (bắt đầu **1000**)
@@ -91,10 +93,12 @@ Có thể thách đấu clan khác từ bảng **#arena**:
 
 Muốn mượn người từ clan khác chơi tạm?
 - Cần **3 bên đồng ý**: Clan cho mượn + Clan mượn + Người được mượn
-- Tối đa **7 ngày**
+- Tối đa **7 ngày**, mỗi clan mượn/cho mượn tối đa **2 người**
+- Yêu cầu loan được gửi vào kênh riêng của clan cho mượn
+- Khi thành công → Thông báo công khai tại `#chat-arena`
 - Sau khi trả người → Cooldown 14 ngày
 
-**Lệnh:** `/loan request <@người> <tên clan> <số ngày>`
+**Lệnh:** `/loan request <@người> <số ngày> [ghi chú]`
 
 ---
 

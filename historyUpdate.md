@@ -21,6 +21,22 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.27a] - 2026-02-12
+### 🐛 Fix: Loan KeyError + Interaction Race Condition
+
+#### 📢 Discord Update
+> - **Sửa lỗi Loan**: Khắc phục lỗi `KeyError: 'note'` khi bấm nút chấp nhận loan.
+> - **Sửa lỗi Interaction**: Khắc phục race condition gây lỗi "Interaction already acknowledged" liên tục khi bấm nút loan.
+
+#### 🔧 Technical Details
+- **Loan Cog**: Replaced `loan["note"]` with `loan.get("note")` to handle missing column gracefully.
+- **Race Condition**: Wrapped `defer()` in `try/except discord.HTTPException` to handle TOCTOU race between View callback and `on_interaction` handler.
+- **Cleanup**: Removed duplicate import `from services import db, permissions, cooldowns, loan_service`.
+- **Schema**: Added `note TEXT` column to `loans` table in `schema.sql`.
+- Files: `cogs/loans.py`, `db/schema.sql`
+
+---
+
 ## [1.2.26] - 2026-02-12
 ### ✨ Feat: Elo Adjustment Command & Clean Match History
 

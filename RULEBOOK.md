@@ -160,7 +160,13 @@ trận được tạo bằng bot và hai bên đồng ý
 kết quả được xác nhận bởi cả hai bên
 
 
-Một bên báo cáo kết quả, bên còn lại bấm xác nhận. Nếu phản đối hoặc không xác nhận, trận chuyển sang tranh chấp và chỉ mod được chốt.
+Một bên báo cáo kết quả (kèm tỉ số), bên còn lại nhận thông báo vào kênh riêng để bấm xác nhận. Nếu phản đối hoặc không xác nhận, trận chuyển sang tranh chấp và chỉ mod được chốt.
+
+
+Cả hai clan tham gia trận đều có thể báo cáo kết quả (không chỉ người tạo trận).
+
+
+Hủy trận yêu cầu sự đồng thuận của cả hai bên: một bên yêu cầu hủy, bên kia phải xác nhận.
 
 
 Elo khởi điểm của clan là 1000.

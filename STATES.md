@@ -24,10 +24,12 @@ stateDiagram-v2
 ## 2. Match Lifecycle
 ```mermaid
 stateDiagram-v2
-    [*] --> CREATED: /match create
-    CREATED --> REPORTED: Creator reports winner
-    CREATED --> CANCELLED: Creator cancels
-    REPORTED --> CONFIRMED: Opponent confirms
+    [*] --> CREATED: /match create or Challenge Accept
+    CREATED --> REPORTED: Any member reports winner + score
+    CREATED --> CANCEL_REQUESTED: One clan requests cancel
+    CANCEL_REQUESTED --> CANCELLED: Other clan confirms cancel
+    CANCEL_REQUESTED --> CREATED: Cancel request ignored
+    REPORTED --> CONFIRMED: Opponent confirms (in their clan channel)
     REPORTED --> DISPUTE: Opponent disputes
     CONFIRMED --> [*]: Elo Applied (if clans active)
     DISPUTE --> RESOLVED: Mod resolves
@@ -36,16 +38,18 @@ stateDiagram-v2
 ```
 
 ### States
-- **CREATED**: Match created, waiting for creator to report result.
-- **REPORTED**: Result reported by creator. Waiting for opponent clan member to confirm or dispute.
+- **CREATED**: Match created, waiting for any member of either clan to report result.
+- **REPORTED**: Result reported with score (e.g. 2-1). Bot sends confirmation request to opponent clan's private channel.
 - **CONFIRMED**: Opponent confirmed result. Elo calculated and applied (if both clans active).
 - **DISPUTE**: Opponent disputed result. Awaiting moderator resolution.
 - **RESOLVED**: Mod resolved the dispute. Elo applied (if both clans active).
-- **CANCELLED**: Match cancelled by creator (only before result reported).
+- **CANCEL_REQUESTED**: One clan requested cancellation. Waiting for other clan to confirm.
+- **CANCELLED**: Both clans agreed to cancel. No Elo changes.
 
 ### Permission Rules
 - **Create**: Any member of a clan can create matches.
-- **Report/Cancel**: Only the match creator.
+- **Report**: Any member of either participating clan.
+- **Cancel**: Requires mutual agreement — one clan requests, the other confirms.
 - **Confirm/Dispute**: Any current member of the opponent clan.
 - **Resolve**: Moderators only.
 
