@@ -56,11 +56,13 @@ This document provides a cumulative history of all technical improvements, fixes
 
 #### 📢 Discord Update
 > - **Sửa lỗi kích hoạt Loan**: Khắc phục 2 lỗi khi loan được tất cả bên chấp nhận — role không được chuyển và thông báo công khai không gửi được.
+> - **Lệnh mới**: `/admin loan fix_roles` — quét tất cả loan đang hoạt động và sửa role Discord cho member bị lệch.
 
 #### 🔧 Technical Details
 - **Missing Import**: `loan_service.py` used `datetime.now(timezone.utc)` without importing `datetime`/`timezone` → added `from datetime import datetime, timezone`.
 - **Guild None**: When member accepts loan via DM, `interaction.guild` is `None` → added fallback `interaction.client.get_guild(config.GUILD_ID)` in `activate_loan()`.
-- Files: `services/loan_service.py`, `cogs/loans.py`
+- **Admin Command**: Added `/admin loan fix_roles` — scans all active loans, removes lending clan role, adds borrowing clan role for each loaned member. Reports fixed count and errors.
+- Files: `services/loan_service.py`, `cogs/loans.py`, `cogs/admin.py`
 
 ---
 
