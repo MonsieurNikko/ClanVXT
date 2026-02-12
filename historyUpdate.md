@@ -3,6 +3,69 @@
 
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
+## [1.2.27] - 2026-02-12
+### ✨ Feat: Reporting Flexibility & Interaction Reliability
+
+#### 📢 Discord Update
+> - **Linh hoạt báo cáo**: Giờ đây cả hai clan tham gia trận đấu đều có thể nhấn nút **Báo cáo kết quả**. Sau khi một bên báo cáo, bên kia sẽ nhận được yêu cầu xác nhận.
+> - **Hủy Match đồng thuận**: Tính năng hủy trận đấu giờ đây yêu cầu sự xác nhận của cả hai bên. Một bên yêu cầu, bên kia phải bấm 'Hủy Match' để đồng ý hủy bỏ.
+> - **Sửa lỗi Interaction**: Khắc phục triệt để lỗi "Interaction has already been acknowledged" (40060) khi bấm các nút Thách đấu hoặc Báo cáo trận đấu.
+> - **Độ ổn định cao**: Tối ưu hóa phản hồi nút bấm, đảm bảo bot không bị treo hoặc báo lỗi đỏ khi nhiều người cùng thao tác.
+
+#### 🔧 Technical Details
+- **Interaction Safety**: Implemented no-op callbacks for persistent buttons in `ArenaCog` and `MatchesCog`. Handled all logic via `on_interaction` listeners with `is_done()` checks to prevent double-acknowledgment.
+- **Matches Cog**: Updated `handle_match_report_btn` and `handle_match_cancel_btn` to support mutual agreement. Added logic to identify the acting clan and track cancellation requests.
+- **Database**: Added `cancel_requested_by_clan_id` to `matches` table and added helper functions `request_match_cancel`, `clear_match_cancel_request`.
+- **Standardization**: Refactored `ChallengeAcceptView`, `ArenaView`, `MatchCreatedView`, and `MatchReportedView` to follow the standardized interaction handling pattern.
+- Files: `cogs/arena.py`, `cogs/matches.py`, `config.py`, `services/bot_utils.py`
+
+---
+
+## [1.2.26] - 2026-02-12
+### ✨ Feat: Elo Adjustment Command & Clean Match History
+
+#### 📢 Discord Update
+> - **Báo cáo bằng tỉ số**: Giờ đây bạn có thể nhập tỉ số cụ thể (VD: 2-1) thay vì chỉ chọn Thắng/Thua.
+> - **Xác nhận chéo an toàn**: Khi một bên báo cáo, bot sẽ gửi nút Xác nhận vào kênh chat riêng của đối thủ. Trận đấu chỉ được tính khi cả 2 bên đồng ý.
+> - **Tăng giới hạn Loan**: Mỗi clan giờ được phép mượn/cho mượn tối đa **02 thành viên** (trước đây là 01).
+> - **Quy trình Loan mới**: Clan mượn giờ chủ động gửi yêu cầu `/loan request` đến clan cho mượn. Yêu cầu sẽ xuất hiện trực tiếp trong kênh chat riêng của clan đối thủ để Captain bên đó duyệt.
+> - **Thông báo công khai**: Tự động thông báo các hợp đồng loan thành công vào kênh `#chat-arena` để toàn server cùng biết.
+> - **Tiện lợi cho Member**: Thành viên được mượn giờ đây có thể bấm Accept ngay trong DM của bot thay vì phải tìm kênh clan.
+> - **Cập nhật /clan help**: Bổ sung đầy đủ lệnh Transfer/Loan và quy tắc mới nhất cho Captain/Vice.
+> - **Lịch sử trận đấu sạch hơn**: Tự động ẩn các trận đấu đã bị hủy (`cancelled`) và hiện tỉ số cụ thể.
+> - **Chi tiết thời gian**: Lịch sử trận đấu hiện đầy đủ Ngày và Giờ.
+
+#### 🔧 Technical Details
+- **Match Cog**: Refactored reporting flow to use `MatchScoreModal` and private channel notifications.
+- **Database**: Migrated `matches` table to include `score_a` and `score_b`.
+- **Elo Service**: Updated to support score-based winner determination.
+- **Admin Cog**: Added `/admin clan set_elo` command.
+- **Database Service**: Cập nhật `get_recent_matches` để lọc trạng thái `cancelled` theo mặc định.
+- **Arena UI**: Nâng cấp `match_history_button` với format hiển thị mới: 
+    - Dùng `\n└ 🕒` để tách dòng thời gian.
+    - Chuẩn hóa text hiển thị Elo thắng/thua (`+X / -Y`).
+    - Parse `created_at` để lấy giờ phút.
+- Files: `cogs/admin.py`, `services/db.py`, `cogs/arena.py`
+
+---
+
+## [1.2.25] - 2026-02-12
+### ✨ Feat: Cooldown Fusion & Match Rate Limit Fix
+
+#### 📢 Discord Update
+> **[v1.2.25] Gộp hệ thống Cooldown & Sửa lỗi hiển thị!**
+> - **Hợp nhất Cooldown**: Toàn bộ hệ thống chờ gia nhập/rời clan được quy về một nơi duy nhất. Admin xóa cooldown giờ sẽ có tác dụng ngay lập tức 100%.
+> - **Sửa lỗi số âm**: Khắc phục triệt để lỗi hiện "-128 phút" khi tạo trận đấu hoặc thách đấu.
+> - **Hiển thị chính xác**: Thời gian chờ được chuẩn hóa múi giờ, hiển thị rõ ràng từng phút từng giây.
+
+#### 🔧 Technical Details
+- **FUSION**: Triển khai "Lazy Migration" trong `services/cooldowns.py` - tự động chuyển dữ liệu `users.cooldown_until` cũ sang bảng `cooldowns` mới khi kiểm tra.
+- **SQL Fix**: Sử dụng `DATETIME(column)` cho tất cả các câu lệnh SQLite so sánh ngày tháng để khắc phục lỗi so sánh chuỗi ISO (chữ 'T' gây sai lệch).
+- **Service Layer**: Cập nhật `services/db.py` để wrap các query cooldown/ban/pop expired.
+- **Display Logic**: Chuẩn hóa logic tính toán `time_str` trong `cogs/matches.py` và `cogs/arena.py` (max(0, seconds), UTC normalization, handle space vs 'T').
+- **Admin Commands**: Cập nhật `/admin cooldown clear/view` để đồng bộ với cơ chế Fusion.
+- Files: `services/db.py`, `services/cooldowns.py`, `cogs/clan.py`, `cogs/admin.py`, `cogs/matches.py`, `cogs/arena.py`
+
 ---
 
 ## [1.2.24] - 2026-02-11

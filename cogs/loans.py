@@ -270,14 +270,13 @@ class LoanCog(commands.Cog):
     
     loan_group = app_commands.Group(name="loan", description="Loan management commands")
     
-    @loan_group.command(name="request", description="Request to loan a member to another clan")
+    @loan_group.command(name="request", description="Request to loan a member from another clan")
     @app_commands.describe(
-        member="The member to loan",
-        to_clan_name="The clan borrowing the member",
+        member="The member you want to borrow",
         duration_days="Duration in days (1-7)",
         note="Optional note"
     )
-    async def loan_request(self, interaction: discord.Interaction, member: discord.Member, to_clan_name: str, duration_days: int, note: Optional[str] = None):
+    async def loan_request(self, interaction: discord.Interaction, member: discord.Member, duration_days: int, note: Optional[str] = None):
         """Create a loan request."""
         # Validation
         if not (1 <= duration_days <= 7):
@@ -287,54 +286,56 @@ class LoanCog(commands.Cog):
         if not user:
             return await interaction.response.send_message("Bạn chưa đăng ký hệ thống.", ephemeral=True)
             
-        # Check requester is Captain/Vice of Source Clan
-        source_clan = await db.get_user_clan(user["id"])
-        if not source_clan or source_clan["member_role"] not in ["captain", "vice"]:
-            return await interaction.response.send_message("Chỉ Captain/Vice mới có thể yêu cầu loan.", ephemeral=True)
+        # Check requester is Captain/Vice of Borrowing Clan (USER is the borrower now)
+        borrowing_clan = await db.get_user_clan(user["id"])
+        if not borrowing_clan or borrowing_clan["member_role"] not in ["captain", "vice"]:
+            return await interaction.response.send_message("Chỉ Captain/Vice của clan mượn mới có thể gửi yêu cầu loan.", ephemeral=True)
             
-        # Check target member is in Source Clan
+        # Check target member exists
         target_user = await db.get_user(str(member.id))
         if not target_user:
             return await interaction.response.send_message("Thành viên này chưa đăng ký hệ thống.", ephemeral=True)
             
-        target_member_clan = await db.get_user_clan(target_user["id"])
-        if not target_member_clan or target_member_clan["id"] != source_clan["id"]:
-            return await interaction.response.send_message("Thành viên này không thuộc clan của bạn.", ephemeral=True)
+        # Target must be in a different clan (the lending clan)
+        lending_clan = await db.get_user_clan(target_user["id"])
+        if not lending_clan:
+            return await interaction.response.send_message("Thành viên này hiện đang tự do, hãy dùng /clan invite.", ephemeral=True)
             
+        if lending_clan["id"] == borrowing_clan["id"]:
+            return await interaction.response.send_message("Thành viên này đã ở trong clan của bạn.", ephemeral=True)
+            
+        if lending_clan["status"] != "active":
+            return await interaction.response.send_message(f"Clan '{lending_clan['name']}' hiện không hoạt động.", ephemeral=True)
+
         # [P0 Fix] Cannot loan the Captain
-        if target_member_clan["member_role"] == "captain":
+        if lending_clan["member_role"] == "captain":
             return await interaction.response.send_message("❌ Không thể loan Captain của clan.", ephemeral=True)
             
-        # [P0 Fix] Check if clan has enough members to loan
-        member_count = await db.count_clan_members(source_clan["id"])
-        if member_count <= config.MIN_MEMBERS_ACTIVE:
+        # [P0 Fix] Check if lending clan has enough members to loan
+        lending_member_count = await db.count_clan_members(lending_clan["id"])
+        if lending_member_count <= config.MIN_MEMBERS_ACTIVE:
             return await interaction.response.send_message(
-                f"❌ Your clan only has {member_count} members. "
-                f"A clan must have at least {config.MIN_MEMBERS_ACTIVE + 1} members to loan one out.",
+                f"❌ Clan '{lending_clan['name']}' chỉ có {lending_member_count} thành viên. "
+                f"Phải có ít nhất {config.MIN_MEMBERS_ACTIVE + 1} người mới có thể cho mượn.",
                 ephemeral=True
             )
             
-        # Check Borrowing Clan exists
-        borrowing_clan = await db.get_clan(to_clan_name)
-        if not borrowing_clan:
-            return await interaction.response.send_message(f"Không tìm thấy clan '{to_clan_name}'.", ephemeral=True)
-            
-        if borrowing_clan["id"] == source_clan["id"]:
-            return await interaction.response.send_message("Không thể loan cho chính clan của mình.", ephemeral=True)
-            
         # Permission Checks
-        allowed, error = await permissions.can_request_loan(target_user["id"], source_clan["id"])
+        allowed, error = await permissions.can_request_loan(target_user["id"], lending_clan["id"])
         if not allowed:
             return await interaction.response.send_message(f"❌ Không thể yêu cầu loan: {error}", ephemeral=True)
             
-        # Check Borrowing Clan active loan status
-        borrowing_active_loan = await db.get_active_loan_for_clan(borrowing_clan["id"])
-        if borrowing_active_loan:
-            return await interaction.response.send_message(f"❌ Clan mượn '{to_clan_name}' đang có một giao dịch loan đang diễn ra.", ephemeral=True)
+        # Check Borrowing Clan active loan status (Limit increased to 2)
+        active_loans_count = await db.count_active_loans_for_clan(borrowing_clan["id"])
+        if active_loans_count >= 2:
+            return await interaction.response.send_message(
+                f"❌ Clan của bạn đã đạt giới hạn tối đa (2) khoản loan đang hoạt động.", 
+                ephemeral=True
+            )
             
         # Create Loan
         loan_id = await db.create_loan(
-            lending_clan_id=source_clan["id"],
+            lending_clan_id=lending_clan["id"],
             borrowing_clan_id=borrowing_clan["id"],
             member_user_id=target_user["id"],
             requested_by_user_id=user["id"],
@@ -342,59 +343,74 @@ class LoanCog(commands.Cog):
             note=note
         )
         
-        # Send Embed
-        view = LoanAcceptView(loan_id, source_clan["id"], borrowing_clan["id"], target_user["id"])
+        # Auto-accept for initiator's side (Borrowing)
+        await db.update_loan_acceptance(loan_id, borrowing=True)
+        
+        # Build Embed
+        view = LoanAcceptView(loan_id, lending_clan["id"], borrowing_clan["id"], target_user["id"])
         embed = discord.Embed(
             title="🤝 Yêu cầu Loan thành viên",
             description=f"Yêu cầu loan cho {member.mention}",
             color=discord.Color.gold()
         )
-        embed.add_field(name="Clan cho loan", value=source_clan['name'], inline=True)
+        embed.add_field(name="Clan cho loan", value=lending_clan['name'], inline=True)
         embed.add_field(name="Clan mượn", value=borrowing_clan['name'], inline=True)
         embed.add_field(name="Thời hạn", value=f"{duration_days} ngày", inline=True)
-        embed.add_field(name="Captain cho loan", value="✅ Đã chấp nhận (Người tạo)" if user["id"] == user["id"] else "⏳ Đang chờ", inline=True) # Initiator logic handled in View update usually, but here we just show pending for now or auto-accept?
-        # Actually, initiator should probably auto-accept. Let's do that.
-        
-        # Auto-accept for initiator's side (Lending)
-        await db.update_loan_acceptance(loan_id, lending=True)
-        
-        # Re-update embed to show accepted
-        embed.set_field_at(3, name="Captain cho loan", value="✅ Đã chấp nhận", inline=True)
-        embed.add_field(name="Captain mượn", value="⏳ Đang chờ", inline=True)
+        embed.add_field(name="Captain cho loan", value="⏳ Đang chờ", inline=True)
+        embed.add_field(name="Captain mượn", value="✅ Đã chấp nhận (Người tạo)", inline=True)
         embed.add_field(name="Thành viên", value="⏳ Đang chờ", inline=True)
         
         if note:
             embed.add_field(name="Ghi chú", value=note, inline=False)
             
-        embed.set_footer(text=f"Loan ID: {loan_id} | Expires in 48h")
+        embed.set_footer(text=f"Loan ID: {loan_id} | Hết hạn sau 48h")
         
-        await interaction.response.send_message(embed=embed, view=view)
-        
-        # [P2 Fix] Notify member and borrowing captain via DM
-        msg = (
+        # Send message to LENDING clan's private channel
+        lending_channel_id = lending_clan.get("private_channel_id")
+        if lending_channel_id:
+            try:
+                channel = interaction.client.get_channel(int(lending_channel_id))
+                if channel:
+                    await channel.send(f"🔔 **Thông báo từ {borrowing_clan['name']}**:", embed=embed, view=view)
+                    await interaction.response.send_message(f"✅ Đã gửi yêu cầu loan đến clan **{lending_clan['name']}**.", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"❌ Không tìm thấy kênh của clan **{lending_clan['name']}**. Vui lòng báo Mod.", ephemeral=True)
+            except Exception as e:
+                 await interaction.response.send_message(f"❌ Lỗi khi gửi tin nhắn đến clan đối thủ: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Clan **{lending_clan['name']}** chưa có kênh riêng. Vui lòng báo Mod.", ephemeral=True)
+
+        # [P2 Fix] Notify member via DM (Now with View)
+        dm_msg = (
             f"🤝 **Yêu cầu Loan mới!**\n"
             f"• Member: {member.mention}\n"
-            f"• Từ clan: **{source_clan['name']}**\n"
+            f"• Từ clan: **{lending_clan['name']}**\n"
+            f"• Đến clan: **{borrowing_clan['name']}**\n"
+            f"• Thời hạn: {duration_days} ngày.\n"
+            f"Bạn có thể Accept trực tiếp tại đây hoặc trong kênh clan."
+        )
+        try:
+            await member.send(dm_msg, embed=embed, view=view)
+        except Exception: pass
+        
+        # Notify lending captain via DM (Instructions updated)
+        dm_cap_msg = (
+            f"🤝 **Yêu cầu Loan mới cho thành viên của bạn!**\n"
+            f"• Member: {member.mention}\n"
+            f"• Từ clan: **{lending_clan['name']}** (Của bạn)\n"
             f"• Đến clan: **{borrowing_clan['name']}**\n"
             f"• Thời hạn: {duration_days} ngày.\n"
             f"Vui lòng kiểm tra kênh clan để Accept."
         )
-        
-        # Notify member
         try:
-            await member.send(msg)
-        except Exception: pass
-        
-        # Notify borrowing captain
-        try:
-            cap_discord_id = (await db.get_user_by_id(borrowing_clan["captain_id"]))["discord_id"]
+            cap_discord_id = (await db.get_user_by_id(lending_clan["captain_id"]))["discord_id"]
             cap = interaction.client.get_user(int(cap_discord_id))
-            if cap: await cap.send(msg)
+            if cap: await cap.send(dm_cap_msg)
         except Exception: pass
 
         await bot_utils.log_event(
             "LOAN_REQUESTED",
-            f"Loan {loan_id} requested by {interaction.user.mention}: {member.mention} to '{to_clan_name}'"
+            f"Loan {loan_id} requested by {interaction.user.mention} (from {borrowing_clan['name']}): {member.mention} from '{lending_clan['name']}'"
         )
 
     @loan_group.command(name="status", description="Check status of a loan")

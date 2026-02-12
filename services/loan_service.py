@@ -57,6 +57,29 @@ async def activate_loan(loan_id: int, guild: discord.Guild) -> bool:
     except Exception as e:
         print(f"Error updating roles for loan activation (Loan {loan_id}): {e}")
     
+    # 5. Public Announcement in chat-arena
+    chat_channel = bot_utils.get_chat_channel()
+    if chat_channel:
+        try:
+            lending_clan = await db.get_clan_by_id(lending_clan_id)
+            borrowing_clan = await db.get_clan_by_id(borrowing_clan_id)
+            member_user = await db.get_user_by_id(member_id)
+            
+            embed = discord.Embed(
+                title="🤝 Thông Báo Loan Thành Viên",
+                description=f"Một hợp đồng mượn quân đã được ký kết!",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
+            )
+            embed.add_field(name="👤 Thành viên", value=f"<@{member_user['discord_id']}>", inline=False)
+            embed.add_field(name="📤 Từ Clan", value=lending_clan['name'], inline=True)
+            embed.add_field(name="📥 Đến Clan", value=borrowing_clan['name'], inline=True)
+            embed.add_field(name="⏰ Thời hạn", value=f"{loan['duration_days']} ngày", inline=True)
+            
+            await chat_channel.send(embed=embed)
+        except Exception as e:
+            print(f"Error posting public loan announcement in chat-arena: {e}")
+            
     return True
 
 async def end_all_clan_loans(clan_id: int, guild: discord.Guild):

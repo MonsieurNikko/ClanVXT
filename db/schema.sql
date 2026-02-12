@@ -137,9 +137,13 @@ CREATE TABLE IF NOT EXISTS matches (
     multiplier REAL,                                    -- Anti-farm multiplier (1.0, 0.7, 0.4, 0.2)
     final_delta_a INTEGER,                              -- Final Elo change for clan A
     final_delta_b INTEGER,                              -- Final Elo change for clan B
+    -- Score tracking
+    score_a INTEGER DEFAULT NULL,                       -- Score for Clan A
+    score_b INTEGER DEFAULT NULL,                       -- Score for Clan B
     -- Discord message tracking (for persistent buttons)
     message_id TEXT,                                    -- Discord message ID containing buttons
     channel_id TEXT,                                    -- Discord channel ID
+    cancel_requested_by_clan_id INTEGER,                -- ID of clan that requested cancellation
     -- Timestamps
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (clan_a_id) REFERENCES clans(id) ON DELETE RESTRICT,

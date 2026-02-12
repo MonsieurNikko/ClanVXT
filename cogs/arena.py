@@ -267,7 +267,7 @@ class ChallengeAcceptView(discord.ui.View):
             style=discord.ButtonStyle.success,
             custom_id=f"challenge_accept:{chal_id}:{opp_id}:{creator_id}:{arena_channel_id}",
         )
-        accept_btn.callback = self._accept
+        accept_btn.callback = self._callback_noop
         self.add_item(accept_btn)
 
         decline_btn = discord.ui.Button(
@@ -275,8 +275,11 @@ class ChallengeAcceptView(discord.ui.View):
             style=discord.ButtonStyle.danger,
             custom_id=f"challenge_decline:{chal_id}:{opp_id}:{creator_id}",
         )
-        decline_btn.callback = self._decline
+        decline_btn.callback = self._callback_noop
         self.add_item(decline_btn)
+
+    async def _callback_noop(self, interaction: discord.Interaction):
+        pass # Managed by on_interaction handler to prevent double-acknowledgment
 
     async def _accept(self, interaction: discord.Interaction):
         # Must be member of opponent clan
@@ -469,14 +472,27 @@ class ChallengeSelectView(discord.ui.View):
         is_cd, cd_until = await cooldowns.check_cooldown("clan", self.user_clan["id"], "match_create")
         if is_cd:
             try:
-                from datetime import datetime, timezone as tz
-                until_dt = datetime.fromisoformat(cd_until)
-                diff = until_dt - datetime.now(tz.utc)
+                # Standardize format (FUSED & ROBUST)
+                until_str = cd_until.replace('Z', '+00:00')
+                if ' ' in until_str and 'T' not in until_str:
+                    until_str = until_str.replace(' ', 'T')
+                
+                until_dt = datetime.fromisoformat(until_str)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=timezone.utc)
+                
+                now_dt = datetime.now(timezone.utc)
+                diff = until_dt - now_dt
                 secs = max(0, int(diff.total_seconds()))
-                mins, s = divmod(secs, 60)
-                time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
-            except Exception:
-                time_str = cd_until
+                
+                if secs == 0:
+                    time_str = "vài giây"
+                else:
+                    mins, s = divmod(secs, 60)
+                    time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
+            except Exception as e:
+                print(f"[DEBUG] Arena cooldown parse error: {e}")
+                time_str = "một lát"
             await interaction.response.send_message(
                 f"⏳ Clan của bạn vừa gửi lời thách đấu. Vui lòng chờ **{time_str}**.",
                 ephemeral=True,
@@ -701,7 +717,8 @@ class ArenaView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            matches = await db.get_recent_matches(limit=10)
+            # Get 10 most recent matches (excluding cancelled by default in db.py)
+            matches = await db.get_recent_matches(limit=10, include_cancelled=False)
             print(f"[ARENA] Found {len(matches)} recent matches")
             
             if not matches:
@@ -710,7 +727,8 @@ class ArenaView(discord.ui.View):
             
             embed = discord.Embed(
                 title="⚔️ Lịch Sử Trận Đấu Gần Đây",
-                color=discord.Color.red()
+                color=discord.Color.red(),
+                description="*Ghi chú: 10 trận đấu chính thức mới nhất.*"
             )
             
             match_lines = []
@@ -727,13 +745,21 @@ class ArenaView(discord.ui.View):
                     "reported": "⏳",
                     "dispute": "⚠️",
                     "resolved": "⚖️",
-                    "cancelled": "❌",
-                    "created": "🆕",
-                    "voided": "🚫"
+                    "voided": "🚫",
+                    "created": "🆕"
                 }.get(match["status"], "❓")
                 
-                # Date (short format)
-                date_str = match["created_at"][:10] if match.get("created_at") else ""
+                # Date & Time (formatted)
+                # SQLite datetime strings usually look like '2026-02-12 10:39:15' or ISO '2026-02-12T10:39:15'
+                raw_date = match.get("created_at", "")
+                if raw_date:
+                    try:
+                        # Simple cleanup for display
+                        display_date = raw_date.replace("T", " ")[:16] # YYYY-MM-DD HH:MM
+                    except:
+                        display_date = raw_date[:10]
+                else:
+                    display_date = "N/A"
                 
                 # Build line based on match state
                 if match.get("winner_clan_id") and match["status"] in ("confirmed", "resolved"):
@@ -741,20 +767,23 @@ class ArenaView(discord.ui.View):
                     winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
                     loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
                     
+                    # Score info
+                    score_text = ""
+                    if match.get("score_a") is not None and match.get("score_b") is not None:
+                        score_text = f" `{match['score_a']}-{match['score_b']}`"
+                    
                     # Elo change info
                     elo_text = ""
                     if match.get("elo_applied"):
                         delta_a = match.get("final_delta_a", 0)
                         delta_b = match.get("final_delta_b", 0)
-                        w_delta = delta_a if winner_id == match["clan_a_id"] else delta_b
-                        l_delta = delta_b if winner_id == match["clan_a_id"] else delta_a
-                        w_str = f"+{w_delta}" if w_delta >= 0 else str(w_delta)
-                        l_str = f"+{l_delta}" if l_delta >= 0 else str(l_delta)
-                        elo_text = f" (`{w_str}`/`{l_str}`)"
+                        w_delta = abs(delta_a if winner_id == match["clan_a_id"] else delta_b)
+                        l_delta = abs(delta_b if winner_id == match["clan_a_id"] else delta_a)
+                        elo_text = f" (`+{w_delta}` / `-{l_delta}`)"
                     
-                    line = f"{status_emoji} 🏆 **{winner_name}** thắng **{loser_name}**{elo_text}"
-                elif match["status"] in ("cancelled", "voided"):
-                    line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *{match['status']}*"
+                    line = f"{status_emoji} 🏆 **{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
+                elif match["status"] == "voided":
+                    line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *Trận đấu vô hiệu*"
                 else:
                     status_text = {
                         "created": "đang chờ kết quả",
@@ -763,12 +792,10 @@ class ArenaView(discord.ui.View):
                     }.get(match["status"], match["status"])
                     line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
                 
-                if date_str:
-                    line += f"  `{date_str}`"
-                
+                line += f"\n└ 🕒 `{display_date}`"
                 match_lines.append(line)
             
-            embed.description = "\n".join(match_lines)
+            embed.description = "\n\n".join(match_lines)
             embed.set_footer(text="10 trận gần nhất • Elo: (thắng/thua)")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -1076,14 +1103,27 @@ class ArenaView(discord.ui.View):
         is_cd, cd_until = await cooldowns.check_cooldown("clan", user_clan["id"], "match_create")
         if is_cd:
             try:
-                from datetime import datetime, timezone as tz
-                until_dt = datetime.fromisoformat(cd_until)
-                diff = until_dt - datetime.now(tz.utc)
+                # Standardize format (FUSED & ROBUST)
+                until_str = cd_until.replace('Z', '+00:00')
+                if ' ' in until_str and 'T' not in until_str:
+                    until_str = until_str.replace(' ', 'T')
+                
+                until_dt = datetime.fromisoformat(until_str)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=timezone.utc)
+                
+                now_dt = datetime.now(timezone.utc)
+                diff = until_dt - now_dt
                 secs = max(0, int(diff.total_seconds()))
-                mins, s = divmod(secs, 60)
-                time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
-            except Exception:
-                time_str = cd_until
+                
+                if secs == 0:
+                    time_str = "vài giây"
+                else:
+                    mins, s = divmod(secs, 60)
+                    time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
+            except Exception as e:
+                print(f"[DEBUG] Arena cooldown parse error: {e}")
+                time_str = "một lát"
             await interaction.response.send_message(
                 f"⏳ Clan của bạn vừa tạo match. Vui lòng chờ **{time_str}**.",
                 ephemeral=True,

@@ -40,18 +40,45 @@ async def clear_cooldown(target_type: str, target_id: int, kind: Optional[str] =
 # =============================================================================
 
 async def check_member_join_cooldown(user_id: int) -> Tuple[bool, Optional[str]]:
-    """Check if user has a join/leave cooldown."""
-    # Check new table
+    """Check if user has a join/leave cooldown. FUSED: Includes lazy migration."""
+    # 1. Check new table
     is_cd, until = await check_cooldown("user", user_id, KIND_JOIN_LEAVE)
     if is_cd:
         return True, until
     
-    # Backward compatibility: Check users table
+    # 2. Backward compatibility & Lazy Migration
     user = await db.get_user_by_id(user_id)
     if user and user.get("cooldown_until"):
-        until_dt = datetime.fromisoformat(user["cooldown_until"])
-        if until_dt > datetime.now(timezone.utc).replace(tzinfo=None):
-            return True, user["cooldown_until"]
+        legacy_until = user["cooldown_until"]
+        try:
+            # Handle timestamps with and without 'Z'
+            if legacy_until.endswith('Z'):
+                until_str = legacy_until.replace('Z', '+00:00')
+            else:
+                until_str = legacy_until
+            
+            until_dt = datetime.fromisoformat(until_str)
+            if until_dt.tzinfo is None:
+                until_dt = until_dt.replace(tzinfo=timezone.utc)
+            
+            now = datetime.now(timezone.utc)
+            
+            if until_dt > now:
+                # Migrate to the new system
+                print(f"[COOLDOWN] Lazy migrating user {user_id} cooldown: {legacy_until}")
+                await db.set_cooldown("user", user_id, KIND_JOIN_LEAVE, (until_dt - now).days + 1, "Lazy migration from legacy column")
+                
+                # Clear legacy column
+                await db.update_user_cooldown(user_id, None) 
+                
+                return True, until_dt.isoformat()
+            else:
+                # Expired legacy cooldown - just clear it
+                await db.update_user_cooldown(user_id, None)
+        except Exception as e:
+            print(f"[COOLDOWN] Error during lazy migration for user {user_id}: {e}")
+            # Clear invalid legacy data
+            await db.update_user_cooldown(user_id, None)
             
     return False, None
 

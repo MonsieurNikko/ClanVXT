@@ -114,6 +114,14 @@ async def on_ready():
     else:
         print(f"⚠ Update channel '{config.CHANNEL_UPDATE_BOT}' not found. Updates will not be posted.")
 
+    # Chat channel (optional)
+    chat_channel = discord.utils.get(guild.text_channels, name=config.CHANNEL_CHAT_ARENA)
+    if chat_channel:
+        bot_utils.set_chat_channel(chat_channel)
+        print(f"✓ Found chat arena channel: #{chat_channel.name}")
+    else:
+        print(f"⚠ Chat channel '{config.CHANNEL_CHAT_ARENA}' not found. Loan announcements will not be posted.")
+
     
     # ==========================================================================
     # LOAD COGS & SYNC COMMANDS

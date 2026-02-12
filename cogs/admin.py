@@ -13,7 +13,6 @@ import json
 
 import config
 from services import db, cooldowns, moderation, permissions
-from services import db, cooldowns, moderation, permissions
 from services import bot_utils
 
 
@@ -28,6 +27,7 @@ class AdminCog(commands.Cog):
     case_group = app_commands.Group(name="case", description="Manage cases", parent=admin_group)
     ban_group = app_commands.Group(name="ban", description="System ban management", parent=admin_group)
     freeze_group = app_commands.Group(name="freeze", description="Clan freeze management", parent=admin_group)
+    clan_group = app_commands.Group(name="clan", description="Admin clan management", parent=admin_group)
     
     async def check_mod(self, interaction: discord.Interaction) -> bool:
         """Check if user has mod role."""
@@ -72,14 +72,19 @@ class AdminCog(commands.Cog):
             target_id = clan["id"]
             target_name = clan["name"]
             
-        # Check all known kinds
-        kinds = [cooldowns.KIND_JOIN_LEAVE, cooldowns.KIND_LOAN, cooldowns.KIND_TRANSFER_SICKNESS]
+        # Check active cooldowns
         active_cooldowns = []
         
-        for kind in kinds:
-            is_cd, until = await cooldowns.check_cooldown(target_type, target_id, kind)
-            if is_cd:
-                active_cooldowns.append(f"• **{kind}**: Đến {until}")
+        if target_type == "user":
+            user_cds = await db.get_all_user_cooldowns(target_id)
+            for cd in user_cds:
+                active_cooldowns.append(f"• **{cd['kind']}**: Đến {cd['until']}")
+        else:
+            # Clans don't have legacy columns
+            for kind in [cooldowns.KIND_JOIN_LEAVE, cooldowns.KIND_LOAN]:
+                is_cd, until = await cooldowns.check_cooldown("clan", target_id, kind)
+                if is_cd:
+                    active_cooldowns.append(f"• **{kind}**: Đến {until}")
                 
         if not active_cooldowns:
             await interaction.response.send_message(f"✅ Không có cooldown nào đang hoạt động cho **{target_name}** ({target_type}).", ephemeral=True)
@@ -126,11 +131,12 @@ class AdminCog(commands.Cog):
         await cooldowns.apply_cooldown(target_type, target_id, kind, duration_days, reason)
 
         if target_type == "user" and kind == cooldowns.KIND_JOIN_LEAVE:
-            if duration_days == 0:
-                await db.update_user_cooldown(target_id, None)
-            else:
-                until = (datetime.now(timezone.utc) + timedelta(days=duration_days)).isoformat()
-                await db.update_user_cooldown(target_id, until)
+            # We already applied to the new table with cooldowns.apply_cooldown above.
+            # Just ensure the legacy column is cleared in the users table.
+            print(f"[ADMIN] Setting join_leave cooldown for user {target_id}, clearing legacy column.")
+            async with db.get_connection() as conn:
+                await conn.execute("UPDATE users SET cooldown_until = NULL WHERE id = ?", (target_id,))
+                await conn.commit()
         
         await interaction.response.send_message(f"✅ Đã đặt cooldown **{kind}** cho **{target_name}** trong {duration_days} ngày.\nLý do: {reason}")
         
@@ -174,7 +180,12 @@ class AdminCog(commands.Cog):
         await cooldowns.clear_cooldown(target_type, target_id, kind)
 
         if target_type == "user" and (kind is None or kind == cooldowns.KIND_JOIN_LEAVE):
-            await db.update_user_cooldown(target_id, None)
+            # Kind was cleared in the new table via cooldowns.clear_cooldown above.
+            # Clear legacy column in users table.
+            print(f"[ADMIN] Clearing cooldown for user {target_id}, clearing legacy column.")
+            async with db.get_connection() as conn:
+                await conn.execute("UPDATE users SET cooldown_until = NULL WHERE id = ?", (target_id,))
+                await conn.commit()
         
         msg = f"✅ Đã xóa **{kind if kind else 'TẤT CẢ'}** cooldown cho **{target_name}**."
         await interaction.response.send_message(msg)
@@ -654,6 +665,49 @@ class AdminCog(commands.Cog):
             await bot_utils.log_event("CLAN_UNFROZEN", f"Clan {clan['name']} unfrozen by {interaction.user.mention}.")
         else:
             await interaction.response.send_message(f"Clan **{clan['name']}** không bị đóng băng.", ephemeral=True)
+
+    # =========================================================================
+    # CLAN ADMIN COMMANDS
+    # =========================================================================
+
+    @clan_group.command(name="set_elo", description="Đặt điểm Elo cho clan (Admin only)")
+    @app_commands.describe(
+        clan_name="Tên clan cần chỉnh điểm",
+        new_elo="Điểm Elo mới",
+        reason="Lý do điều chỉnh"
+    )
+    async def admin_set_elo(self, interaction: discord.Interaction, clan_name: str, new_elo: int, reason: str):
+        """Manually set a clan's Elo score."""
+        if not await self.check_mod(interaction):
+            return
+            
+        clan = await db.get_clan_any_status(clan_name)
+        if not clan:
+            await interaction.response.send_message("❌ Clan không tồn tại.", ephemeral=True)
+            return
+
+        # Perform the update
+        mod_user = await permissions.ensure_user_exists(str(interaction.user.id), interaction.user.name)
+        await db.update_clan_elo(
+            clan_id=clan["id"],
+            new_elo=new_elo,
+            match_id=None,
+            reason=f"Admin Adjustment: {reason}",
+            changed_by=mod_user["id"]
+        )
+        
+        await interaction.response.send_message(
+            f"✅ Đã cập nhật Elo cho clan **{clan['name']}**.\n"
+            f"• Cũ: `{clan['elo']}`\n"
+            f"• Mới: `{new_elo}`\n"
+            f"• Lý do: {reason}"
+        )
+        
+        await bot_utils.log_event(
+            "CLAN_ELO_ADJUSTED",
+            f"Clan {clan['name']} Elo set to {new_elo} by {interaction.user.mention}. Reason: {reason}"
+        )
+        print(f"[ADMIN] Elo adjusted for {clan['name']} to {new_elo} by {interaction.user}")
 
     # =========================================================================
     # DASHBOARD COMMAND

@@ -71,6 +71,20 @@ def get_update_channel() -> Optional[discord.TextChannel]:
     return _update_channel
 
 
+# =============================================================================
+# CHAT CHANNEL (for public game-related announcements)
+# =============================================================================
+
+_chat_channel: Optional[discord.TextChannel] = None
+
+def set_chat_channel(channel: discord.TextChannel):
+    global _chat_channel
+    _chat_channel = channel
+
+def get_chat_channel() -> Optional[discord.TextChannel]:
+    return _chat_channel
+
+
 async def post_update(title: str, description: str, version: str = None) -> bool:
     """
     Gửi thông báo cập nhật lên kênh #update-bot.

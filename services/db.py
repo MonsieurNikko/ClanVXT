@@ -60,6 +60,17 @@ async def init_db() -> None:
         else:
             print(f"  ✓ Schema up to date ({len(all_tables)} tables)")
 
+        # --- Automatic Migrations for Existing Tables ---
+        
+        # Check for cancel_requested_by_clan_id in matches
+        cursor = await conn.execute("PRAGMA table_info(matches)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "cancel_requested_by_clan_id" not in columns:
+            print("[DB] Migrating: Adding 'cancel_requested_by_clan_id' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN cancel_requested_by_clan_id INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+
 
 
 # =============================================================================
@@ -108,11 +119,37 @@ async def create_user(discord_id: str, riot_id: str) -> int:
 
 
 async def update_user_cooldown(user_id: int, cooldown_until: Optional[str]) -> None:
-    """Set or clear user's join cooldown."""
+    """Set or clear user's join cooldown (FUSED: Now using cooldowns table)."""
+    if cooldown_until:
+        # Calculate duration in days for backward compatibility with the old API
+        try:
+            until_dt = datetime.fromisoformat(cooldown_until.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            duration = (until_dt - now).days + 1
+            if duration <= 0:
+                await clear_cooldown("user", user_id, "join_leave")
+            else:
+                await set_cooldown("user", user_id, "join_leave", duration, "Updated via legacy API")
+        except Exception:
+            # Fallback for invalid formats
+            async with get_connection() as conn:
+                await conn.execute(
+                    """INSERT INTO cooldowns (target_type, target_id, kind, until, reason) 
+                       VALUES ('user', ?, 'join_leave', ?, 'Legacy fallback') 
+                       ON CONFLICT(target_type, target_id, kind) 
+                       DO UPDATE SET until = excluded.until""", 
+                    (user_id, cooldown_until)
+                )
+                await conn.commit()
+    else:
+        await clear_cooldown("user", user_id, "join_leave")
+
+    # Clear legacy column to avoid double-checks
+    print(f"[DB] Clearing legacy cooldown_until for user {user_id} (Syncing with new system)")
     async with get_connection() as conn:
         await conn.execute(
-            "UPDATE users SET cooldown_until = ?, updated_at = datetime('now') WHERE id = ?",
-            (cooldown_until, user_id)
+            "UPDATE users SET cooldown_until = NULL, updated_at = datetime('now') WHERE id = ?",
+            (user_id,)
         )
         await conn.commit()
 
@@ -583,19 +620,39 @@ async def update_match_status_atomic(match_id: int, expected_status: str, new_st
         return cursor.rowcount > 0
 
 
-async def report_match_v2(match_id: int, winner_clan_id: int) -> bool:
+async def report_match_v3(match_id: int, score_a: int, score_b: int) -> bool:
     """
-    Report match result. Sets status to 'reported'.
+    Report match result with numerical scores. Sets status to 'reported'.
     Returns True if successful, False if match not in 'created' status.
     """
     async with get_connection() as conn:
+        # Determine reported_winner_clan_id based on scores
+        # We need to get clan IDs first
+        cursor = await conn.execute("SELECT clan_a_id, clan_b_id FROM matches WHERE id = ?", (match_id,))
+        match_row = await cursor.fetchone()
+        if not match_row:
+            return False
+            
+        clan_a_id = match_row["clan_a_id"]
+        clan_b_id = match_row["clan_b_id"]
+        
+        if score_a > score_b:
+            reported_winner_id = clan_a_id
+        elif score_b > score_a:
+            reported_winner_id = clan_b_id
+        else:
+            # Draw is not expected in this system, but let's handle it
+            reported_winner_id = None
+            
         cursor = await conn.execute(
             """UPDATE matches SET 
+               score_a = ?,
+               score_b = ?,
                reported_winner_clan_id = ?,
                reported_at = datetime('now'),
                status = 'reported'
                WHERE id = ? AND status = 'created'""",
-            (winner_clan_id, match_id)
+            (score_a, score_b, reported_winner_id, match_id)
         )
         await conn.commit()
         return cursor.rowcount > 0
@@ -660,12 +717,38 @@ async def resolve_match(match_id: int, resolved_by_user_id: int, winner_clan_id:
 
 async def cancel_match(match_id: int) -> bool:
     """
-    Cancel a match. Only allowed if status is 'created'.
-    Returns True if successful, False otherwise.
+    Finalize cancelling a match.
+    Returns True if successful.
     """
     async with get_connection() as conn:
         cursor = await conn.execute(
-            "UPDATE matches SET status = 'cancelled' WHERE id = ? AND status = 'created'",
+            "UPDATE matches SET status = 'cancelled' WHERE id = ?",
+            (match_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def request_match_cancel(match_id: int, clan_id: int) -> bool:
+    """
+    Record that a clan requested to cancel the match.
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE matches SET cancel_requested_by_clan_id = ? WHERE id = ? AND status = 'created'",
+            (clan_id, match_id)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def clear_match_cancel_request(match_id: int) -> bool:
+    """
+    Clear a cancellation request (e.g. if someone reports score instead).
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE matches SET cancel_requested_by_clan_id = NULL WHERE id = ?",
             (match_id,)
         )
         await conn.commit()
@@ -813,6 +896,19 @@ async def get_active_loan_for_clan(clan_id: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
+async def count_active_loans_for_clan(clan_id: int) -> int:
+    """Count how many active loans a clan is involved in (lending or borrowing)."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT COUNT(*) FROM loans 
+               WHERE (lending_clan_id = ? OR borrowing_clan_id = ?) 
+               AND status = 'active'""",
+            (clan_id, clan_id)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+
 async def get_all_active_loans_for_clan(clan_id: int) -> List[Dict[str, Any]]:
     """Get all active loans for a clan (as lending or borrowing)."""
     async with get_connection() as conn:
@@ -933,7 +1029,7 @@ async def get_cooldown(target_type: str, target_id: int, kind: str) -> Optional[
         cursor = await conn.execute(
             """SELECT * FROM cooldowns 
                WHERE target_type = ? AND target_id = ? AND kind = ? 
-               AND until > datetime('now')""",
+               AND DATETIME(until) > datetime('now')""",
             (target_type, target_id, kind)
         )
         row = await cursor.fetchone()
@@ -989,7 +1085,7 @@ async def pop_expired_cooldowns() -> List[Dict[str, Any]]:
     """Return and clear expired cooldowns from the new cooldowns table."""
     async with get_connection() as conn:
         cursor = await conn.execute(
-            "SELECT * FROM cooldowns WHERE until <= datetime('now')"
+            "SELECT * FROM cooldowns WHERE DATETIME(until) <= datetime('now')"
         )
         rows = await cursor.fetchall()
         if not rows:
@@ -1462,15 +1558,15 @@ async def count_clan_members(clan_id: int) -> int:
         return row["cnt"] if row else 0
 
 
-async def get_recent_matches(limit: int = 10) -> List[Dict[str, Any]]:
+async def get_recent_matches(limit: int = 10, include_cancelled: bool = False) -> List[Dict[str, Any]]:
     """Get recent matches, ordered by created_at descending."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
-            """SELECT * FROM matches 
-               ORDER BY created_at DESC 
-               LIMIT ?""",
-            (limit,)
-        )
+        query = "SELECT * FROM matches"
+        if not include_cancelled:
+            query += " WHERE status != 'cancelled'"
+        query += " ORDER BY created_at DESC LIMIT ?"
+        
+        cursor = await conn.execute(query, (limit,))
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
@@ -1485,7 +1581,7 @@ async def get_active_cooldown(target_id: int, target_type: str, kind: str) -> Op
         cursor = await conn.execute(
             """SELECT * FROM cooldowns 
                WHERE target_id = ? AND target_type = ? AND kind = ? 
-               AND until > datetime('now')""",
+               AND DATETIME(until) > datetime('now')""",
             (target_id, target_type, kind)
         )
         row = await cursor.fetchone()
@@ -1493,16 +1589,48 @@ async def get_active_cooldown(target_id: int, target_type: str, kind: str) -> Op
 
 
 async def get_all_user_cooldowns(user_id: int) -> List[Dict[str, Any]]:
-    """Get all active cooldowns for a user."""
+    """Get all active cooldowns for a user (FUSED: checks both systems)."""
     async with get_connection() as conn:
+        # 1. New table
         cursor = await conn.execute(
             """SELECT * FROM cooldowns 
                WHERE target_id = ? AND target_type = 'user' 
-               AND until > datetime('now')""",
+               AND DATETIME(until) > datetime('now')""",
             (user_id,)
         )
         rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        cooldowns = [dict(row) for row in rows]
+        
+        # 2. Legacy check (for UI visibility before lazy migration)
+        cursor = await conn.execute(
+            "SELECT cooldown_until FROM users WHERE id = ? AND cooldown_until IS NOT NULL",
+            (user_id,)
+        )
+        user_row = await cursor.fetchone()
+        
+        if user_row:
+            legacy_until = user_row["cooldown_until"]
+            try:
+                # Basic check if it's in the future
+                if legacy_until.endswith('Z'):
+                    until_str = legacy_until.replace('Z', '+00:00')
+                else:
+                    until_str = legacy_until
+                
+                if datetime.fromisoformat(until_str) > datetime.now(timezone.utc):
+                    # Check if not already in the list
+                    if not any(c["kind"] == "join_leave" for c in cooldowns):
+                        cooldowns.append({
+                            "target_type": "user",
+                            "target_id": user_id,
+                            "kind": "join_leave",
+                            "until": legacy_until,
+                            "reason": "Legacy join cooldown"
+                        })
+            except Exception:
+                pass
+                
+        return cooldowns
 
 
 async def is_user_banned(user_id: int) -> Optional[Dict[str, Any]]:
@@ -1511,7 +1639,7 @@ async def is_user_banned(user_id: int) -> Optional[Dict[str, Any]]:
         cursor = await conn.execute(
             """SELECT * FROM system_bans 
                WHERE entity_type = 'user' AND entity_id = ?
-               AND (expires_at IS NULL OR expires_at > datetime('now'))""",
+               AND (expires_at IS NULL OR DATETIME(expires_at) > datetime('now'))""",
             (user_id,)
         )
         row = await cursor.fetchone()

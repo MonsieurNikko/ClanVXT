@@ -85,18 +85,6 @@ async def ensure_user_registered(interaction: discord.Interaction) -> Optional[d
     return user
 
 
-def check_cooldown(cooldown_until: Optional[str]) -> Optional[int]:
-    """Check if user is in cooldown. Returns days remaining or None."""
-    if not cooldown_until:
-        return None
-    try:
-        cooldown_dt = datetime.fromisoformat(cooldown_until.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        if cooldown_dt > now:
-            return (cooldown_dt - now).days + 1
-    except Exception:
-        pass
-    return None
 
 
 # =============================================================================
@@ -189,10 +177,15 @@ class MemberSelectView(discord.ui.View):
                 errors.append(f"• {member.mention} is already in clan '{member_clan['name']}'")
                 continue
             
-            # Check cooldown
-            days = check_cooldown(user.get("cooldown_until"))
-            if days:
-                errors.append(f"• {member.mention} is in cooldown ({days} days remaining)")
+            # Check cooldown (FUSED)
+            is_cd, until = await cooldowns.check_member_join_cooldown(user["id"])
+            if is_cd:
+                try:
+                    until_dt = datetime.fromisoformat(until.replace('Z', '+00:00'))
+                    days = (until_dt - datetime.now(timezone.utc)).days + 1
+                    errors.append(f"• {member.mention} is in cooldown ({days} days remaining)")
+                except Exception:
+                    errors.append(f"• {member.mention} is in cooldown")
         
         if errors:
             await interaction.response.edit_message(
@@ -793,6 +786,8 @@ class ClanCog(commands.Cog):
         if clan_role in ("captain", "vice"):
             capvice_cmds = """
 `/clan invite @user` - Gửi lời mời gia nhập clan (qua DM)
+`/transfer request @user <tên_clan>` - Yêu cầu chuyển nhượng thành viên
+`/loan request @user <tên_clan> <số_ngày>` - Yêu cầu mượn thành viên (có thời hạn)
 """
             embed.add_field(name="🛡️ Lệnh Captain/Vice", value=capvice_cmds, inline=False)
         
@@ -802,27 +797,18 @@ class ClanCog(commands.Cog):
 `/clan promote_vice @user` - Bổ nhiệm Đội Phó
 `/clan demote_vice @user` - Bãi nhiệm Đội Phó
 `/clan kick @user` - Trục xuất thành viên khỏi clan
-`/clan disband` - Giải tán clan (Xóa toàn bộ dữ liệu clan)
+`/clan disband` - Giải toán clan
+`/transfer cancel <id>` - Hủy yêu cầu chuyển nhượng
+`/loan cancel <id>` - Hủy yêu cầu mượn quân
 """
             embed.add_field(name="👑 Lệnh Đội Trưởng", value=captain_cmds, inline=False)
         
         # Mod commands
         if is_mod:
             mod_cmds = """
-`/mod clan approve <tên>` - Phê duyệt clan mới
-`/mod clan reject <tên> <lý_do>` - Từ chối phê duyệt
-`/mod clan delete <tên>` - Xóa clan vĩnh viễn
-`/mod clan set_captain <tên> @user` - Đặt Captain mới
-`/mod clan kick @user` - Kick bất kỳ thành viên khỏi clan
-`/matchadmin match resolve <id> <thắng> <lý_do>` - Xử lý tranh chấp
-
-`/admin dashboard` - Tổng quan hệ thống
-`/admin cooldown view|set|clear` - Quản lý cooldown
-`/admin ban user|clan` - Ban hệ thống
-`/admin unban user|clan` - Gỡ ban hệ thống
-`/admin freeze clan` - Đóng băng clan
-`/admin unfreeze <tên>` - Bỏ đóng băng clan
-`/admin case list|view|action|close` - Quản lý case
+`/mod clan approve/reject/delete` - Quản lý clan
+`/matchadmin match resolve` - Xử lý tranh chấp match
+`/admin dashboard/cooldown/ban/freeze` - Quản trị hệ thống
 """
             embed.add_field(name="⚖️ Lệnh Quản Trị", value=mod_cmds, inline=False)
         
@@ -837,9 +823,10 @@ class ClanCog(commands.Cog):
         
         # Info section
         info_txt = """
-• Clan cần **5 thành viên** để được duyệt
-• Nếu thành viên giảm xuống dưới 5, clan trở thành **inactive**
-• Rời clan = **cooldown 14 ngày** trước khi tham gia clan khác
+• **Transfer/Loan**: Cần sự đồng thuận từ 3 bên (2 Captain & Thành viên).
+• **Loan Limit**: Mỗi clan được phép mượn/cho mượn tối đa **02 thành viên** cùng lúc.
+• **Cooldown**: Rời/Đổi clan chịu **14 ngày** cooldown.
+• **Active**: Clan cần tối thiểu **5 thành viên** để được tính Elo.
 """
         embed.add_field(name="ℹ️ Thông Tin Chung", value=info_txt, inline=False)
         
@@ -1226,15 +1213,19 @@ class ClanCog(commands.Cog):
             )
             return
         
-        # Check cooldown
-        if target_user.get("cooldown_until"):
-            cooldown = datetime.fromisoformat(target_user["cooldown_until"].replace('Z', '+00:00'))
-            if cooldown > datetime.now(timezone.utc):
-                await interaction.response.send_message(
-                    f"❌ {member.mention} đang trong thời gian chờ đến **{cooldown.strftime('%Y-%m-%d %H:%M')} UTC**.",
-                    ephemeral=True
-                )
-                return
+        # Check cooldown (FUSED)
+        is_cd, until = await cooldowns.check_member_join_cooldown(target_user["id"])
+        if is_cd:
+            try:
+                until_dt = datetime.fromisoformat(until.replace('Z', '+00:00'))
+                until_str = until_dt.strftime('%Y-%m-%d %H:%M')
+            except Exception:
+                until_str = until
+            await interaction.response.send_message(
+                f"❌ {member.mention} đang trong thời gian chờ đến **{until_str} UTC**.",
+                ephemeral=True
+            )
+            return
         
         # Check for existing pending invite
         existing_invite = await db.get_pending_invite(target_user["id"], clan_data["id"])

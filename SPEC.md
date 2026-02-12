@@ -9,7 +9,7 @@
 | `/clan help` | Hiển thị hướng dẫn lệnh theo role của bạn. | None. |
 | `/clan info [clan_name]` | View clan stats, members, Elo. | None. |
 | `/clan leave` | Leave current clan. | User in clan. Starts 14-day cooldown. |
-| `/loan request <member> <clan> <days>` | Request to loan a member to another clan. | Captain/Vice of Source. 3-party accept required. |
+| `/loan request <member> <days> [note]` | Request to borrow a member from another clan. | Captain/Vice of Borrower. Sent to Lending clan channel. |
 | `/loan status [id]` | Check status of a loan. | None. |
 | `/loan cancel <id>` | Cancel a pending loan request. | Initiator or Source Captain. |
 | `/transfer request <member> <clan>` | Request to transfer a member to another clan. | Captain/Vice of Source. 3-party accept required. |
@@ -28,8 +28,8 @@
 - **Report**: Chỉ người tạo trận mới có thể báo cáo kết quả hoặc hủy.
 - **Hủy**: Chỉ được phép trước khi kết quả được báo cáo.
 - **Cooldown**: Có thời gian chờ 10 phút giữa các lần tạo trận để tránh spam.
-- Sau khi report, tin nhắn hiển thị: `[Xác Nhận]` `[Tranh Chấp]`
-- **Xác Nhận/Tranh Chấp**: Bất kỳ thành viên nào của clan đối phương đều có thể click (chỉ cần 1 người).
+- Sau khi report, bot gửi tin nhắn kèm tỉ số vào **kênh chat riêng của đối phương**.
+- **Xác Nhận/Tranh Chấp**: Bất kỳ thành viên nào (Captain/Vice) của clan đối phương đều có thể click để chốt kết quả.
 - **Tranh Chấp**: Nếu có tranh chấp, Mod sẽ nhận được thông báo DM.
 
 ### Captain/Vice Commands
@@ -165,6 +165,7 @@ All events must be logged to the **Mod Log Channel** (`log`).
     -   `LOAN_END`: Member returned (Cooldown started).
     -   `TRANSFER_REQUEST`: Member requested transfer.
     -   `TRANSFER_COMPLETED`: Transfer finalized (3d sickness started).
+    -   `LOAN_ACTIVATED`: Loan finalized (Announced in `#chat-arena`).
     -   `TRANSFER_REJECTED`: Request denied/cancelled.
 3.  **Match & Elo**:
     -   `MATCH_CREATED`: Clan A vs Clan B.

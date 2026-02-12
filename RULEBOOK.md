@@ -108,13 +108,13 @@ Captain có quyền kick thành viên. Kick vẫn áp dụng cooldown 14 ngày c
 
 
 Cho mượn thành viên giữa các clan
-Clan được phép cho mượn tối đa 1 thành viên sang clan khác trong thời gian ngắn để chơi custom vui hoặc đủ người.
+Clan muốn mượn người có thể gửi yêu cầu loan đến clan đang sở hữu thành viên đó.
 
 
-Việc cho mượn phải có 3 bên đồng ý: Captain/Vice của clan cho mượn, Captain/Vice của clan mượn, và chính thành viên được mượn bấm Accept.
+Yêu cầu sẽ được gửi vào kênh chat riêng của clan cho mượn. Việc cho mượn phải có sự đồng ý của 3 bên: Captain/Vice clan mượn (người yêu cầu), Captain/Vice clan cho mượn (Accept trong kênh chat), và chính thành viên được mượn (Accept qua DM/Kênh chat). Khi thành công, thông báo sẽ được đăng tại `#chat-arena`.
 
 
-Mỗi clan chỉ được có tối đa 1 người đang cho mượn tại một thời điểm. Mỗi người chỉ được cho mượn tới 1 clan tại một thời điểm.
+Mỗi clan chỉ được có tối đa 2 người đang trong diện cho mượn (lending) hoặc đang mượn (borrowing) tại một thời điểm.
 
 
 Thời hạn cho mượn mặc định tối đa 7 ngày (hoặc kết thúc sớm nếu captain hủy).

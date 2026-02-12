@@ -144,6 +144,18 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
         cursor = await conn.execute("SELECT * FROM clans WHERE id = ?", (clan_b_id,))
         clan_b = dict(await cursor.fetchone())
         
+        # Determine winner from scores if not provided
+        if winner_clan_id is None:
+            if match.get("score_a") is not None and match.get("score_b") is not None:
+                if match["score_a"] > match["score_b"]:
+                    winner_clan_id = clan_a_id
+                elif match["score_b"] > match["score_a"]:
+                    winner_clan_id = clan_b_id
+                else:
+                    return {"success": False, "reason": "DRAW_NOT_SUPPORTED"}
+            else:
+                return {"success": False, "reason": "WINNER_REQUIRED"}
+
         # Check both clans are active
         if clan_a["status"] != "active" or clan_b["status"] != "active":
             inactive_clans = []
