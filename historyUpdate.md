@@ -37,6 +37,19 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.27b] - 2026-02-12
+### 🐛 Fix: Loan Channel Lookup Wrong Key
+
+#### 📢 Discord Update
+> - **Sửa lỗi Loan**: Khắc phục lỗi "Clan chưa có kênh riêng" khi tạo yêu cầu loan — trước đó mọi clan đều bị báo lỗi dù đã có kênh Discord.
+
+#### 🔧 Technical Details
+- **Root Cause**: `loan_request()` used `lending_clan.get("private_channel_id")` which doesn't exist in the clan dict. The correct DB column is `discord_channel_id`.
+- **Fix**: Changed key from `private_channel_id` → `discord_channel_id` in `loan_request()`.
+- Files: `cogs/loans.py`
+
+---
+
 ## [1.2.26] - 2026-02-12
 ### ✨ Feat: Elo Adjustment Command & Clean Match History
 
