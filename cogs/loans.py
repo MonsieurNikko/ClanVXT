@@ -359,7 +359,7 @@ class LoanCog(commands.Cog):
         embed.set_footer(text=f"Loan ID: {loan_id} | Hết hạn sau 48h")
         
         # Send message to LENDING clan's private channel
-        lending_channel_id = lending_clan.get("private_channel_id")
+        lending_channel_id = lending_clan.get("discord_channel_id")
         if lending_channel_id:
             try:
                 channel = interaction.client.get_channel(int(lending_channel_id))
