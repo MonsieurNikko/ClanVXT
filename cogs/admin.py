@@ -726,6 +726,87 @@ class AdminCog(commands.Cog):
         embed = await view.get_overview_embed()
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
+    # =============================================================================
+    # LOAN ADMIN COMMANDS
+    # =============================================================================
+
+    @loan_admin_group.command(name="fix_roles", description="Fix Discord roles for all active loans")
+    async def admin_loan_fix_roles(self, interaction: discord.Interaction):
+        """Scan all active loans and fix Discord roles for loaned members."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        guild = interaction.guild
+        if not guild:
+            await interaction.followup.send("❌ Chỉ sử dụng được trong server.", ephemeral=True)
+            return
+        
+        # Get all active loans
+        async with db.get_connection() as conn:
+            cursor = await conn.execute(
+                "SELECT id, lending_clan_id, borrowing_clan_id, member_user_id FROM loans WHERE status = 'active'"
+            )
+            active_loans = [dict(row) for row in await cursor.fetchall()]
+        
+        if not active_loans:
+            await interaction.followup.send("ℹ️ Không có loan nào đang hoạt động.", ephemeral=True)
+            return
+        
+        fixed = 0
+        errors = []
+        
+        for loan in active_loans:
+            loan_id = loan["id"]
+            try:
+                member_user = await db.get_user_by_id(loan["member_user_id"])
+                if not member_user:
+                    errors.append(f"Loan {loan_id}: user not found")
+                    continue
+                
+                discord_member = guild.get_member(int(member_user["discord_id"]))
+                if not discord_member:
+                    errors.append(f"Loan {loan_id}: <@{member_user['discord_id']}> not in server")
+                    continue
+                
+                lending_clan = await db.get_clan_by_id(loan["lending_clan_id"])
+                borrowing_clan = await db.get_clan_by_id(loan["borrowing_clan_id"])
+                
+                changed = False
+                
+                # Remove lending clan role (member is loaned away)
+                if lending_clan and lending_clan.get("discord_role_id"):
+                    role = guild.get_role(int(lending_clan["discord_role_id"]))
+                    if role and role in discord_member.roles:
+                        await discord_member.remove_roles(role, reason=f"Admin fix_roles: Loan {loan_id}")
+                        changed = True
+                
+                # Add borrowing clan role (member should be in borrowing clan)
+                if borrowing_clan and borrowing_clan.get("discord_role_id"):
+                    role = guild.get_role(int(borrowing_clan["discord_role_id"]))
+                    if role and role not in discord_member.roles:
+                        await discord_member.add_roles(role, reason=f"Admin fix_roles: Loan {loan_id}")
+                        changed = True
+                
+                if changed:
+                    fixed += 1
+                    
+            except Exception as e:
+                errors.append(f"Loan {loan_id}: {e}")
+        
+        # Result
+        result = f"✅ Đã kiểm tra {len(active_loans)} loan, sửa role cho {fixed} member."
+        if errors:
+            result += f"\n⚠️ Lỗi ({len(errors)}):\n" + "\n".join(f"• {e}" for e in errors)
+        
+        await interaction.followup.send(result, ephemeral=True)
+        
+        await bot_utils.log_event(
+            "ADMIN_LOAN_FIX_ROLES",
+            f"{interaction.user.mention} ran fix_roles: {len(active_loans)} loans checked, {fixed} fixed."
+        )
+
 
 # =============================================================================
 # DASHBOARD VIEW
@@ -1007,87 +1088,6 @@ class DashboardView(discord.ui.View):
         
         await interaction.response.edit_message(embed=embed, view=self)
 
-
-# =============================================================================
-# LOAN ADMIN COMMANDS
-# =============================================================================
-
-    @loan_admin_group.command(name="fix_roles", description="Fix Discord roles for all active loans")
-    async def admin_loan_fix_roles(self, interaction: discord.Interaction):
-        """Scan all active loans and fix Discord roles for loaned members."""
-        if not await self.check_mod(interaction):
-            return
-        
-        await interaction.response.defer(ephemeral=True)
-        
-        guild = interaction.guild
-        if not guild:
-            await interaction.followup.send("❌ Chỉ sử dụng được trong server.", ephemeral=True)
-            return
-        
-        # Get all active loans
-        async with db.get_connection() as conn:
-            cursor = await conn.execute(
-                "SELECT id, lending_clan_id, borrowing_clan_id, member_user_id FROM loans WHERE status = 'active'"
-            )
-            active_loans = [dict(row) for row in await cursor.fetchall()]
-        
-        if not active_loans:
-            await interaction.followup.send("ℹ️ Không có loan nào đang hoạt động.", ephemeral=True)
-            return
-        
-        fixed = 0
-        errors = []
-        
-        for loan in active_loans:
-            loan_id = loan["id"]
-            try:
-                member_user = await db.get_user_by_id(loan["member_user_id"])
-                if not member_user:
-                    errors.append(f"Loan {loan_id}: user not found")
-                    continue
-                
-                discord_member = guild.get_member(int(member_user["discord_id"]))
-                if not discord_member:
-                    errors.append(f"Loan {loan_id}: <@{member_user['discord_id']}> not in server")
-                    continue
-                
-                lending_clan = await db.get_clan_by_id(loan["lending_clan_id"])
-                borrowing_clan = await db.get_clan_by_id(loan["borrowing_clan_id"])
-                
-                changed = False
-                
-                # Remove lending clan role (member is loaned away)
-                if lending_clan and lending_clan.get("discord_role_id"):
-                    role = guild.get_role(int(lending_clan["discord_role_id"]))
-                    if role and role in discord_member.roles:
-                        await discord_member.remove_roles(role, reason=f"Admin fix_roles: Loan {loan_id}")
-                        changed = True
-                
-                # Add borrowing clan role (member should be in borrowing clan)
-                if borrowing_clan and borrowing_clan.get("discord_role_id"):
-                    role = guild.get_role(int(borrowing_clan["discord_role_id"]))
-                    if role and role not in discord_member.roles:
-                        await discord_member.add_roles(role, reason=f"Admin fix_roles: Loan {loan_id}")
-                        changed = True
-                
-                if changed:
-                    fixed += 1
-                    
-            except Exception as e:
-                errors.append(f"Loan {loan_id}: {e}")
-        
-        # Result
-        result = f"✅ Đã kiểm tra {len(active_loans)} loan, sửa role cho {fixed} member."
-        if errors:
-            result += f"\n⚠️ Lỗi ({len(errors)}):\n" + "\n".join(f"• {e}" for e in errors)
-        
-        await interaction.followup.send(result, ephemeral=True)
-        
-        await bot_utils.log_event(
-            "ADMIN_LOAN_FIX_ROLES",
-            f"{interaction.user.mention} ran fix_roles: {len(active_loans)} loans checked, {fixed} fixed."
-        )
 
 # =============================================================================
 # SETUP
