@@ -4,6 +4,7 @@ Handles the logic for activating and ending loans, including member movement and
 """
 
 import discord
+from datetime import datetime, timezone
 from services import db, cooldowns
 from services import bot_utils
 

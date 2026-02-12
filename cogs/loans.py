@@ -92,7 +92,13 @@ class LoanAcceptView(discord.ui.View):
     async def activate_loan(self, interaction: discord.Interaction):
         """Activate the loan."""
         try:
-            await loan_service.activate_loan(self.loan_id, interaction.guild)
+            # Resolve guild — interaction.guild can be None if accepted via DM
+            guild = interaction.guild
+            if not guild:
+                import config
+                guild = interaction.client.get_guild(config.GUILD_ID)
+            
+            await loan_service.activate_loan(self.loan_id, guild)
             
             # Disable buttons
             for child in self.children:
