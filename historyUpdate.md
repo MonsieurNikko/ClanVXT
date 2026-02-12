@@ -38,14 +38,15 @@ This document provides a cumulative history of all technical improvements, fixes
 ---
 
 ## [1.2.27b] - 2026-02-12
-### 🐛 Fix: Loan Channel Lookup Wrong Key
+### 🐛 Fix: Loan Channel Lookup + Remove Redundant Button
 
 #### 📢 Discord Update
 > - **Sửa lỗi Loan**: Khắc phục lỗi "Clan chưa có kênh riêng" khi tạo yêu cầu loan — trước đó mọi clan đều bị báo lỗi dù đã có kênh Discord.
+> - **Gọn giao diện**: Xóa nút "Clan Mượn Chấp Nhận" thừa — clan mượn tạo request = tự động chấp nhận, không cần bấm thêm.
 
 #### 🔧 Technical Details
-- **Root Cause**: `loan_request()` used `lending_clan.get("private_channel_id")` which doesn't exist in the clan dict. The correct DB column is `discord_channel_id`.
-- **Fix**: Changed key from `private_channel_id` → `discord_channel_id` in `loan_request()`.
+- **Channel Key Fix**: Changed `lending_clan.get("private_channel_id")` → `lending_clan.get("discord_channel_id")` — wrong key caused all clans to fail.
+- **Remove Borrowing Button**: Removed `accept_borrowing` button from `LoanAcceptView`, removed `loan_accept_borrowing` handler from `on_interaction`, removed borrowing case from `handle_loan_accept`. Borrowing clan auto-accepts on request creation.
 - Files: `cogs/loans.py`
 
 ---

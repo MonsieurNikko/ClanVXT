@@ -29,8 +29,6 @@ class LoanAcceptView(discord.ui.View):
             if hasattr(child, 'custom_id'):
                 if 'lending' in child.custom_id:
                     child.custom_id = f"loan_accept_lending:{loan_id}:{lending_clan_id}:{borrowing_clan_id}:{member_id}"
-                elif 'borrowing' in child.custom_id:
-                    child.custom_id = f"loan_accept_borrowing:{loan_id}:{lending_clan_id}:{borrowing_clan_id}:{member_id}"
                 elif 'member' in child.custom_id:
                     child.custom_id = f"loan_accept_member:{loan_id}:{lending_clan_id}:{borrowing_clan_id}:{member_id}"
 
@@ -154,11 +152,6 @@ class LoanAcceptView(discord.ui.View):
         # All logic moved to LoanCog.on_interaction to avoid "Interaction already acknowledged"
         pass
 
-    @discord.ui.button(label="Clan Mượn Chấp Nhận", style=discord.ButtonStyle.primary, custom_id="loan_accept_borrowing_placeholder")
-    async def accept_borrowing(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # All logic moved to LoanCog.on_interaction
-        pass
-
     @discord.ui.button(label="Thành Viên Chấp Nhận", style=discord.ButtonStyle.success, custom_id="loan_accept_member_placeholder")
     async def accept_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         # All logic moved to LoanCog.on_interaction
@@ -199,16 +192,6 @@ class LoanCog(commands.Cog):
                 await self.handle_loan_accept(interaction, loan_id, lending_clan_id, borrowing_clan_id, member_id, "lending")
                 return
 
-        if custom_id.startswith("loan_accept_borrowing:"):
-            parts = custom_id.split(":")
-            if len(parts) == 5:
-                loan_id = int(parts[1])
-                lending_clan_id = int(parts[2])
-                borrowing_clan_id = int(parts[3])
-                member_id = int(parts[4])
-                await self.handle_loan_accept(interaction, loan_id, lending_clan_id, borrowing_clan_id, member_id, "borrowing")
-                return
-
         if custom_id.startswith("loan_accept_member:"):
             parts = custom_id.split(":")
             if len(parts) == 5:
@@ -235,14 +218,6 @@ class LoanCog(commands.Cog):
                 except Exception: pass
                 return
             await db.update_loan_acceptance(loan_id, lending=True)
-            
-        elif type_key == "borrowing":
-            clan_data = await db.get_user_clan(user["id"])
-            if not clan_data or clan_data["id"] != borrowing_clan_id or clan_data["member_role"] not in ["captain", "vice"]:
-                try: await interaction.response.send_message("Chỉ Captain/Vice của clan mượn mới có thể chấp nhận.", ephemeral=True)
-                except Exception: pass
-                return
-            await db.update_loan_acceptance(loan_id, borrowing=True)
             
         elif type_key == "member":
             if user["id"] != member_id:
