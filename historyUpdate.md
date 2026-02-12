@@ -51,6 +51,19 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.27c] - 2026-02-12
+### 🐛 Fix: Loan Activation Crash (datetime + guild None)
+
+#### 📢 Discord Update
+> - **Sửa lỗi kích hoạt Loan**: Khắc phục 2 lỗi khi loan được tất cả bên chấp nhận — role không được chuyển và thông báo công khai không gửi được.
+
+#### 🔧 Technical Details
+- **Missing Import**: `loan_service.py` used `datetime.now(timezone.utc)` without importing `datetime`/`timezone` → added `from datetime import datetime, timezone`.
+- **Guild None**: When member accepts loan via DM, `interaction.guild` is `None` → added fallback `interaction.client.get_guild(config.GUILD_ID)` in `activate_loan()`.
+- Files: `services/loan_service.py`, `cogs/loans.py`
+
+---
+
 ## [1.2.26] - 2026-02-12
 ### ✨ Feat: Elo Adjustment Command & Clean Match History
 
