@@ -11,7 +11,6 @@ from typing import Optional, List
 
 import config
 from services import db, permissions, cooldowns, loan_service
-from services import db, permissions, cooldowns, loan_service
 from services import bot_utils
 
 class LoanAcceptView(discord.ui.View):
@@ -43,7 +42,12 @@ class LoanAcceptView(discord.ui.View):
             # Disable buttons if no longer requested
             for child in self.children:
                 child.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(view=self)
+                else:
+                    await interaction.message.edit(view=self)
+            except Exception: pass
             return
 
         lending_clan = await db.get_clan_by_id(self.lending_clan_id)
@@ -69,12 +73,19 @@ class LoanAcceptView(discord.ui.View):
         embed.add_field(name="Captain mượn", value=borrowing_status, inline=True)
         embed.add_field(name="Thành viên", value=member_status, inline=True)
         
-        if loan["note"]:
+        # Use .get() to avoid KeyError if column missing or None
+        if loan.get("note"):
             embed.add_field(name="Ghi chú", value=loan["note"], inline=False)
             
         embed.set_footer(text=f"Loan ID: {self.loan_id} | Hết hạn sau 48h")
         
-        await interaction.message.edit(embed=embed, view=self)
+        # Always use edit_message if possible, fallback to message.edit
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.message.edit(embed=embed, view=self)
+        except Exception: pass
         
         # Check if all accepted
         if loan["accept_lending"] and loan["accept_borrowing"] and loan["accept_member"]:
@@ -89,10 +100,13 @@ class LoanAcceptView(discord.ui.View):
             for child in self.children:
                 child.disabled = True
             
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except Exception: pass
+            
             await interaction.followup.send(f"✅ **Loan đã kích hoạt!** Khoản loan (ID: {self.loan_id}) đã được tất cả các bên chấp nhận và hiện đang có hiệu lực.")
             
-            # [P2 Fix] Notify all parties via DM
+            # Notify all parties via DM
             loan = await db.get_loan(self.loan_id)
             if loan:
                 lending_clan = await db.get_clan_by_id(loan["lending_clan_id"])
@@ -131,48 +145,24 @@ class LoanAcceptView(discord.ui.View):
                 f"Loan {self.loan_id} activated. Member {self.member_id} loaned from {self.lending_clan_id} to {self.borrowing_clan_id}."
             )
         except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khi kích hoạt loan: {e}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"❌ Lỗi khi kích hoạt loan: {e}", ephemeral=True)
+            except Exception: pass
 
     @discord.ui.button(label="Clan Cho Loan Chấp Nhận", style=discord.ButtonStyle.primary, custom_id="loan_accept_lending_placeholder")
     async def accept_lending(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is captain/vice of lending clan
-        user = await db.get_user(str(interaction.user.id))
-        if not user:
-            return await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
-            
-        clan_data = await db.get_user_clan(user["id"])
-        if not clan_data or clan_data["id"] != self.lending_clan_id or clan_data["member_role"] not in ["captain", "vice"]:
-            return await interaction.response.send_message("Chỉ Captain/Vice của clan cho loan mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_loan_acceptance(self.loan_id, lending=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # All logic moved to LoanCog.on_interaction to avoid "Interaction already acknowledged"
+        pass
 
     @discord.ui.button(label="Clan Mượn Chấp Nhận", style=discord.ButtonStyle.primary, custom_id="loan_accept_borrowing_placeholder")
     async def accept_borrowing(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is captain/vice of borrowing clan
-        user = await db.get_user(str(interaction.user.id))
-        if not user:
-            return await interaction.response.send_message("Bạn chưa đăng ký trong hệ thống.", ephemeral=True)
-            
-        clan_data = await db.get_user_clan(user["id"])
-        if not clan_data or clan_data["id"] != self.borrowing_clan_id or clan_data["member_role"] not in ["captain", "vice"]:
-            return await interaction.response.send_message("Chỉ Captain/Vice của clan mượn mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_loan_acceptance(self.loan_id, borrowing=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # All logic moved to LoanCog.on_interaction
+        pass
 
     @discord.ui.button(label="Thành Viên Chấp Nhận", style=discord.ButtonStyle.success, custom_id="loan_accept_member_placeholder")
     async def accept_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is the member
-        user = await db.get_user(str(interaction.user.id))
-        if not user or user["id"] != self.member_id:
-            return await interaction.response.send_message("Chỉ member được loan mới có thể chấp nhận.", ephemeral=True)
-            
-        await db.update_loan_acceptance(self.loan_id, member=True)
-        await interaction.response.defer()
-        await self.update_embed(interaction)
+        # All logic moved to LoanCog.on_interaction
+        pass
 
 
 class LoanCog(commands.Cog):
@@ -261,9 +251,12 @@ class LoanCog(commands.Cog):
                 return
             await db.update_loan_acceptance(loan_id, member=True)
         
-        # Update UI
-        if not interaction.response.is_done():
-            await interaction.response.defer()
+        # Update UI — wrap defer in try/except to handle race condition
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except discord.HTTPException:
+            pass
             
         view = LoanAcceptView(loan_id, lending_clan_id, borrowing_clan_id, member_id)
         await view.update_embed(interaction)
