@@ -64,10 +64,31 @@ async def init_db() -> None:
         
         # Check for cancel_requested_by_clan_id in matches
         cursor = await conn.execute("PRAGMA table_info(matches)")
-        columns = [row[1] for row in await cursor.fetchall()]
-        if "cancel_requested_by_clan_id" not in columns:
+        match_columns = [row[1] for row in await cursor.fetchall()]
+        if "cancel_requested_by_clan_id" not in match_columns:
             print("[DB] Migrating: Adding 'cancel_requested_by_clan_id' to 'matches' table...")
             await conn.execute("ALTER TABLE matches ADD COLUMN cancel_requested_by_clan_id INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+        
+        # Check for score_a, score_b in matches
+        if "score_a" not in match_columns:
+            print("[DB] Migrating: Adding 'score_a' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN score_a INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+        if "score_b" not in match_columns:
+            print("[DB] Migrating: Adding 'score_b' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN score_b INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        # Check for note in loans
+        cursor = await conn.execute("PRAGMA table_info(loans)")
+        loan_columns = [row[1] for row in await cursor.fetchall()]
+        if "note" not in loan_columns:
+            print("[DB] Migrating: Adding 'note' to 'loans' table...")
+            await conn.execute("ALTER TABLE loans ADD COLUMN note TEXT")
             await conn.commit()
             print("  ✓ Column added.")
 
