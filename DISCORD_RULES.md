@@ -92,7 +92,8 @@ Có thể thách đấu clan khác từ bảng **#arena**:
 ## 🔄 CHO MƯỢN NGƯỜI (LOAN)
 
 Muốn mượn người từ clan khác chơi tạm?
-- Cần **3 bên đồng ý**: Clan cho mượn + Clan mượn + Người được mượn
+- Clan mượn gửi yêu cầu → **tự động chấp nhận** phía clan mượn
+- Cần **2 bên còn lại đồng ý**: Clan cho mượn + Người được mượn
 - Tối đa **7 ngày**, mỗi clan mượn/cho mượn tối đa **2 người**
 - Yêu cầu loan được gửi vào kênh riêng của clan cho mượn
 - Khi thành công → Thông báo công khai tại `#chat-arena`

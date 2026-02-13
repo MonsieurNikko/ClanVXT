@@ -66,6 +66,23 @@ This document provides a cumulative history of all technical improvements, fixes
 
 ---
 
+## [1.2.27d] - 2026-02-12
+### 🐛 Fix: DB Auto-Migration for Missing Columns
+
+#### 📢 Discord Update
+> - **Sửa lỗi Database**: Khắc phục lỗi "no such column: score_a" khi báo cáo kết quả trận đấu — database cũ thiếu cột mới.
+> - **Tự động nâng cấp DB**: Bot giờ tự kiểm tra và thêm các cột thiếu khi khởi động, không cần xóa lại database.
+
+#### 🔧 Technical Details
+- **Root Cause**: Production DB was created from older `schema.sql`. `CREATE TABLE IF NOT EXISTS` doesn't ALTER existing tables, so new columns (`score_a`, `score_b`, `note`) were missing.
+- **Auto-Migration**: `init_db()` now uses `PRAGMA table_info()` to check existing columns and runs `ALTER TABLE ADD COLUMN` for any missing ones:
+  - `matches`: `cancel_requested_by_clan_id`, `score_a`, `score_b`
+  - `loans`: `note`
+- **Zero downtime**: Migration runs on every bot startup, safe to re-run (idempotent).
+- Files: `services/db.py`
+
+---
+
 ## [1.2.26] - 2026-02-12
 ### ✨ Feat: Elo Adjustment Command & Clean Match History
 

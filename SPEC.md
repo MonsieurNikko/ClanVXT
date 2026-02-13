@@ -9,7 +9,7 @@
 | `/clan help` | Hiển thị hướng dẫn lệnh theo role của bạn. | None. |
 | `/clan info [clan_name]` | View clan stats, members, Elo. | None. |
 | `/clan leave` | Leave current clan. | User in clan. Starts 14-day cooldown. |
-| `/loan request <member> <days> [note]` | Request to borrow a member from another clan. | Captain/Vice of Borrower. Sent to Lending clan channel. |
+| `/loan request <member> <days> [note]` | Request to borrow a member from another clan. Borrowing clan auto-accepts. Requires 2-party accept: Lending Captain/Vice + Member. | Captain/Vice of Borrower. Sent to Lending clan channel. |
 | `/loan status [id]` | Check status of a loan. | None. |
 | `/loan cancel <id>` | Cancel a pending loan request. | Initiator or Source Captain. |
 | `/transfer request <member> <clan>` | Request to transfer a member to another clan. | Captain/Vice of Source. 3-party accept required. |
@@ -70,6 +70,7 @@
 | `/admin freeze clan <clan_name> <reason>` | Freeze clan (no Elo applied). | Mod Role. |
 | `/admin unfreeze <clan_name>` | Unfreeze a clan. | Mod Role. |
 | `/admin clan set_elo <clan_name> <value>` | Manually set Elo for a clan. | Mod Role. |
+| `/admin loan fix_roles` | Scan all active loans and fix Discord roles for loaned members. | Mod Role. |
 
 ### Report & Appeal Commands
 | Command | Description | Requirements |

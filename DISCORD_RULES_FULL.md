@@ -245,7 +245,7 @@ Cho phép clan mượn tạm thành viên từ clan khác để đủ người �
 
 | Điều kiện | Chi tiết |
 |-----------|----------|
-| Sự đồng ý | 3 bên: Clan cho mượn + Clan mượn + Thành viên |
+| Sự đồng ý | 2 bên: Clan cho mượn + Thành viên (Clan mượn tự động chấp nhận khi gửi request) |
 | Giới hạn | Mỗi clan cho mượn/mượn tối đa 2 người cùng lúc |
 | Thời hạn | Tối đa 7 ngày |
 | Thời gian chờ accept | 48 giờ |
@@ -255,8 +255,8 @@ Cho phép clan mượn tạm thành viên từ clan khác để đủ người �
 ### 8.3. Luồng xử lý
 
 ```
-REQUESTED ──[3 bên Accept]──► ACTIVE ──[Hết hạn/Hủy]──► ENDED
-     │
+REQUESTED ──[Lending Captain + Member Accept]──► ACTIVE ──[Hết hạn/Hủy]──► ENDED
+     │        (Borrowing auto-accepts on request)
      └──[Cancel/Timeout]──► CANCELLED
 ```
 

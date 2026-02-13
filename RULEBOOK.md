@@ -111,7 +111,7 @@ Cho mượn thành viên giữa các clan
 Clan muốn mượn người có thể gửi yêu cầu loan đến clan đang sở hữu thành viên đó.
 
 
-Yêu cầu sẽ được gửi vào kênh chat riêng của clan cho mượn. Việc cho mượn phải có sự đồng ý của 3 bên: Captain/Vice clan mượn (người yêu cầu), Captain/Vice clan cho mượn (Accept trong kênh chat), và chính thành viên được mượn (Accept qua DM/Kênh chat). Khi thành công, thông báo sẽ được đăng tại `#chat-arena`.
+Yêu cầu sẽ được gửi vào kênh chat riêng của clan cho mượn. Clan mượn tự động được tính là đồng ý khi gửi yêu cầu. Việc cho mượn cần sự đồng ý của 2 bên còn lại: Captain/Vice clan cho mượn (Accept trong kênh chat) và chính thành viên được mượn (Accept qua DM/Kênh chat). Khi thành công, thông báo sẽ được đăng tại `#chat-arena`.
 
 
 Mỗi clan chỉ được có tối đa 2 người đang trong diện cho mượn (lending) hoặc đang mượn (borrowing) tại một thời điểm.

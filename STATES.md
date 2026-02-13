@@ -56,15 +56,15 @@ stateDiagram-v2
 ## 3. Member Loan Workflow
 ```mermaid
 stateDiagram-v2
-    [*] --> REQUESTED: /loan request
-    REQUESTED --> ACTIVE: All 3 Parties Accepted (Lending, Borrowing, Member)
+    [*] --> REQUESTED: /loan request (Borrowing auto-accepts)
+    REQUESTED --> ACTIVE: Lending Captain + Member Accepted
     REQUESTED --> CANCELLED: Cancelled by Initiator/Captain or Expired (48h)
     ENDED --> [*]: Cooldown (14d) applied to Member, Lending Clan, Borrowing Clan
     ACTIVE --> ENDED: Clan Disbanded (Force Return)
 ```
 
 ### States
-- **REQUESTED**: Loan proposed. Waiting for 3-party acceptance (Lending Captain, Borrowing Captain, Member).
+- **REQUESTED**: Loan proposed by Borrowing clan (auto-accepted). Waiting for 2-party acceptance (Lending Captain/Vice + Member).
 - **ACTIVE**: All parties accepted. Member temporarily in Borrowing Clan.
 - **ENDED**: Loan finished. Member returns to Lending Clan. Cooldowns applied.
 - **CANCELLED**: Request cancelled or expired.
