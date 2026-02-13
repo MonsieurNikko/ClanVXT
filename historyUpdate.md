@@ -18,6 +18,7 @@ This document provides a cumulative history of all technical improvements, fixes
 - **Captain Safety**:
   - Promoting a user to `captain` auto-demotes old captain to `member` and updates `clans.captain_id`.
   - Directly demoting current captain is blocked to avoid inconsistent clan ownership.
+- **Clan Override for Testing**: Added `/admin clan set_member <@user> <clan_name> [role] [reason]` to force move/add a member into any clan for test/fix workflows (with DB update and Discord role sync best-effort).
 - Files: `cogs/admin.py`, `services/db.py`
 
 ---

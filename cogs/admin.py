@@ -711,6 +711,122 @@ class AdminCog(commands.Cog):
         )
         print(f"[ADMIN] Elo adjusted for {clan['name']} to {new_elo} by {interaction.user}")
 
+    @clan_group.command(name="set_member", description="Force move/add a member to a clan (Admin test/fix)")
+    @app_commands.describe(
+        user="Member cần điều chỉnh clan",
+        clan_name="Clan đích",
+        role="Role nội bộ sau khi vào clan đích",
+        reason="Lý do chỉnh tay (audit log)"
+    )
+    async def admin_set_member_clan(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        clan_name: str,
+        role: Literal["member", "vice", "captain"] = "member",
+        reason: str = "Admin manual test/fix",
+    ):
+        """Force set a user's clan membership for testing/maintenance (DB-backed)."""
+        if not await self.check_mod(interaction):
+            return
+
+        target_clan = await db.get_clan_any_status(clan_name)
+        if not target_clan:
+            await interaction.response.send_message("❌ Clan đích không tồn tại.", ephemeral=True)
+            return
+
+        db_user = await db.get_user(str(user.id))
+        if not db_user:
+            await db.create_user(str(user.id), user.display_name)
+            db_user = await db.get_user(str(user.id))
+
+        if not db_user:
+            await interaction.response.send_message("❌ Không thể tạo/tải user trong DB.", ephemeral=True)
+            return
+
+        current_clan = await db.get_user_clan(db_user["id"])
+        old_clan_name = current_clan["name"] if current_clan else "None"
+        old_role = current_clan["member_role"] if current_clan else "none"
+
+        try:
+            # If user is captain of another clan and moving away, auto-handover captain to another member.
+            if current_clan and current_clan["id"] != target_clan["id"] and current_clan["member_role"] == "captain":
+                async with db.get_connection() as conn:
+                    cursor = await conn.execute(
+                        """SELECT user_id, role FROM clan_members
+                           WHERE clan_id = ? AND user_id != ?
+                           ORDER BY CASE role WHEN 'vice' THEN 0 ELSE 1 END, user_id ASC
+                           LIMIT 1""",
+                        (current_clan["id"], db_user["id"]),
+                    )
+                    replacement = await cursor.fetchone()
+                    if not replacement:
+                        await interaction.response.send_message(
+                            "❌ Không thể chuyển clan cho Captain khi clan hiện tại không có người thay thế.",
+                            ephemeral=True,
+                        )
+                        return
+
+                    await conn.execute(
+                        "UPDATE clan_members SET role = 'captain' WHERE clan_id = ? AND user_id = ?",
+                        (current_clan["id"], replacement["user_id"]),
+                    )
+                    await conn.execute(
+                        "UPDATE clans SET captain_id = ?, updated_at = datetime('now') WHERE id = ?",
+                        (replacement["user_id"], current_clan["id"]),
+                    )
+                    await conn.commit()
+
+            # Membership move/add
+            if current_clan and current_clan["id"] != target_clan["id"]:
+                await db.move_member(db_user["id"], current_clan["id"], target_clan["id"], "member")
+            elif not current_clan:
+                await db.add_member(db_user["id"], target_clan["id"], "member")
+
+            # Apply final role in target clan (handles captain safety + clans.captain_id sync)
+            role_result = await db.admin_set_member_role(target_clan["id"], db_user["id"], role)
+            if not role_result.get("success"):
+                await interaction.response.send_message(
+                    f"❌ Đã chuyển member nhưng set role thất bại: {role_result.get('reason')}",
+                    ephemeral=True,
+                )
+                return
+
+            # Sync Discord roles best-effort
+            guild = interaction.guild or self.bot.get_guild(config.GUILD_ID)
+            role_sync_note = ""
+            if guild:
+                discord_member = guild.get_member(user.id)
+                if discord_member:
+                    if current_clan and current_clan.get("discord_role_id") and current_clan["id"] != target_clan["id"]:
+                        old_discord_role = guild.get_role(int(current_clan["discord_role_id"]))
+                        if old_discord_role and old_discord_role in discord_member.roles:
+                            await discord_member.remove_roles(old_discord_role, reason=f"Admin set_member: {reason}")
+
+                    if target_clan.get("discord_role_id"):
+                        new_discord_role = guild.get_role(int(target_clan["discord_role_id"]))
+                        if new_discord_role and new_discord_role not in discord_member.roles:
+                            await discord_member.add_roles(new_discord_role, reason=f"Admin set_member: {reason}")
+                else:
+                    role_sync_note = "\n⚠️ User không có trong guild, chỉ cập nhật DB."
+            else:
+                role_sync_note = "\n⚠️ Không lấy được guild, chỉ cập nhật DB."
+
+            await interaction.response.send_message(
+                f"✅ Đã điều chỉnh clan cho {user.mention}.\n"
+                f"• Clan: **{old_clan_name}** → **{target_clan['name']}**\n"
+                f"• Role: `{old_role}` → `{role_result.get('new_role')}`\n"
+                f"• Lý do: {reason}"
+                f"{role_sync_note}"
+            )
+
+            await bot_utils.log_event(
+                "ADMIN_SET_MEMBER_CLAN",
+                f"{interaction.user.mention} moved {user.mention} from '{old_clan_name}' to '{target_clan['name']}' and set role to {role_result.get('new_role')}. Reason: {reason}"
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Lỗi khi điều chỉnh clan: {e}", ephemeral=True)
+
     @role_group.command(name="grant", description="Grant clan management role to a member (DB update)")
     @app_commands.describe(
         user="Member to grant role",
