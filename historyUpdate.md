@@ -3,6 +3,25 @@
 
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
+## [1.2.27e] - 2026-02-13
+### ✨ Feat: Admin Manual Role Override (DB-backed)
+
+#### 📢 Discord Update
+> - **Lệnh mới cho Mod/Admin**: `/admin role grant` và `/admin role remove` để tự cấp/xóa quyền nội bộ clan cho member.
+> - **Chỉnh quyền trực tiếp trong DB**: Role nội bộ (`member/vice/captain`) được cập nhật thẳng vào database để sửa quyền thao tác nhanh khi cần.
+
+#### 🔧 Technical Details
+- **New Admin Commands**:
+  - `/admin role grant <@user> <vice|captain> <reason>`
+  - `/admin role remove <@user> <reason>` (force về `member`)
+- **DB Transaction Helper**: Added `admin_set_member_role(clan_id, user_id, new_role)` in `services/db.py`.
+- **Captain Safety**:
+  - Promoting a user to `captain` auto-demotes old captain to `member` and updates `clans.captain_id`.
+  - Directly demoting current captain is blocked to avoid inconsistent clan ownership.
+- Files: `cogs/admin.py`, `services/db.py`
+
+---
+
 ## [1.2.27] - 2026-02-12
 ### ✨ Feat: Reporting Flexibility & Interaction Reliability
 

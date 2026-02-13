@@ -395,6 +395,75 @@ async def update_member_role(user_id: int, clan_id: int, role: str) -> None:
         await conn.commit()
 
 
+async def admin_set_member_role(clan_id: int, user_id: int, new_role: str) -> Dict[str, Any]:
+    """
+    Admin-only role override with transaction safety.
+
+    Rules:
+    - Allowed roles: captain, vice, member
+    - Captain cannot be demoted with this function unless another captain is assigned first.
+    - Promoting a new captain automatically demotes current captain to member and updates clans.captain_id.
+    """
+    if new_role not in {"captain", "vice", "member"}:
+        return {"success": False, "reason": "invalid_role"}
+
+    async with get_connection() as conn:
+        await conn.execute("BEGIN")
+        try:
+            cursor = await conn.execute(
+                "SELECT role FROM clan_members WHERE clan_id = ? AND user_id = ?",
+                (clan_id, user_id),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                await conn.rollback()
+                return {"success": False, "reason": "target_not_in_clan"}
+
+            old_role = row["role"]
+            if old_role == new_role:
+                await conn.rollback()
+                return {
+                    "success": True,
+                    "changed": False,
+                    "old_role": old_role,
+                    "new_role": new_role,
+                }
+
+            if old_role == "captain" and new_role != "captain":
+                await conn.rollback()
+                return {"success": False, "reason": "captain_demote_forbidden"}
+
+            if new_role == "captain":
+                await conn.execute(
+                    "UPDATE clan_members SET role = 'member' WHERE clan_id = ? AND role = 'captain' AND user_id != ?",
+                    (clan_id, user_id),
+                )
+                await conn.execute(
+                    "UPDATE clan_members SET role = 'captain' WHERE clan_id = ? AND user_id = ?",
+                    (clan_id, user_id),
+                )
+                await conn.execute(
+                    "UPDATE clans SET captain_id = ?, updated_at = datetime('now') WHERE id = ?",
+                    (user_id, clan_id),
+                )
+            else:
+                await conn.execute(
+                    "UPDATE clan_members SET role = ? WHERE clan_id = ? AND user_id = ?",
+                    (new_role, clan_id, user_id),
+                )
+
+            await conn.commit()
+            return {
+                "success": True,
+                "changed": True,
+                "old_role": old_role,
+                "new_role": new_role,
+            }
+        except Exception as e:
+            await conn.rollback()
+            raise e
+
+
 async def get_clan_members(clan_id: int) -> List[Dict[str, Any]]:
     """Get all members of a clan."""
     async with get_connection() as conn:

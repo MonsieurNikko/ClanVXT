@@ -29,6 +29,7 @@ class AdminCog(commands.Cog):
     freeze_group = app_commands.Group(name="freeze", description="Clan freeze management", parent=admin_group)
     clan_group = app_commands.Group(name="clan", description="Admin clan management", parent=admin_group)
     loan_admin_group = app_commands.Group(name="loan", description="Admin loan management", parent=admin_group)
+    role_group = app_commands.Group(name="role", description="Admin role management", parent=admin_group)
     
     async def check_mod(self, interaction: discord.Interaction) -> bool:
         """Check if user has mod role."""
@@ -709,6 +710,115 @@ class AdminCog(commands.Cog):
             f"Clan {clan['name']} Elo set to {new_elo} by {interaction.user.mention}. Reason: {reason}"
         )
         print(f"[ADMIN] Elo adjusted for {clan['name']} to {new_elo} by {interaction.user}")
+
+    @role_group.command(name="grant", description="Grant clan management role to a member (DB update)")
+    @app_commands.describe(
+        user="Member to grant role",
+        role="Role to grant (vice/captain)",
+        reason="Reason for the role grant"
+    )
+    async def admin_role_grant(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        role: Literal["vice", "captain"],
+        reason: str,
+    ):
+        """Grant elevated internal clan role via admin override (writes to DB)."""
+        if not await self.check_mod(interaction):
+            return
+
+        db_user = await db.get_user(str(user.id))
+        if not db_user:
+            await interaction.response.send_message("❌ User chưa đăng ký trong hệ thống DB.", ephemeral=True)
+            return
+
+        clan_data = await db.get_user_clan(db_user["id"])
+        if not clan_data:
+            await interaction.response.send_message("❌ User hiện không thuộc clan nào.", ephemeral=True)
+            return
+
+        result = await db.admin_set_member_role(clan_data["id"], db_user["id"], role)
+        if not result.get("success"):
+            reason_code = result.get("reason")
+            if reason_code == "captain_demote_forbidden":
+                msg = "❌ Không thể hạ Captain trực tiếp. Hãy chỉ định Captain mới trước."
+            elif reason_code == "target_not_in_clan":
+                msg = "❌ User không còn trong clan tại thời điểm cập nhật."
+            else:
+                msg = f"❌ Không thể cập nhật role. ({reason_code})"
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        old_role = result.get("old_role")
+        new_role = result.get("new_role")
+        changed = result.get("changed", False)
+        state_text = "(không đổi)" if not changed else ""
+
+        await interaction.response.send_message(
+            f"✅ Đã cấp role nội bộ cho {user.mention} trong clan **{clan_data['name']}**.\n"
+            f"• Role: `{old_role}` → `{new_role}` {state_text}\n"
+            f"• Lý do: {reason}"
+        )
+
+        await bot_utils.log_event(
+            "ADMIN_ROLE_GRANT",
+            f"{interaction.user.mention} set role for {user.mention} in clan '{clan_data['name']}': {old_role} -> {new_role}. Reason: {reason}"
+        )
+
+    @role_group.command(name="remove", description="Remove elevated role (set user back to member) (DB update)")
+    @app_commands.describe(
+        user="Member to remove elevated role from",
+        reason="Reason for removing the elevated role"
+    )
+    async def admin_role_remove(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        reason: str,
+    ):
+        """Remove elevated role by forcing role to member via admin override (writes to DB)."""
+        if not await self.check_mod(interaction):
+            return
+
+        db_user = await db.get_user(str(user.id))
+        if not db_user:
+            await interaction.response.send_message("❌ User chưa đăng ký trong hệ thống DB.", ephemeral=True)
+            return
+
+        clan_data = await db.get_user_clan(db_user["id"])
+        if not clan_data:
+            await interaction.response.send_message("❌ User hiện không thuộc clan nào.", ephemeral=True)
+            return
+
+        if clan_data["member_role"] == "captain":
+            await interaction.response.send_message(
+                "❌ Không thể xóa role của Captain trực tiếp. Hãy dùng `/admin role grant` để chỉ định Captain mới trước.",
+                ephemeral=True,
+            )
+            return
+
+        result = await db.admin_set_member_role(clan_data["id"], db_user["id"], "member")
+        if not result.get("success"):
+            reason_code = result.get("reason")
+            await interaction.response.send_message(f"❌ Không thể cập nhật role. ({reason_code})", ephemeral=True)
+            return
+
+        old_role = result.get("old_role")
+        new_role = result.get("new_role")
+        changed = result.get("changed", False)
+        state_text = "(không đổi)" if not changed else ""
+
+        await interaction.response.send_message(
+            f"✅ Đã xóa role nâng cao của {user.mention} trong clan **{clan_data['name']}**.\n"
+            f"• Role: `{old_role}` → `{new_role}` {state_text}\n"
+            f"• Lý do: {reason}"
+        )
+
+        await bot_utils.log_event(
+            "ADMIN_ROLE_REMOVE",
+            f"{interaction.user.mention} removed elevated role for {user.mention} in clan '{clan_data['name']}': {old_role} -> {new_role}. Reason: {reason}"
+        )
 
     # =========================================================================
     # DASHBOARD COMMAND
