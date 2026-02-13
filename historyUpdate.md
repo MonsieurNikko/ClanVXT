@@ -3,6 +3,67 @@
 
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
+## [1.3.1] - 2026-02-13
+### ✨ Feat: Side Pick ATK/DEF + Voice Limit Update
+
+> **Author: ImDaMinh**
+
+#### 📢 Discord Update
+> - **Chọn Side (Attack/Defense)**: Sau khi ban/pick map xong, 2 clan sẽ chọn bên ATK hoặc DEF cho từng map. Clan nào pick map thì đối thủ được chọn side cho map đó. Map 3 (random) → side cũng random.
+> - **Voice channel**: Tăng giới hạn từ 5 lên **6 người** mỗi phòng voice.
+> - **Fix Confirm 1 click**: Sửa lỗi phải bấm Confirm 2 lần — View callbacks giờ xử lý trực tiếp thay vì qua `_noop`.
+> - **Fix Cleanup sau Cancel**: Sửa lỗi cleanup không hoạt động khi huỷ match từ nút "Huỷ Match" trong báo cáo kết quả.
+
+#### 🔧 Technical Details
+- **Side Pick Phase**: Thêm 2 lượt mới (turn 6-7) sau ban/pick: chọn side ATK/DEF cho Map 1 và Map 2. Map 3 tự động random side.
+  - `SidePickView`: UI mới với 2 nút ⚔️ Attack / 🛡️ Defense + ❌ Cancel.
+  - `side_choices: Dict[str, Dict[str, str]]` field mới trong `MapBanPickState` — lưu `{"map_name": {"chooser": "a"|"b", "chooser_side": "attack"|"defense"}}`.
+  - Turn 6: Clan B chọn side cho Map 1 (Clan A pick). Turn 7: Clan A chọn side cho Map 2 (Clan B pick).
+  - `is_completed` updated: `>= 8` (trước: `>= 6`). Thêm `is_side_pick_phase` property.
+  - Summary embed hiển thị đầy đủ maps + sides (ai ATK, ai DEF).
+- **Voice Limit**: `user_limit=6` (trước: 5).
+- **Fix Confirm**: `MapSelectView` callbacks gọi thẳng `handle_mapbp_interaction()` thay vì `_noop`. `on_interaction` giờ chỉ là fallback post-restart.
+- **Fix Cleanup**: Thêm `"cancelled"` vào `_cleanup_checker` status check. `_cancel_match` xoá session khỏi `_active_sessions` trước khi spawn `_delayed_cleanup` → tránh double-trigger.
+- **Refactor**: `cleanup_all_channels()` → `_delete_channels()` (chỉ xoá channels, không quản lý sessions).
+- Files: `cogs/challenge.py`, `config.py`
+
+---
+
+## [1.3.0] - 2026-02-13
+### ✨ Feat: ĐẠI CHIẾN CLANS — Challenge Upgrade (Ban/Pick Map + Match Channels)
+
+> **Author: ImDaMinh**
+
+#### 📢 Discord Update
+> - **Nâng cấp Thách Đấu**: Khi một clan chấp nhận lời thách đấu, bot sẽ tự động tạo phòng thi đấu riêng (2 voice + 1 text channel) với quyền truy cập đúng cho từng clan.
+> - **Ban/Pick Map**: Trước khi trận đấu bắt đầu, 2 clan sẽ thực hiện ban/pick map theo luật: 2-2-2-2 ban, 1-1 pick, random map 3 (tổng 12 maps).
+> - **Thông báo tự động**: Bot gửi link phòng voice + text vào channel riêng của từng clan khi match được tạo.
+> - **Voice giới hạn**: Mỗi phòng voice chỉ cho tối đa 5 người join.
+> - **Báo cáo kết quả**: Embed báo cáo kết quả gửi trực tiếp trong room text match (không gửi trong arena).
+> - **Persistent**: Ban/pick embed không hết hạn, hoạt động ngay cả sau khi reset bot. State lưu vào file JSON.
+> - **Dọn dẹp tự động**: Channels sẽ bị xoá sau 5 phút khi match kết thúc (báo cáo kết quả thành công hoặc huỷ trận).
+
+#### 🔧 Technical Details
+- **New Cog**: `cogs/challenge.py` — chứa toàn bộ logic ban/pick + channel management.
+  - `MapBanPickState` dataclass: quản lý trạng thái session (maps, turns, bans, picks, channels, pending_selection).
+  - `MapSelectView`: persistent UI (select menu + ✅ Confirm / 🔁 Reset / ❌ Cancel) sử dụng `custom_id` pattern `mapbp_*`.
+  - `start_challenge_flow()`: entry point được gọi từ `arena.py`.
+  - `handle_mapbp_interaction()`: xử lý tất cả button/select interactions qua `on_interaction` listener.
+  - `create_match_channels()`: tạo channels với Discord permission overwrites + `user_limit=5` cho voice.
+  - `_continue_to_match_flow()`: sau ban/pick → reuse 100% `MatchCreatedView` từ `cogs/matches.py`, gửi trong text channel.
+  - `_delayed_cleanup()`: `asyncio.create_task` chờ 5 phút rồi xoá channels.
+  - `_cleanup_checker`: background task (mỗi 2 phút) kiểm tra match status → tự schedule cleanup khi match done.
+  - `_save_sessions()` / `_load_sessions()`: persist state ra `data/challenge_sessions.json`.
+- **Config**: Thêm `MAP_POOL` (12 maps Valorant), `MAP_BAN_TIMEOUT_SECONDS = 180`, `MATCH_CHANNEL_CLEANUP_DELAY = 300`.
+- **Arena Redirect**: `ChallengeAcceptView._accept()` giờ chỉ validate rồi gọi `start_challenge_flow()`.
+- **Channel Permissions**:
+  - Voice: `@everyone` view only, clan role = connect + speak, user_limit = 5.
+  - Text: `@everyone` view only, no send messages. Clan roles view only. Bot = full send/manage.
+- **Persistent sessions**: State lưu vào JSON, khôi phục qua `cog_load()`. Không timeout — embed sống mãi đến khi trận kết thúc.
+- Files: `cogs/challenge.py` (NEW), `cogs/arena.py`, `config.py`, `main.py`
+
+---
+
 ## [1.2.27e] - 2026-02-13
 ### ✨ Feat: Admin Manual Role Override (DB-backed)
 
