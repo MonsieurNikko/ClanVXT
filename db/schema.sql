@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS matches (
     -- Score tracking
     score_a INTEGER DEFAULT NULL,                       -- Score for Clan A
     score_b INTEGER DEFAULT NULL,                       -- Score for Clan B
+    winner_clan_id INTEGER,                             -- Final winner (confirmed or resolved)
     -- Discord message tracking (for persistent buttons)
     message_id TEXT,                                    -- Discord message ID containing buttons
     channel_id TEXT,                                    -- Discord channel ID
@@ -369,3 +370,24 @@ CREATE TABLE IF NOT EXISTS case_actions (
 
 CREATE INDEX IF NOT EXISTS idx_case_actions_case ON case_actions(case_id);
 CREATE INDEX IF NOT EXISTS idx_case_actions_type ON case_actions(action_type);
+
+-- -----------------------------------------------------------------------------
+-- LFG POSTS TABLE
+-- Tracks active "Looking for Clan" posts from free agents
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lfg_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,                           -- FK to users.id (the free agent)
+    riot_id TEXT NOT NULL,                              -- Discord profile Riot ID
+    rank TEXT NOT NULL,                                 -- Rank provided in modal
+    role TEXT NOT NULL,                                 -- Desired role (Duelist, Sentinel, etc.)
+    tracker_link TEXT,                                  -- Valorant Tracker URL
+    note TEXT,                                          -- Optional self-description
+    status TEXT NOT NULL DEFAULT 'active',              -- active, closed
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lfg_posts_user ON lfg_posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_lfg_posts_status ON lfg_posts(status);

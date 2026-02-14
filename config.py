@@ -59,6 +59,17 @@ CHALLENGE_COOLDOWN_MINUTES: int = 10  # Cooldown between challenges from same cl
 APPEAL_WINDOW_DAYS: int = 7           # Time to appeal a case
 
 # =============================================================================
+# CHALLENGE UPGRADE — "ĐẠI CHIẾN CLANS"
+# =============================================================================
+
+MAP_POOL: list = [
+    "Abyss", "Ascent", "Bind", "Breeze", "Fracture", "Haven",
+    "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Corrode",
+]
+MAP_BAN_TIMEOUT_SECONDS: int = 180       # 3 phút mỗi lượt ban/pick
+MATCH_CHANNEL_CLEANUP_DELAY: int = 300   # 5 phút sau khi match kết thúc → xoá channels
+
+# =============================================================================
 # DATABASE PATH
 # =============================================================================
 

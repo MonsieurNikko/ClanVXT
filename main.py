@@ -153,6 +153,9 @@ async def on_ready():
     await bot.load_extension("cogs.arena")
     print("✓ Loaded cog: cogs.arena")
     
+    await bot.load_extension("cogs.challenge")
+    print("✓ Loaded cog: cogs.challenge")
+    
     # Sync commands to the specific guild (instant)
     guild_obj = discord.Object(id=config.GUILD_ID)
     bot.tree.copy_global_to(guild=guild_obj)

@@ -304,75 +304,14 @@ class ChallengeAcceptView(discord.ui.View):
             await interaction.followup.send("❌ Clan của bạn không còn active.")
             return
 
-        # Get creator user record
-        creator_user = await db.get_user(self.creator_id)
-        if not creator_user:
-            creator_user = await permissions.ensure_user_exists(self.creator_id, "Unknown")
-
-        # Create the match
-        match_id = await db.create_match_v2(
-            clan_a_id=challenger["id"],
-            clan_b_id=opponent["id"],
-            creator_user_id=creator_user["id"],
-            note=f"Thách đấu từ Arena — chấp nhận bởi {interaction.user.display_name}",
-        )
-
-        # Build match embed
-        from cogs.matches import create_match_embed, MatchCreatedView
-        match = await db.get_match_with_clans(match_id)
-
-        embed = create_match_embed(
-            match,
-            "🆕 **Đang chờ kết quả...**\n\nNgười tạo match hãy báo cáo kết quả.",
-            discord.Color.blue(),
-        )
-        view = MatchCreatedView(
-            match_id=match_id,
+        # === CHALLENGE UPGRADE: redirect to ban/pick flow ===
+        from cogs.challenge import start_challenge_flow
+        await start_challenge_flow(
+            interaction=interaction,
+            challenger=challenger,
+            opponent=opponent,
             creator_id=self.creator_id,
-            clan_a_id=challenger["id"],
-            clan_b_id=opponent["id"],
-            clan_a_name=challenger["name"],
-            clan_b_name=opponent["name"],
-        )
-
-        # Send match message to arena channel
-        arena_channel = interaction.client.get_channel(self.arena_channel_id)
-        if arena_channel:
-            msg = await arena_channel.send(embed=embed, view=view)
-            await db.update_match_message_ids(match_id, str(msg.id), str(arena_channel.id))
-        else:
-            # Fallback: send in current channel
-            msg = await interaction.channel.send(embed=embed, view=view)
-            await db.update_match_message_ids(match_id, str(msg.id), str(interaction.channel_id))
-
-        # Update challenge message to show accepted
-        accepted_embed = discord.Embed(
-            title="⚔️ Thách Đấu Đã Được Chấp Nhận!",
-            description=(
-                f"**{challenger['name']}** vs **{opponent['name']}**\n\n"
-                f"✅ Chấp nhận bởi {interaction.user.mention}\n"
-                f"📋 Match #{match_id} đã được tạo"
-            ),
-            color=discord.Color.green(),
-        )
-        await interaction.message.edit(embed=accepted_embed, view=None)
-
-        # Notify challenger clan channel
-        if challenger.get("discord_channel_id"):
-            try:
-                chal_channel = interaction.client.get_channel(int(challenger["discord_channel_id"]))
-                if chal_channel:
-                    await chal_channel.send(
-                        f"✅ Clan **{opponent['name']}** đã **chấp nhận** lời thách đấu!\n"
-                        f"Match #{match_id} đã được tạo. Xem tại {arena_channel.mention if arena_channel else '#arena'}"
-                    )
-            except Exception as e:
-                print(f"[ARENA] Error notifying challenger clan: {e}")
-
-        await bot_utils.log_event(
-            "MATCH_CREATED",
-            f"Match #{match_id}: {challenger['name']} vs {opponent['name']} "
-            f"(thách đấu chấp nhận bởi {interaction.user.mention})",
+            arena_channel_id=self.arena_channel_id,
         )
 
     async def _decline(self, interaction: discord.Interaction):

@@ -83,6 +83,13 @@ async def init_db() -> None:
             await conn.commit()
             print("  ✓ Column added.")
 
+        # Check for winner_clan_id in matches
+        if "winner_clan_id" not in match_columns:
+            print("[DB] Migrating: Adding 'winner_clan_id' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN winner_clan_id INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+
         # Check for note in loans
         cursor = await conn.execute("PRAGMA table_info(loans)")
         loan_columns = [row[1] for row in await cursor.fetchall()]
@@ -91,6 +98,10 @@ async def init_db() -> None:
             await conn.execute("ALTER TABLE loans ADD COLUMN note TEXT")
             await conn.commit()
             print("  ✓ Column added.")
+            
+        # Ensure lfg_posts table exists (handled by executescript but for clarity)
+        if "lfg_posts" not in all_tables:
+             print("[DB] Initializing 'lfg_posts' table...")
 
 
 
@@ -750,7 +761,7 @@ async def report_match_v3(match_id: int, score_a: int, score_b: int) -> bool:
 
 async def confirm_match_v2(match_id: int, confirmed_by_user_id: int) -> bool:
     """
-    Confirm match result. Sets status to 'confirmed'.
+    Confirm match result. Sets status to 'confirmed' and populates winner_clan_id.
     Returns True if successful, False if match not in 'reported' status.
     """
     async with get_connection() as conn:
@@ -758,6 +769,7 @@ async def confirm_match_v2(match_id: int, confirmed_by_user_id: int) -> bool:
             """UPDATE matches SET 
                confirmed_by_user_id = ?,
                confirmed_at = datetime('now'),
+               winner_clan_id = reported_winner_clan_id,
                status = 'confirmed'
                WHERE id = ? AND status = 'reported'""",
             (confirmed_by_user_id, match_id)
@@ -787,7 +799,7 @@ async def dispute_match(match_id: int, disputed_by_user_id: int, reason: Optiona
 
 async def resolve_match(match_id: int, resolved_by_user_id: int, winner_clan_id: int, reason: str) -> bool:
     """
-    Resolve disputed match (Mod action). Sets status to 'resolved'.
+    Resolve disputed match (Mod action). Sets status to 'resolved' and populates winner_clan_id.
     Returns True if successful, False if match not in 'dispute' status.
     """
     async with get_connection() as conn:
@@ -797,9 +809,10 @@ async def resolve_match(match_id: int, resolved_by_user_id: int, winner_clan_id:
                resolved_at = datetime('now'),
                resolved_reason = ?,
                resolved_winner_clan_id = ?,
+               winner_clan_id = ?,
                status = 'resolved'
                WHERE id = ? AND status = 'dispute'""",
-            (resolved_by_user_id, reason, winner_clan_id, match_id)
+            (resolved_by_user_id, reason, winner_clan_id, winner_clan_id, match_id)
         )
         await conn.commit()
         return cursor.rowcount > 0
@@ -1735,3 +1748,54 @@ async def is_user_banned(user_id: int) -> Optional[Dict[str, Any]]:
         row = await cursor.fetchone()
         return dict(row) if row else None
 
+
+# =============================================================================
+# LFG / FREE AGENT OPERATIONS
+# =============================================================================
+
+async def create_lfg_post(user_id: int, riot_id: str, rank: str, role: str, tracker_link: str, note: str) -> int:
+    """Create a new LFG post and close previous ones for the same user."""
+    async with get_connection() as conn:
+        # Close old posts
+        await conn.execute(
+            "UPDATE lfg_posts SET status = 'closed', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'",
+            (user_id,)
+        )
+        
+        cursor = await conn.execute(
+            """INSERT INTO lfg_posts (user_id, riot_id, rank, role, tracker_link, note)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, riot_id, rank, role, tracker_link, note)
+        )
+        await conn.commit()
+        return cursor.lastrowid
+
+async def get_active_lfg_post(user_id: int) -> Optional[Dict[str, Any]]:
+    """Get the active LFG post for a user."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM lfg_posts WHERE user_id = ? AND status = 'active'",
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+async def close_lfg_post(post_id: int) -> bool:
+    """Close an LFG post."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE lfg_posts SET status = 'closed', updated_at = datetime('now') WHERE id = ?",
+            (post_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+async def get_lfg_post_by_id(post_id: int) -> Optional[Dict[str, Any]]:
+    """Get LFG post by ID."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM lfg_posts WHERE id = ?",
+            (post_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
