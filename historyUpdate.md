@@ -16,6 +16,7 @@ This document provides a cumulative history of all technical improvements, fixes
 - **Database Migration**: Thêm cột `winner_clan_id` vào bảng `matches` trong `schema.sql`.
 - **Auto-Migration**: Cập nhật `services/db.py` để tự động thêm cột `winner_clan_id` nếu database hiện tại chưa có.
 - **Manual Fix**: Thực hiện lệnh `ALTER TABLE` trực tiếp trên `clan.db` để bot có thể hoạt động lại ngay lập tức.
+- **Git Push**: Đã push toàn bộ thay đổi lên branch `feature/challenge-upgrade-v1.3.1`.
 - Files: `db/schema.sql`, `services/db.py`
 
 ---
@@ -23,7 +24,7 @@ This document provides a cumulative history of all technical improvements, fixes
 ## [1.3.1] - 2026-02-13
 ### ✨ Feat: Side Pick ATK/DEF + Voice Limit Update
 
-> **Author: ImDaMinh**
+> **Author: Nikko**
 
 #### 📢 Discord Update
 > - **Chọn Side (Attack/Defense)**: Sau khi ban/pick map xong, 2 clan sẽ chọn bên ATK hoặc DEF cho từng map. Clan nào pick map thì đối thủ được chọn side cho map đó. Map 3 (random) → side cũng random.
@@ -49,7 +50,7 @@ This document provides a cumulative history of all technical improvements, fixes
 ## [1.3.0] - 2026-02-13
 ### ✨ Feat: ĐẠI CHIẾN CLANS — Challenge Upgrade (Ban/Pick Map + Match Channels)
 
-> **Author: ImDaMinh**
+> **Author: Nikko**
 
 #### 📢 Discord Update
 > - **Nâng cấp Thách Đấu**: Khi một clan chấp nhận lời thách đấu, bot sẽ tự động tạo phòng thi đấu riêng (2 voice + 1 text channel) với quyền truy cập đúng cho từng clan.
