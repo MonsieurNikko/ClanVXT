@@ -3,6 +3,23 @@
 
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
+
+## [1.3.2] - 2026-02-14
+### 🐛 Fix: Database missing `winner_clan_id` column
+
+> **Author: Nikko**
+
+#### 📢 Discord Update
+> - **Sửa lỗi xác nhận trận đấu**: Khắc phục lỗi bot crash khi xác nhận kết quả trận đấu do thiếu dữ liệu trong database.
+
+#### 🔧 Technical Details
+- **Database Migration**: Thêm cột `winner_clan_id` vào bảng `matches` trong `schema.sql`.
+- **Auto-Migration**: Cập nhật `services/db.py` để tự động thêm cột `winner_clan_id` nếu database hiện tại chưa có.
+- **Manual Fix**: Thực hiện lệnh `ALTER TABLE` trực tiếp trên `clan.db` để bot có thể hoạt động lại ngay lập tức.
+- Files: `db/schema.sql`, `services/db.py`
+
+---
+
 ## [1.3.1] - 2026-02-13
 ### ✨ Feat: Side Pick ATK/DEF + Voice Limit Update
 
