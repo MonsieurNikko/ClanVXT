@@ -1,7 +1,70 @@
-
 # 📜 ClanVXT Changelog
 
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
+
+## [1.2.30] - 2026-02-13
+### ✨ Feat: Enhanced System Observability & Logging
+
+#### 📢 Discord Update
+> - **Hệ thống Log chi tiết hơn**: Tăng cường khả năng giám sát hệ thống bằng cách bổ sung log chi tiết cho tất cả các tương tác quan trọng.
+> - **Minh bạch hóa hoạt động**: Mọi hành động từ Tìm Clan, Quản lý Clan (Khai trừ, Bổ nhiệm), đến Báo cáo/Xác nhận trận đấu đều được ghi nhận rõ ràng trong kênh log.
+> - **Theo dõi real-time**: Admin có thể nắm bắt trạng thái hệ thống ngay lập tức thông qua console và Discord logs.
+
+#### 🔧 Technical Details
+- **Console Monitoring**: Added `print` statements to all major interaction flows.
+- **Traceability**: Detailed logs for LFG system, clan management, and match lifecycle.
+- Files: `cogs/arena.py`, `cogs/clan.py`, `cogs/matches.py`, `cogs/admin.py`
+
+---
+
+
+## [1.2.29] - 2026-02-13
+### ✨ Feat: Updated Arena Dashboard & New Tournament Rules
+
+#### 📢 Discord Update
+> - **Cập nhật giao diện Arena**: Dashboard tại kênh `#arena` đã được làm mới, trình bày gọn gàng và chuyên nghiệp hơn.
+> - **Quy định thi đấu Online mới**: Bổ sung luật bắt buộc thi đấu trong Voice Server chính, giới hạn 1 người nước ngoài (tây) và các quy định về nhân sự trong trận đấu.
+> - **Khung xử phạt nghiêm khắc**: Thiết lập hệ thống phạt 3 cấp độ (Reset Elo -> Xóa Clan -> Ban Server) đối với các hành vi vi phạm quy định thi đấu.
+
+#### 🔧 Technical Details
+- **UI Refresh**: Updated `create_arena_embed` in `cogs/arena.py` with the new formatting and added the missing **"Tìm Clan 🤝"** description.
+- **Rules Expansion**: Updated `rules_button` in `cogs/arena.py` to include detailed Online Tournament Rules, Penalty Tiers, and Purpose sections.
+- **Text Standardization**: Removed bolding from dashboard descriptions for a cleaner look.
+- Files: `cogs/arena.py`
+
+---
+
+## [1.2.28] - 2026-02-13
+### ✨ Feat: Detailed Elo Explanation & Free Agent System
+
+#### 📢 Discord Update
+> - **Hệ thống Tìm Clan (Free Agent)**: Dashboard Arena giờ đây có thêm nút **"Tìm Clan 🤝"**. Người chơi solo có thể đăng Profile (Riot ID, Rank, Role) để tìm kiếm clan phù hợp.
+> - **Kết nối Solo**: Các người chơi tự do cũng có thể bấm nút để kết nối với nhau và cùng lập team mới.
+
+#### 🔧 Technical Details
+- **Elo Transparency**: Added detailed breakdown for all Elo changes (Match Confirm, Dispute, Manual Adjust, Rollback).
+- **Log Helper**: Added `format_elo_explanation_vn` in `services/elo.py` to standardize Vietnamese explanations for Elo calculations.
+- **Enhanced Logs**: Updated `MATCH_CONFIRMED`, `MATCH_RESOLVED`, `CASE_ACTION`, and `CLAN_ELO_ADJUSTED` events to include the detailed breakdown in Discord Logs and Console.
+- **Free Agent System**: Added `lfg_posts` table and service functions.
+- **Interactive UI**: Implemented `LFGModal`, `LFGContactView`, and "Find Clan" button in `ArenaView`.
+- Files: `services/elo.py`, `cogs/matches.py`, `cogs/admin.py`, `cogs/arena.py`, `services/db.py`, `db/schema.sql`
+---
+
+## [1.2.27f] - 2026-02-13
+### 🐛 Fix: Arena Match History Score Display
+
+#### 📢 Discord Update
+> - **Sửa lỗi hiển thị tỉ số**: Khắc phục lỗi không hiện tỉ số và người thắng trong Lịch sử Match tại Arena sau khi trận đấu đã confirm.
+> - **Hiển thị linh hoạt**: Dashboard giờ đây hiển thị cả tỉ số của các trận đấu đang chờ xác nhận (status reported), giúp theo dõi kết quả nhanh chóng hơn.
+> - **Độ ổn định cao**: Khắc phục các trận đấu cũ thiếu thông tin người thắng vẫn hiển thị được tỉ số chính xác.
+
+#### 🔧 Technical Details
+- **Winner Persistence**: Updated `services/db.py` to ensure `winner_clan_id` is populated in `confirm_match_v2` and `resolve_match`.
+- **Display Resilience**: Updated `cogs/arena.py` to fallback to `reported_winner_clan_id` or `resolved_winner_clan_id` if the final winner ID is missing.
+- **Real-time Scoring**: Added support for displaying scores in the "reported" state within the Arena history.
+- Files: `cogs/arena.py`, `services/db.py`
+
+---
 
 ## [1.2.27e] - 2026-02-13
 ### ✨ Feat: Admin Manual Role Override (DB-backed)

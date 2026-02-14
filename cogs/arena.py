@@ -567,6 +567,155 @@ class ChallengeSelectView(discord.ui.View):
 
 
 # =============================================================================
+# LFG / FREE AGENT VIEWS & MODALS
+# =============================================================================
+
+class LFGContactView(discord.ui.View):
+    """View with buttons on the LFG announcement message."""
+    
+    def __init__(self, post_id: int):
+        super().__init__(timeout=None)  # Persistent
+        self.post_id = post_id
+    
+    @discord.ui.button(
+        label="Liên hệ (Captain/Vice)",
+        style=discord.ButtonStyle.primary,
+        emoji="✉️",
+        custom_id="lfg:contact_captain" # Note: format might need to include post_id if not using persistent base
+    )
+    async def contact_captain(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Allow Captain/Vice to contact the Free Agent."""
+        # This will be handled in on_interaction for persistence if we don't pass post_id in custom_id
+        pass
+
+    @discord.ui.button(
+        label="Lập team (Free Agent)",
+        style=discord.ButtonStyle.secondary,
+        emoji="🤝",
+        custom_id="lfg:connect_solo"
+    )
+    async def connect_solo(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Allow other free agents to connect."""
+        pass
+
+
+class LFGModal(discord.ui.Modal, title="🤝 Đăng Ký Tìm Clan (Free Agent)"):
+    """Modal to collect Free Agent information."""
+    
+    riot_id = discord.ui.TextInput(
+        label="Riot ID",
+        placeholder="Name#TAG (Ví dụ: TenCuaBan#VXT)...",
+        min_length=3,
+        max_length=32,
+        required=True
+    )
+    
+    rank = discord.ui.TextInput(
+        label="Rank Valorant",
+        placeholder="Ví dụ: Ascendant 3, Immortal 1...",
+        min_length=1,
+        max_length=20,
+        required=True
+    )
+    
+    role = discord.ui.TextInput(
+        label="Role chính",
+        placeholder="Ví dụ: Duelist, Sentinel, Flex...",
+        min_length=1,
+        max_length=20,
+        required=True
+    )
+    
+    tracker_link = discord.ui.TextInput(
+        label="Link Tracker (Tùy chọn)",
+        placeholder="Link tracker.gg của bạn (nếu có)...",
+        required=False
+    )
+    
+    note = discord.ui.TextInput(
+        label="Ghi chú thêm",
+        style=discord.TextStyle.paragraph,
+        placeholder="Mô tả bản thân hoặc mong muốn tìm clan...",
+        max_length=200,
+        required=False
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        user_db = await db.get_user(str(interaction.user.id))
+        if not user_db:
+            # Create user if not exists
+            await db.create_user(str(interaction.user.id), interaction.user.name)
+            user_db = await db.get_user(str(interaction.user.id))
+
+        # Save to DB
+        post_id = await db.create_lfg_post(
+            user_id=user_db["id"],
+            riot_id=self.riot_id.value,
+            rank=self.rank.value,
+            role=self.role.value,
+            tracker_link=self.tracker_link.value or "",
+            note=self.note.value or ""
+        )
+
+        # Post to chat-arena
+        channel_name = config.CHANNEL_CHAT_ARENA
+        channel = discord.utils.get(interaction.guild.channels, name=channel_name)
+        
+        if not channel:
+            await interaction.followup.send(f"❌ Không tìm thấy kênh `#{channel_name}` để đăng tin.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="🔍 Free Agent Đang Tìm Clan!",
+            description=f"{interaction.user.mention} đang tìm kiếm một bến đỗ mới.",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.add_field(name="🆔 Riot ID", value=f"`{self.riot_id.value}`", inline=True)
+        embed.add_field(name="🏆 Rank", value=f"`{self.rank.value}`", inline=True)
+        embed.add_field(name="⚔️ Role", value=f"`{self.role.value}`", inline=True)
+        
+        if self.tracker_link.value:
+            embed.add_field(name="📊 Tracker", value=f"[Xem Profile]({self.tracker_link.value})", inline=True)
+        
+        if self.note.value:
+            embed.add_field(name="📝 Ghi chú", value=self.note.value, inline=False)
+            
+        embed.set_footer(text=f"Post ID: {post_id} • Bấm nút bên dưới để liên hệ!")
+
+        # Dynamic View with Post ID in custom_ids for persistence tracking
+        view = discord.ui.View(timeout=None)
+        
+        btn_contact = discord.ui.Button(
+            label="Liên hệ (Captain/Vice)", 
+            style=discord.ButtonStyle.primary, 
+            emoji="✉️",
+            custom_id=f"lfg:contact:{post_id}"
+        )
+        btn_solo = discord.ui.Button(
+            label="Lập team (Solo)", 
+            style=discord.ButtonStyle.secondary, 
+            emoji="🤝",
+            custom_id=f"lfg:solo:{post_id}"
+        )
+        
+        view.add_item(btn_contact)
+        view.add_item(btn_solo)
+
+        await channel.send(embed=embed, view=view)
+        
+        await interaction.followup.send("✅ Đã đăng tin tìm clan tại kênh chat arena!", ephemeral=True)
+        
+        # Enhanced Logging
+        log_msg = f"👤 **{interaction.user.name}** ({interaction.user.mention}) đã đăng tin tìm clan:\n• **Riot ID**: `{self.riot_id.value}`\n• **Rank**: `{self.rank.value}`\n• **Role**: `{self.role.value}`"
+        await bot_utils.log_event("LFG_POST_CREATED", log_msg)
+        print(f"[ARENA] LFG Post created by {interaction.user.name} (Riot: {self.riot_id.value}, Rank: {self.rank.value})")
+
+
+# =============================================================================
 # ARENA VIEW (Persistent Buttons)
 # =============================================================================
 
@@ -762,8 +911,9 @@ class ArenaView(discord.ui.View):
                     display_date = "N/A"
                 
                 # Build line based on match state
-                if match.get("winner_clan_id") and match["status"] in ("confirmed", "resolved"):
-                    winner_id = match["winner_clan_id"]
+                winner_id = match.get("winner_clan_id") or match.get("reported_winner_clan_id") or match.get("resolved_winner_clan_id")
+                
+                if winner_id and match["status"] in ("confirmed", "resolved", "reported"):
                     winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
                     loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
                     
@@ -781,7 +931,10 @@ class ArenaView(discord.ui.View):
                         l_delta = abs(delta_b if winner_id == match["clan_a_id"] else delta_a)
                         elo_text = f" (`+{w_delta}` / `-{l_delta}`)"
                     
-                    line = f"{status_emoji} 🏆 **{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
+                    prefix = "✅ " if match["status"] == "confirmed" else status_emoji
+                    line = f"{prefix}**{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
+                    if match["status"] == "reported":
+                        line += " — *đang chờ xác nhận*"
                 elif match["status"] == "voided":
                     line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *Trận đấu vô hiệu*"
                 else:
@@ -791,6 +944,7 @@ class ArenaView(discord.ui.View):
                         "dispute": "tranh chấp — chờ Mod",
                     }.get(match["status"], match["status"])
                     line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
+
                 
                 line += f"\n└ 🕒 `{display_date}`"
                 match_lines.append(line)
@@ -906,6 +1060,30 @@ class ArenaView(discord.ui.View):
         from cogs.clan import ClanCreateModal
         await interaction.response.send_modal(ClanCreateModal())
         print(f"[ARENA] Opened ClanCreateModal for {interaction.user}")
+
+    @discord.ui.button(
+        label="Tìm Clan",
+        style=discord.ButtonStyle.success,
+        emoji="🤝",
+        custom_id="arena:find_clan",
+        row=1
+    )
+    async def find_clan_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Open LFG modal for solo players."""
+        print(f"[ARENA] User {interaction.user} clicked: Find Clan")
+        
+        # Check if user already in a clan
+        user_clan = await permissions.get_user_clan_by_discord_id(str(interaction.user.id))
+        if user_clan:
+            print(f"[ARENA] REJECTED: User {interaction.user.name} already in clan {user_clan['name']}")
+            await interaction.response.send_message(
+                f"❌ Bạn đã ở trong clan **{user_clan['name']}** rồi. Hãy rời clan trước khi tìm clan mới.",
+                ephemeral=True
+            )
+            return
+
+        # Show modal
+        await interaction.response.send_modal(LFGModal())
     
     @discord.ui.button(
         label="Luật Lệ", 
@@ -1007,15 +1185,48 @@ class ArenaView(discord.ui.View):
             inline=True
         )
         
-        # Section 8: Vi phạm
+        # Section 8: Quy định thi đấu online
         embed.add_field(
-            name="🚫 Vi Phạm & Hình Phạt",
+            name="🎮 Quy Định Khi Thi Đấu Clan (Online)",
+            value=(
+                "• Tất cả trận đấu clan bắt buộc phải thi đấu trong voice channel của server chính\n"
+                "• Thành viên tham gia trận phải có mặt đầy đủ trong voice để Mod có thể kiểm soát\n"
+                "• Không được tự ý sang server riêng để thi đấu\n"
+                "• Không được thay người ngoài danh sách đăng ký mà không báo trước\n"
+                "• Mỗi team chỉ được tối đa **1 người nước ngoài (tây)** trong đội hình\n"
+                "• Không được lách luật bằng cách thay người giữa trận\n"
+                "• Vi phạm giới hạn đội hình/thay người trái phép sẽ bị xử lý nghiêm"
+            ),
+            inline=False
+        )
+
+        # Section 9: Khung xử phạt
+        embed.add_field(
+            name="🚨 Khung Xử Phạt Vi Phạm",
+            value=(
+                "**Lần 1:** Reset Elo clan về mức thấp nhất: **100 Elo**\n"
+                "**Lần 2:** Xóa clan khỏi hệ thống. Thành viên không được tạo/tham gia clan khác\n"
+                "**Lần 3:** **Ban** khỏi server"
+            ),
+            inline=False
+        )
+
+        # Section 10: Vi phạm khác
+        embed.add_field(
+            name="🚫 Các Vi Phạm Khác",
             value=(
                 "• Dùng nhiều acc/smurf → **ban hệ thống**\n"
                 "• Gian lận Elo/dàn xếp → **ban vĩnh viễn**\n"
                 "• Tên clan tục tĩu/kỳ thị → **reject**\n"
                 "• Mọi quyết định cuối thuộc về **Mod**"
             ),
+            inline=False
+        )
+
+        # Section 11: Mục đích
+        embed.add_field(
+            name="📌 Mục Đích",
+            value="Đảm bảo minh bạch, công bằng và hạn chế rủi ro thay người không hợp lệ. Mod có quyền xác minh và đưa ra quyết định cuối cùng.",
             inline=False
         )
         
@@ -1160,17 +1371,18 @@ def create_arena_embed() -> discord.Embed:
     embed = discord.Embed(
         title="🏟️ ARENA - Trung Tâm Thông Tin",
         description=(
-            "Chào mừng đến với **Arena**!\n\n"
+            "Chào mừng đến với Arena!\n\n"
             "Bấm vào các nút bên dưới để xem thông tin về hệ thống Clan:\n\n"
-            "🏰 **Danh sách Clan** — Xem tất cả các clan đang hoạt động\n"
-            "🏆 **Bảng xếp hạng** — Top clan theo điểm Elo\n"
-            "⚔️ **Lịch sử Match** — Các trận đấu gần đây\n"
-            "👤 **Thông tin của tôi** — Xem thông tin clan của bạn\n"
-            "🔎 **Tra cứu người khác** — Chọn hoặc gõ tên để xem thông tin\n\n"
-            "➕ **Tạo Clan** — Tạo clan mới và mời đồng đội\n"
-            "📜 **Luật Lệ** — Xem quy định hệ thống Clan\n"
-            "🏷️ **Đổi Tên Clan** — Captain đổi tên clan mình\n\n"
-            "⚔️ **Thách Đấu** — Chọn clan đối thủ và tạo match ngay!"
+            "🏰 Danh sách Clan — Xem tất cả các clan đang hoạt động\n"
+            "🏆 Bảng xếp hạng — Top clan theo điểm Elo\n"
+            "⚔️ Lịch sử Match — Các trận đấu gần đây\n"
+            "👤 Thông tin của tôi — Xem thông tin clan của bạn\n"
+            "🔎 Tra cứu người khác — Chọn hoặc gõ tên để xem thông tin\n\n"
+            "➕ Tạo Clan — Tạo clan mới và mời đồng đội\n"
+            "🤝 Tìm Clan — Tìm clan hoặc tuyển thêm thành viên\n"
+            "📜 Luật Lệ — Xem quy định hệ thống Clan\n"
+            "🏷️ Đổi Tên Clan — Captain đổi tên clan mình\n\n"
+            "⚔️ Thách Đấu — Chọn clan đối thủ và tạo match ngay!"
         ),
         color=discord.Color.dark_gold()
     )
@@ -1202,7 +1414,7 @@ class ArenaCog(commands.Cog):
         if interaction.type != discord.InteractionType.component:
             return
         custom_id = interaction.data.get("custom_id", "")
-        if not custom_id.startswith("challenge_"):
+        if not (custom_id.startswith("challenge_") or custom_id.startswith("lfg:")):
             return
         if interaction.response.is_done():
             return
@@ -1230,6 +1442,112 @@ class ArenaCog(commands.Cog):
                     view = ChallengeAcceptView(challenger, opponent, creator_id, 0)
                     await view._decline(interaction)
                     return
+
+        # ---------------------------------------------------------------------
+        # LFG / FIND CLAN HANDLING
+        # ---------------------------------------------------------------------
+        if custom_id.startswith("lfg:"):
+            # Format: lfg:contact:POST_ID or lfg:solo:POST_ID
+            parts = custom_id.split(":")
+            if len(parts) < 3: return
+            
+            action = parts[1]
+            try:
+                post_id = int(parts[2])
+            except ValueError:
+                return
+            
+            # Get post data
+            post = await db.get_lfg_post_by_id(post_id)
+            if not post or post["status"] != "active":
+                await interaction.on_error(ValueError("Post not found or inactive")) # trigger error if needed
+                await interaction.response.send_message("❌ Tin này không còn tồn tại hoặc đã bị đóng.", ephemeral=True)
+                return
+            
+            # Get Free Agent user
+            fa_user = await db.get_user_by_id(post["user_id"])
+            if not fa_user:
+                await interaction.response.send_message("❌ Không tìm thấy thông tin người đăng tin.", ephemeral=True)
+                return
+            
+            # FA's discord ID
+            fa_discord_id = int(fa_user["discord_id"])
+            
+            if action == "contact":
+                # Check clicker is Captain/Vice of a clan
+                clicker_clan = await permissions.get_user_clan_by_discord_id(str(interaction.user.id))
+                if not clicker_clan or clicker_clan["member_role"] not in ["captain", "vice"]:
+                    await interaction.response.send_message("❌ Chỉ Captain hoặc Vice Captain của một clan mới có thể bấm nút này.", ephemeral=True)
+                    return
+                
+                # Send DM to Free Agent
+                try:
+                    fa_discord_user = await interaction.client.fetch_user(fa_discord_id)
+                    dm_embed = discord.Embed(
+                        title="🏰 Clan Đang Quan Tâm Đến Bạn!",
+                        description=(
+                            f"Clan **{clicker_clan['name']}** muốn liên hệ với bạn về tin tìm clan.\n\n"
+                            f"👤 Người liên hệ: {interaction.user.mention} ({clicker_clan['member_role'].capitalize()})\n"
+                            f"💬 Vui lòng check tin nhắn chờ hoặc chủ động nhắn tin cho họ!"
+                        ),
+                        color=discord.Color.green()
+                    )
+                    await fa_discord_user.send(embed=dm_embed)
+                    
+                    # Send DM to Captain with FA info
+                    captain_embed = discord.Embed(
+                        title="✅ Đã gửi thông báo liên hệ",
+                        description=f"Hệ thống đã gửi thông báo đến **{fa_discord_user.name}**. Bạn có thể nhắn tin cho họ ngay bây giờ.",
+                        color=discord.Color.blue()
+                    )
+                    captain_embed.add_field(name="👤 User", value=f"{fa_discord_user.mention}", inline=True)
+                    captain_embed.add_field(name="🆔 Riot ID", value=f"`{post['riot_id']}`", inline=True)
+                    await interaction.user.send(embed=captain_embed)
+                    
+                    await interaction.response.send_message("✅ Đã gửi thông báo cho cả hai bên qua DM!", ephemeral=True)
+                    
+                    # Enhanced Logging
+                    log_msg = f"🏰 Clan **{clicker_clan['name']}** ({interaction.user.mention}) đã liên hệ với Free Agent **{fa_discord_user.name}** ({fa_discord_user.mention})"
+                    await bot_utils.log_event("LFG_CONTACTED", log_msg)
+                    print(f"[ARENA] LFG Contact: {interaction.user.name} (Clan: {clicker_clan['name']}) contacted {fa_discord_user.name}")
+                except Exception as e:
+                    await interaction.response.send_message(f"❌ Không thể gửi DM: {e}", ephemeral=True)
+
+            elif action == "solo":
+                # Check clicker is NOT in a clan
+                clicker_clan = await permissions.get_user_clan_by_discord_id(str(interaction.user.id))
+                if clicker_clan:
+                    await interaction.response.send_message("❌ Bạn đã có clan rồi. Chỉ những Free Agent khác mới có thể kết nối lập team.", ephemeral=True)
+                    return
+                
+                if str(interaction.user.id) == fa_user["discord_id"]:
+                    await interaction.response.send_message("❌ Bạn không thể tự lập team với chính mình.", ephemeral=True)
+                    return
+
+                # Connect two solo players
+                try:
+                    fa_discord_user = await interaction.client.fetch_user(fa_discord_id)
+                    
+                    # Inform both
+                    msg = (
+                        f"🤝 **Kết nối thành công!**\n"
+                        f"Hai bạn đều đang tìm clan và có thể muốn lập team cùng nhau:\n"
+                        f"• {interaction.user.mention} (Riot: `{interaction.user.name}`)\n"
+                        f"• {fa_discord_user.mention} (Riot: `{post['riot_id']}`)\n\n"
+                        f"Hãy nhắn tin cho nhau để bắt đầu hành trình mới!"
+                    )
+                    
+                    await fa_discord_user.send(msg)
+                    await interaction.user.send(msg)
+                    
+                    await interaction.response.send_message("✅ Tuyệt vời! Đã gửi thông báo kết nối cho cả hai qua DM.", ephemeral=True)
+                    
+                    # Enhanced Logging
+                    log_msg = f"🤝 **{interaction.user.name}** ({interaction.user.mention}) đã kết nối với **{fa_discord_user.name}** ({fa_discord_user.mention}) để lập team solo."
+                    await bot_utils.log_event("LFG_SOLO_CONNECT", log_msg)
+                    print(f"[ARENA] LFG Solo Connect: {interaction.user.name} and {fa_discord_user.name} connected")
+                except Exception as e:
+                    await interaction.response.send_message(f"❌ Không thể gửi DM: {e}", ephemeral=True)
     
     @commands.Cog.listener()
     async def on_ready(self):
