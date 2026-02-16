@@ -3,6 +3,41 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.3.11] - 2026-02-16
+### 🛡️ Feat: Giới hạn 1 trận đấu mỗi clan
+
+#### 📢 Discord Update
+> - **Chỉ 1 trận đấu cùng lúc**: Mỗi clan chỉ được tham gia tối đa **1 trận đấu chưa hoàn thành** tại một thời điểm.
+> - **Kiểm tra 2 chiều**: Hệ thống kiểm tra cả clan gửi lẫn clan nhận trước khi cho phép gửi hoặc chấp nhận thách đấu.
+> - **Thông báo rõ ràng**: Nếu bị chặn, người dùng sẽ nhận thông báo cụ thể clan nào đang bận.
+
+#### 🔧 Technical Details
+- **New DB function**: `has_active_match(clan_id)` — checks for matches with status `created` or `reported`.
+- **Guard checks**: Added to `ChallengeSelectView.confirm` (send) and `AcceptDeclineView.accept` (accept).
+- **Structural fix**: Relocated `ChallengeSelectView` & `AcceptDeclineView` as standalone classes outside `on_interaction`.
+- Files: `services/db.py`, `cogs/arena.py`
+
+---
+
+## [1.3.10] - 2026-02-15
+### ✨ Feat: Map Veto System (BO1/BO3/BO5)
+
+#### 📢 Discord Update
+> - **Thêm lựa chọn thể thức**: Captain có thể chọn BO1, BO3 hoặc BO5 khi tạo thách đấu.
+> - **Map Veto trực quan**: Hệ thống Ban/Pick map tự động theo lượt với giao diện nút bấm tiện lợi.
+> - **Quy trình chuẩn**:
+>   - **BO1**: Ban 6 maps -> Map cuối cùng thi đấu.
+>   - **BO3/BO5**: Ban 2 maps -> Pick lần lượt -> Map còn lại là Decider (nếu cần).
+> - **Map Pool chuẩn**: Ascent, Bind, Haven, Split, Lotus, Pearl, Sunset.
+
+#### 🔧 Technical Details
+- **Schema Update**: Added `match_format`, `maps`, `veto_status` to `matches` table.
+- **New UI**: `ChallengeSelectView` (Format dropdown) & `MapVetoView` (Interactive Ban/Pick).
+- **Core Logic**: Implemented turn-based veto logic handling different sequences for BO1/3/5.
+- Files: `cogs/arena.py`, `cogs/matches.py`, `services/db.py`, `config.py`
+
+---
+
 ## [1.3.2] - 2026-02-14
 ### 🐛 Fix: Database missing `winner_clan_id` column
 

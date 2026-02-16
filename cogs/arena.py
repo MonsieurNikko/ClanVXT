@@ -85,6 +85,195 @@ class ClanDetailSelectView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+# =============================================================================
+# CHALLENGE SELECT VIEW (Format Selection + Opponent)
+# =============================================================================
+
+class ChallengeSelectView(discord.ui.View):
+    """Dropdown to select an opponent clan and match format."""
+    
+    def __init__(self, user_clan: dict, opponent_clans: list, user: discord.User, channel_id: int):
+        super().__init__(timeout=60)
+        self.user_clan = user_clan
+        self.opponent_clans = opponent_clans
+        self.user = user
+        self.channel_id = channel_id
+        self.selected_clan_id = None
+        self.selected_format = "BO1"  # Default
+
+        # 1. Opponent Select
+        options = []
+        for clan in opponent_clans:
+            label = f"{clan['name']} ({clan['elo']} Elo)"
+            if len(label) > 100:
+                label = label[:97] + "..."
+            options.append(discord.SelectOption(label=label, value=str(clan["id"])))
+        
+        if len(options) > 25:
+            options = options[:25]
+            
+        select = discord.ui.Select(
+            placeholder="Chọn đối thủ...",
+            min_values=1, max_values=1,
+            options=options, row=0
+        )
+        select.callback = self.select_callback
+        self.add_item(select)
+
+        # 2. Format Select
+        format_select = discord.ui.Select(
+            placeholder="Chọn thể thức BO1/BO3/BO5...",
+            min_values=1, max_values=1,
+            options=[
+                discord.SelectOption(label="Best of 1 (BO1)", value="BO1", description="Ban maps until 1 remains", default=True),
+                discord.SelectOption(label="Best of 3 (BO3)", value="BO3", description="Ban 2, Pick 2, Decider"),
+                discord.SelectOption(label="Best of 5 (BO5)", value="BO5", description="Ban 2, Pick 4, Decider"),
+            ],
+            row=1
+        )
+        format_select.callback = self.format_callback
+        self.add_item(format_select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        self.selected_clan_id = int(interaction.data["values"][0])
+        await interaction.response.defer()
+
+    async def format_callback(self, interaction: discord.Interaction):
+        self.selected_format = interaction.data["values"][0]
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Gửi Thách Đấu", style=discord.ButtonStyle.green, row=2)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected_clan_id:
+            return await interaction.response.send_message("❌ Vui lòng chọn clan đối thủ.", ephemeral=True)
+            
+        target_clan = next((c for c in self.opponent_clans if c["id"] == self.selected_clan_id), None)
+        if not target_clan:
+            return await interaction.response.send_message("❌ Clan không hợp lệ.", ephemeral=True)
+
+        # Check: only 1 active match per clan
+        if await db.has_active_match(self.user_clan["id"]):
+            return await interaction.response.send_message(
+                "❌ Clan của bạn hiện đang có một trận đấu chưa hoàn thành. Vui lòng hoàn thành trận đấu hiện tại trước khi gửi thách đấu mới.",
+                ephemeral=True
+            )
+        if await db.has_active_match(target_clan["id"]):
+            return await interaction.response.send_message(
+                f"❌ **{target_clan['name']}** hiện đang có một trận đấu chưa hoàn thành. Không thể gửi thách đấu.",
+                ephemeral=True
+            )
+             
+        # Create challenge embed
+        embed = discord.Embed(
+            title=f"⚔️ LỜI THÁCH ĐẤU: {self.selected_format}",
+            description=(
+                f"**{self.user_clan['name']}** muốn thách đấu **{target_clan['name']}**!\n\n"
+                f"Thể thức: **{self.selected_format}**\n"
+                f"Người gửi: {interaction.user.mention} (Captain)\n\n"
+                f"⚠️ Lưu ý: Sau khi chấp nhận, hai bên sẽ tiến hành **Ban/Pick Map** ngay lập tức."
+            ),
+            color=discord.Color.red()
+        )
+        
+        # Send to target clan's channel
+        if target_clan.get("discord_channel_id"):
+            try:
+                target_channel = interaction.guild.get_channel(int(target_clan["discord_channel_id"]))
+                if target_channel:
+                    view = AcceptDeclineView(
+                        self.user_clan, target_clan,
+                        interaction.user, self.selected_format
+                    )
+                    await target_channel.send(
+                        content=f"🔔 Có lời thách đấu từ **{self.user_clan['name']}**!",
+                        embed=embed, view=view
+                    )
+                    await interaction.response.send_message(
+                        f"✅ Đã gửi lời thách đấu **{self.selected_format}** đến {target_clan['name']}.",
+                        ephemeral=True
+                    )
+                    print(f"[ARENA] Challenge sent: {self.user_clan['name']} -> {target_clan['name']} ({self.selected_format})")
+                else:
+                    await interaction.response.send_message("❌ Không tìm thấy kênh riêng của clan đối thủ.", ephemeral=True)
+            except Exception as e:
+                print(f"[ARENA] Error sending challenge: {e}")
+                await interaction.response.send_message(f"❌ Lỗi gửi thách đấu: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Clan đối thủ chưa thiết lập kênh riêng.", ephemeral=True)
+
+
+class AcceptDeclineView(discord.ui.View):
+    """View for accepting or declining a challenge."""
+    
+    def __init__(self, challenger_clan, target_clan, challenger_user, match_format):
+        super().__init__(timeout=86400)  # 24h
+        self.challenger_clan = challenger_clan
+        self.target_clan = target_clan
+        self.challenger_user = challenger_user
+        self.match_format = match_format
+        
+    @discord.ui.button(label="Chấp Nhận", style=discord.ButtonStyle.green, custom_id="accept_challenge")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            return await interaction.response.send_message("❌ Bạn không có trong hệ thống.", ephemeral=True)
+             
+        member = await db.get_clan_member(user["id"], self.target_clan["id"])
+        if not member or member["role"] not in ["captain", "vice"]:
+            return await interaction.response.send_message("❌ Chỉ **Captain** hoặc **Vice** mới được quyền chấp nhận.", ephemeral=True)
+
+        # Check: only 1 active match per clan
+        if await db.has_active_match(self.target_clan["id"]):
+            return await interaction.response.send_message(
+                "❌ Clan của bạn hiện đang có một trận đấu chưa hoàn thành. Vui lòng hoàn thành trận hiện tại trước.",
+                ephemeral=True
+            )
+        if await db.has_active_match(self.challenger_clan["id"]):
+            return await interaction.response.send_message(
+                f"❌ **{self.challenger_clan['name']}** hiện đang có một trận đấu khác. Không thể chấp nhận.",
+                ephemeral=True
+            )
+            
+        await interaction.response.defer()
+        
+        matches_cog = interaction.client.get_cog("MatchesCog")
+        if matches_cog:
+            await matches_cog.create_match_v2(
+                interaction, self.challenger_clan, self.target_clan,
+                self.challenger_user, self.match_format
+            )
+            for child in self.children:
+                child.disabled = True
+            await interaction.followup.edit_message(message_id=interaction.message.id, view=self)
+            print(f"[ARENA] Challenge accepted: {self.target_clan['name']} accepted {self.challenger_clan['name']} ({self.match_format})")
+        else:
+            await interaction.followup.send("❌ Lỗi hệ thống: Không tìm thấy MatchesCog.", ephemeral=True)
+
+    @discord.ui.button(label="Từ Chối", style=discord.ButtonStyle.danger, custom_id="decline_challenge")
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = await db.get_user(str(interaction.user.id))
+        if not user:
+            return await interaction.response.send_message("❌ Bạn không có trong hệ thống.", ephemeral=True)
+        member = await db.get_clan_member(user["id"], self.target_clan["id"])
+        if not member or member["role"] not in ["captain", "vice"]:
+            return await interaction.response.send_message("❌ Chỉ **Captain** hoặc **Vice** mới được quyền từ chối.", ephemeral=True)
+
+        embed = discord.Embed(
+            description=f"❌ **{self.target_clan['name']}** đã từ chối lời thách đấu.",
+            color=discord.Color.dark_grey()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        
+        if self.challenger_clan.get("discord_channel_id"):
+            try:
+                ch_channel = interaction.guild.get_channel(int(self.challenger_clan["discord_channel_id"]))
+                if ch_channel:
+                    await ch_channel.send(f"❌ **{self.target_clan['name']}** đã từ chối lời thách đấu **{self.match_format}**.")
+            except:
+                pass
+        print(f"[ARENA] Challenge declined: {self.target_clan['name']} declined {self.challenger_clan['name']}")
+
+
 class ClanRenameModal(discord.ui.Modal, title="🏷️ Đổi Tên Clan"):
     """Modal for captains to rename their clan."""
     
@@ -1408,9 +1597,13 @@ class ArenaCog(commands.Cog):
             if not fa_user:
                 await interaction.response.send_message("❌ Không tìm thấy thông tin người đăng tin.", ephemeral=True)
                 return
-            
+
             # FA's discord ID
             fa_discord_id = int(fa_user["discord_id"])
+            if fa_discord_id == interaction.user.id:
+                await interaction.response.send_message("❌ Bạn không thể tự liên hệ với chính mình!", ephemeral=True)
+                return
+
             
             if action == "contact":
                 # Check clicker is Captain/Vice of a clan

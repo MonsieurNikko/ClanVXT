@@ -146,6 +146,7 @@ class AdminCog(commands.Cog):
             "ADMIN_COOLDOWN_SET",
             f"Admin {interaction.user.mention} set {kind} cooldown for {target_name} ({target_type}) for {duration_days} days. Reason: {reason}"
         )
+        print(f"[ADMIN] COOLDOWN_SET: {target_name} ({target_type}) | {kind} | {duration_days} days by {interaction.user.name}. Reason: {reason}")
 
     @cooldown_group.command(name="clear", description="Clear cooldowns")
     @app_commands.describe(
@@ -205,6 +206,7 @@ class AdminCog(commands.Cog):
             "ADMIN_COOLDOWN_CLEAR",
             f"Admin {interaction.user.mention} cleared {kind if kind else 'ALL'} cooldowns for {target_name} ({target_type})."
         )
+        print(f"[ADMIN] COOLDOWN_CLEAR: {target_name} ({target_type}) | {kind if kind else 'ALL'} by {interaction.user.name}")
 
     # =========================================================================
     # CASE MANAGEMENT COMMANDS
@@ -490,10 +492,9 @@ class AdminCog(commands.Cog):
             
             await interaction.followup.send(result_msg, ephemeral=True)
             
-            await bot_utils.log_event(
-                "CASE_ACTION",
-                f"Case #{case_id}: {interaction.user.mention} performed **{action_type}** on {target_info}. Reason: {reason}"
-            )
+            log_detail = f"Case #{case_id}: {interaction.user.mention} thực hiện **{action_type}** trên {target_info}.\nLý do: {reason}"
+            await bot_utils.log_event("CASE_ACTION", log_detail)
+            print(f"[MOD] CASE_ACTION: {log_detail}")
             
         except Exception as e:
             await interaction.followup.send(f"❌ Lỗi: {str(e)}", ephemeral=True)
@@ -707,10 +708,11 @@ class AdminCog(commands.Cog):
         
         await bot_utils.log_event(
             "CLAN_ELO_ADJUSTED",
-            f"Clan {clan['name']} Elo set to {new_elo} by {interaction.user.mention}. Reason: {reason}"
+            f"Clan **{clan['name']}** được điều chỉnh Elo bởi {interaction.user.mention}.\n"
+            f"• Thay đổi: `{clan['elo']}` → `{new_elo}`\n"
+            f"• Lý do: {reason}"
         )
-        print(f"[ADMIN] Elo adjusted for {clan['name']} to {new_elo} by {interaction.user}")
-
+        print(f"[ADMIN] CLAN_ELO_ADJUSTED: {clan['name']} ({clan['elo']} -> {new_elo}) by {interaction.user}. Reason: {reason}")
     @clan_group.command(name="set_member", description="Force move/add a member to a clan (Admin test/fix)")
     @app_commands.describe(
         user="Member cần điều chỉnh clan",
@@ -824,6 +826,7 @@ class AdminCog(commands.Cog):
                 "ADMIN_SET_MEMBER_CLAN",
                 f"{interaction.user.mention} moved {user.mention} from '{old_clan_name}' to '{target_clan['name']}' and set role to {role_result.get('new_role')}. Reason: {reason}"
             )
+            print(f"[ADMIN] SET_MEMBER_CLAN: {user.name} moved {old_clan_name} -> {target_clan['name']} | Role: {role_result.get('new_role')} by {interaction.user.name}. Reason: {reason}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi điều chỉnh clan: {e}", ephemeral=True)
 
@@ -881,6 +884,7 @@ class AdminCog(commands.Cog):
             "ADMIN_ROLE_GRANT",
             f"{interaction.user.mention} set role for {user.mention} in clan '{clan_data['name']}': {old_role} -> {new_role}. Reason: {reason}"
         )
+        print(f"[ADMIN] ROLE_GRANT: {user.name} granted {role} in {clan_data['name']} by {interaction.user.name}. Reason: {reason}")
 
     @role_group.command(name="remove", description="Remove elevated role (set user back to member) (DB update)")
     @app_commands.describe(
@@ -935,6 +939,7 @@ class AdminCog(commands.Cog):
             "ADMIN_ROLE_REMOVE",
             f"{interaction.user.mention} removed elevated role for {user.mention} in clan '{clan_data['name']}': {old_role} -> {new_role}. Reason: {reason}"
         )
+        print(f"[ADMIN] ROLE_REMOVE: Management role removed from {user.name} in {clan_data['name']} by {interaction.user.name}. Reason: {reason}")
 
     # =========================================================================
     # DASHBOARD COMMAND

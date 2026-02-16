@@ -145,6 +145,10 @@ CREATE TABLE IF NOT EXISTS matches (
     message_id TEXT,                                    -- Discord message ID containing buttons
     channel_id TEXT,                                    -- Discord channel ID
     cancel_requested_by_clan_id INTEGER,                -- ID of clan that requested cancellation
+    -- Match Veto \u0026 Format
+    match_format TEXT,                                  -- BO1, BO3, BO5
+    maps TEXT,                                          -- JSON list of selected maps
+    veto_status TEXT,                                   -- JSON state of veto process
     -- Timestamps
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (clan_a_id) REFERENCES clans(id) ON DELETE RESTRICT,

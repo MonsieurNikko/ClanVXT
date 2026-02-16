@@ -99,6 +99,28 @@ async def init_db() -> None:
             await conn.commit()
             print("  ✓ Column added.")
             
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        # Check for Veto columns in matches
+        if "match_format" not in match_columns:
+            print("[DB] Migrating: Adding 'match_format' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN match_format TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+            
+        if "maps" not in match_columns:
+            print("[DB] Migrating: Adding 'maps' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN maps TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+            
+        if "veto_status" not in match_columns:
+            print("[DB] Migrating: Adding 'veto_status' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN veto_status TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+
         # Ensure lfg_posts table exists (handled by executescript but for clarity)
         if "lfg_posts" not in all_tables:
              print("[DB] Initializing 'lfg_posts' table...")
@@ -856,6 +878,23 @@ async def clear_match_cancel_request(match_id: int) -> bool:
         )
         await conn.commit()
         return cursor.rowcount > 0
+
+
+async def has_active_match(clan_id: int) -> bool:
+    """Check if a clan already has an active (unresolved) match.
+    
+    A match is considered 'active' if its status is 'created' or 'reported'.
+    Returns True if the clan has at least one such match.
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT COUNT(*) as cnt FROM matches 
+               WHERE (clan_a_id = ? OR clan_b_id = ?) 
+               AND status IN ('created', 'reported')""",
+            (clan_id, clan_id)
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] > 0 if row else False
 
 
 async def get_match_with_clans(match_id: int) -> Optional[Dict[str, Any]]:

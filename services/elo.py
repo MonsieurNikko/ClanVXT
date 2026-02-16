@@ -318,3 +318,35 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             "k_a": k_a,
             "k_b": k_b,
         }
+
+def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
+    """
+    Format a detailed, Vietnamese explanation string from elo_result for logs.
+    """
+    if not elo_result.get("success"):
+        return f"Thất bại: {elo_result.get('reason', 'Lỗi không xác định')}"
+    
+    # K-factor explanations
+    k_a = elo_result.get("k_a", 32)
+    k_b = elo_result.get("k_b", 32)
+    k_a_desc = "Giai đoạn tân thủ" if k_a == K_FACTOR_PLACEMENT else "Giai đoạn ổn định"
+    k_b_desc = "Giai đoạn tân thủ" if k_b == K_FACTOR_PLACEMENT else "Giai đoạn ổn định"
+    
+    # Multiplier explanation
+    mult = elo_result.get("multiplier", 1.0)
+    match_count = elo_result.get("match_count_24h", 1)
+    mult_desc = f"Hệ số {mult}x (Trận thứ {match_count} trong 24h)"
+    
+    # Delta strings
+    delta_a = elo_result.get("final_delta_a", 0)
+    delta_b = elo_result.get("final_delta_b", 0)
+    delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
+    delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
+    
+    explanation = (
+        f"📊 **Chi tiết Elo Match:**\n"
+        f"• **{elo_result['clan_a_name']}**: {delta_a_str} Elo (K={k_a}: {k_a_desc}, {mult_desc})\n"
+        f"• **{elo_result['clan_b_name']}**: {delta_b_str} Elo (K={k_b}: {k_b_desc}, {mult_desc})"
+    )
+    
+    return explanation

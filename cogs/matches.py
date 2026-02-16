@@ -211,6 +211,7 @@ class MatchScoreModal(discord.ui.Modal, title="Báo cáo kết quả trận đ�
             "MATCH_REPORTED",
             f"Match #{self.match_id}: {interaction.user.mention} báo cáo kết quả `{val_a} - {val_b}`"
         )
+        print(f"[MATCH] Match #{self.match_id} reported by {interaction.user.name}: {val_a} - {val_b}")
 
 
 class CancelMatchButton(discord.ui.Button):
@@ -359,6 +360,7 @@ class DisputeReasonModal(discord.ui.Modal, title="Lý do tranh chấp"):
             "MATCH_DISPUTED",
             f"Match #{self.match_id} tranh chấp bởi {interaction.user.mention}. Lý do: {self.reason.value}"
         )
+        print(f"[MATCH] Match #{self.match_id} DISPUTED by {interaction.user.name}. Reason: {self.reason.value}")
 
 
 # =============================================================================
@@ -448,6 +450,7 @@ class MatchesCog(commands.Cog):
  
         modal = MatchScoreModal(match_id, match["clan_a_name"], match["clan_b_name"])
         await interaction.response.send_modal(modal)
+        print(f"[MATCH] User {interaction.user.name} opened MatchScoreModal for Match #{match_id}")
 
     async def handle_match_report(self, interaction: discord.Interaction, match_id: int, winner_clan_id: int, creator_id: str):
         # Only match creator can report
@@ -496,6 +499,7 @@ class MatchesCog(commands.Cog):
             "MATCH_REPORTED",
             f"Match #{match_id}: {interaction.user.mention} báo cáo {winner_name} thắng"
         )
+        print(f"[MATCH] Match #{match_id} REPORTED by {interaction.user.name}. {winner_name} won.")
 
     async def handle_match_cancel(self, interaction: discord.Interaction, match_id: int, creator_id: str):
         # 1. Get user clan
@@ -538,6 +542,7 @@ class MatchesCog(commands.Cog):
                 "MATCH_CANCEL_REQUESTED",
                 f"Match #{match_id}: {user_clan['name']} yêu cầu hủy trận đấu."
             )
+            print(f"[MATCH] Match #{match_id} cancel requested by {interaction.user.name} (Clan: {user_clan['name']})")
         elif already_requested_by == user_clan["id"]:
             # Same clan clicking again
             await interaction.response.send_message("⌛ Bạn đã yêu cầu hủy rồi. Đang chờ đối thủ xác nhận.", ephemeral=True)
@@ -556,6 +561,7 @@ class MatchesCog(commands.Cog):
                     "MATCH_CANCELLED",
                     f"Match #{match_id} bị hủy (đồng thuận bởi cả {match['clan_a_name']} và {match['clan_b_name']})."
                 )
+                print(f"[MATCH] Match #{match_id} CANCELLED by mutual agreement. (Confirmed by {interaction.user.name})")
             else:
                 await interaction.response.send_message(ERRORS["CANNOT_CANCEL"], ephemeral=True)
         
@@ -624,10 +630,12 @@ class MatchesCog(commands.Cog):
         
         await interaction.response.edit_message(embed=embed, view=None)
         
-        await bot_utils.log_event(
-            "MATCH_CONFIRMED",
-            f"Match #{match_id} xác nhận bởi {interaction.user.mention}. Elo applied: {elo_result['success']}"
-        )
+        # Detailed logging
+        explanation = elo.format_elo_explanation_vn(elo_result)
+        log_msg = f"Match #{match_id} xác nhận bởi {interaction.user.mention}.\n{explanation}"
+        
+        await bot_utils.log_event("MATCH_CONFIRMED", log_msg)
+        print(f"[ARENA] MATCH_CONFIRMED: {log_msg}")
 
     async def handle_match_dispute(self, interaction: discord.Interaction, match_id: int, opponent_clan_id: int):
         # Check user is still in opponent clan
@@ -885,11 +893,16 @@ class MatchesCog(commands.Cog):
         except Exception as e:
             print(f"Could not update original message: {e}")
         
-        await bot_utils.log_event(
-            "MATCH_RESOLVED",
-            f"Match #{match_id} xử lý bởi {interaction.user.mention}. "
-            f"Người thắng: {winner['name']}. Lý do: {reason}. Elo applied: {elo_result['success']}"
+        # Detailed logging
+        explanation = elo.format_elo_explanation_vn(elo_result)
+        log_msg = (
+            f"Match #{match_id} xử lý bởi {interaction.user.mention}.\n"
+            f"Người thắng: {winner['name']}. Lý do: {reason}.\n"
+            f"{explanation}"
         )
+        
+        await bot_utils.log_event("MATCH_RESOLVED", log_msg)
+        print(f"[RESOVLE] MATCH_RESOLVED: {log_msg}")
 
     async def callback(self, interaction: discord.Interaction):
         pass # Managed by on_interaction
@@ -902,3 +915,239 @@ class MatchesCog(commands.Cog):
 async def setup(bot: commands.Bot):
     """Setup function to add the cog to the bot."""
     await bot.add_cog(MatchesCog(bot))
+
+# =============================================================================
+# MAP VETO SYSTEM
+# =============================================================================
+
+class MapVetoView(discord.ui.View):
+    """View for interactive Map Veto (Ban/Pick) process."""
+
+    def __init__(self, match_id: int, clan_a: dict, clan_b: dict, match_format: str, maps: list):
+        super().__init__(timeout=config.MAP_BAN_TIMEOUT_SECONDS)
+        self.match_id = match_id
+        self.clan_a = clan_a
+        self.clan_b = clan_b
+        self.match_format = match_format
+        self.maps = maps  # Current pool status
+        self.banned_maps = []
+        self.picked_maps = []
+        self.turn_clan_id = clan_a["id"]  # TEAM A acts first usually
+        self.turn_count = 0 
+        self.process_log = [] # List of strings describing steps
+        
+        # Determine sequence based on format
+        # A = Clan A (Challenger), B = Clan B (Target)
+        if match_format == "BO1":
+            # Ban until 1 remains. 7 maps.
+            # Sequence: A-Ban, B-Ban, A-Ban, B-Ban, A-Ban, B-Ban -> Last Map
+            self.sequence = ["BAN", "BAN", "BAN", "BAN", "BAN", "BAN"]
+        elif match_format == "BO3":
+            # Ban 2, Pick 2, Ban 2, Decider
+            # Seq: A-Ban, B-Ban, A-Pick, B-Pick, A-Ban, B-Ban -> Decider
+            self.sequence = ["BAN", "BAN", "PICK", "PICK", "BAN", "BAN"]
+        elif match_format == "BO5":
+            # Ban 2, Pick 4, Decider (or Pick rest)
+            # Seq: A-Ban, B-Ban, A-Pick, B-Pick, A-Pick, B-Pick -> Decider
+            self.sequence = ["BAN", "BAN", "PICK", "PICK", "PICK", "PICK"]
+        else:
+            self.sequence = [] # Should not happen
+
+        self.update_buttons()
+
+    def get_current_action(self):
+        if self.turn_count < len(self.sequence):
+            return self.sequence[self.turn_count]
+        return "DECIDER"
+
+    def get_current_actor_id(self):
+        # A starts, then alternates
+        if self.turn_count % 2 == 0:
+            return self.clan_a["id"]
+        return self.clan_b["id"]
+        
+    def get_current_actor_name(self):
+        if self.turn_count % 2 == 0:
+            return self.clan_a["name"]
+        return self.clan_b["name"]
+
+    def update_buttons(self):
+        self.clear_items()
+        
+        # If process finished
+        if self.turn_count >= len(self.sequence):
+            # Remaining map is the decider (for BO1/BO3)
+            # Or just finish
+            return
+
+        action = self.get_current_action()
+        
+        # Generate buttons for remaining maps
+        remaining_maps = [m for m in self.maps if m not in self.banned_maps and m not in self.picked_maps]
+        
+        for map_name in remaining_maps:
+            style = discord.ButtonStyle.secondary
+            if action == "BAN":
+                style = discord.ButtonStyle.danger
+            elif action == "PICK":
+                style = discord.ButtonStyle.success
+                
+            btn = discord.ui.Button(label=map_name, style=style, custom_id=f"veto_{map_name}")
+            btn.callback = self.make_callback(map_name)
+            self.add_item(btn)
+
+    def make_callback(self, map_name):
+        async def callback(interaction: discord.Interaction):
+            # 1. Check user clan and role
+            user = await db.get_user(str(interaction.user.id))
+            if not user:
+                 return await interaction.response.send_message("❌ Bạn không có trong hệ thống.", ephemeral=True)
+            
+            # Identify user's clan
+            user_clan = await db.get_user_clan(user["id"])
+            if not user_clan:
+                return await interaction.response.send_message("❌ Bạn không ở trong clan nào.", ephemeral=True)
+                
+            # Check turn
+            expected_clan_id = self.get_current_actor_id()
+            if user_clan["id"] != expected_clan_id:
+                return await interaction.response.send_message(f"❌ Chưa đến lượt clan của bạn.", ephemeral=True)
+                
+            # Check permission (Captain/Vice)
+            if user_clan["member_role"] not in ["captain", "vice"]:
+                return await interaction.response.send_message("❌ Chỉ Captain/Vice mới được quyền Ban/Pick.", ephemeral=True)
+                
+            # Process Action
+            action = self.get_current_action()
+            actor_name = self.get_current_actor_name()
+            
+            if action == "BAN":
+                self.banned_maps.append(map_name)
+                self.process_log.append(f"🟥 **{actor_name}** banned **{map_name}**")
+            elif action == "PICK":
+                self.picked_maps.append(map_name)
+                self.process_log.append(f"🟦 **{actor_name}** picked **{map_name}**")
+            
+            self.turn_count += 1
+            
+            # Check if complete
+            if self.turn_count >= len(self.sequence):
+                await self.finalize_veto(interaction)
+            else:
+                self.update_buttons()
+                await interaction.response.edit_message(embed=self.create_embed(), view=self)
+                
+        return callback
+
+    def create_embed(self) -> discord.Embed:
+        action = self.get_current_action()
+        actor = self.get_current_actor_name()
+        
+        desc = (
+            f"Thể thức: **{self.match_format}**\n"
+            f"Maps: `{', '.join(self.maps)}`\n"
+            f"-----------------------------------\n"
+        )
+        
+        # Add Log
+        if self.process_log:
+            desc += "\n".join(self.process_log) + "\n"
+        
+        desc += f"-----------------------------------\n"
+        
+        if self.turn_count < len(self.sequence):
+            action_vn = "CẤM" if action == "BAN" else "CHỌN"
+            desc += f"👉 Tới lượt **{actor}** {action_vn} map."
+            color = discord.Color.gold()
+        else:
+            desc += "✅ **Veto Hoàn Tất!**"
+            color = discord.Color.green()
+            
+        embed = discord.Embed(
+            title=f"🗺️ Map Veto - Match #{self.match_id}",
+            description=desc,
+            color=color
+        )
+        # Show lists
+        if self.picked_maps:
+             embed.add_field(name="✅ Map Thi Đấu", value="\n".join([f"{i+1}. {m}" for i, m in enumerate(self.picked_maps)]), inline=False)
+        if self.banned_maps:
+             embed.add_field(name="⛔ Map Đã Cấm", value=", ".join(self.banned_maps), inline=False)
+             
+        return embed
+
+    async def finalize_veto(self, interaction: discord.Interaction):
+        # Determine final maps
+        final_maps = []
+        
+        if self.match_format == "BO1":
+            # The remaining map is the map played
+            remaining = [m for m in self.maps if m not in self.banned_maps]
+            if remaining:
+                final_maps = remaining
+                self.process_log.append(f"👉 Decider Map: **{remaining[0]}**")
+        else:
+            # BO3/BO5: Picks + Decider (if any)
+            final_maps.extend(self.picked_maps)
+            remaining = [m for m in self.maps if m not in self.banned_maps and m not in self.picked_maps]
+            if remaining and len(remaining) == 1:
+                final_maps.append(remaining[0])
+                self.process_log.append(f"👉 Decider Map: **{remaining[0]}**")
+                
+        # Update DB
+        import json
+        await db.update_match_veto(self.match_id, json.dumps(final_maps), json.dumps(self.process_log))
+        
+        # Finish
+        embed = self.create_embed()
+        embed.title = f"✅ Map Veto Hoàn Tất - Match #{self.match_id}"
+        embed.color = discord.Color.green()
+        embed.clear_fields()
+        embed.add_field(name="🏟️ MAP THI ĐẤU", value="\n".join([f"**{i+1}. {m}**" for i, m in enumerate(final_maps)]), inline=False)
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+        
+        # Notify channel (Standard Match Created Msg)
+        match = await db.get_match_with_clans(self.match_id)
+        if not match: return
+        
+        # Send FINAL Match Ready Embed to both channel
+        # We can reuse the channel logic from create_match
+        pass # The view will stop here, user sees the result.
+
+
+# =============================================================================
+# EXTEND MATCHESCOG
+# =============================================================================
+
+    async def create_match_v2(self, interaction: discord.Interaction, clan_a: dict, clan_b: dict, creator_user: discord.User, match_format: str):
+        """Create a match and start Veto."""
+        
+        # Create match in DB
+        match_id = await db.create_match(clan_a["id"], clan_b["id"], str(creator_user.id))
+        
+        # Set format
+        await db.update_match_format(match_id, match_format)
+
+        # Map Pool from Config
+        pool = config.MAP_POOL.copy()
+        
+        # Start Veto
+        veto_view = MapVetoView(match_id, clan_a, clan_b, match_format, pool)
+        embed = veto_view.create_embed()
+        
+        await interaction.followup.send(embed=embed, view=veto_view)
+        
+        # Also notify Clan A's channel if interaction was in Clan B's channel
+        # Actually, this is tricky because Veto requires buttons.
+        # Best approach: Run Veto in the channel where "Accept" was clicked (Target/Clan B channel)
+        # Or create a shared channel? But we don't do that.
+        # So we run it in the current channel.
+        # We should notify Clan A that match is accepted and Veto is happening in Clan B's channel?
+        # Or just run it.
+        
+        # Log
+        await bot_utils.log_event(
+            "MATCH_CREATED",
+            f"Match #{match_id} created: {clan_a['name']} vs {clan_b['name']} ({match_format})"
+        )

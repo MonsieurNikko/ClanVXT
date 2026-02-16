@@ -123,12 +123,14 @@ class ClanCreateModal(discord.ui.Modal, title="Create Clan"):
             return
         
         # Show member select
-        view = MemberSelectView(name, self.description.value or "")
+        view = MemberSelectView(self.clan_name.value, self.description.value or "")
         await interaction.response.send_message(
-            f"**Creating Clan:** {name}\n\nSelect **4 members** to invite (you + 4 = 5 total):",
+            f"🏰 **Clan: {self.clan_name.value}**\n"
+            f"Hãy chọn **5 thành viên** (bao gồm cả bạn) để gửi lời mời thành lập clan.",
             view=view,
             ephemeral=True
         )
+        print(f"[CLAN] User {interaction.user.name} submitted ClanCreateModal for '{self.clan_name.value}'")
 
 
 class MemberSelectView(discord.ui.View):
@@ -284,12 +286,13 @@ class ConfirmCreateButton(discord.ui.Button):
             msg += f"\n\n⚠️ Could not DM: {', '.join(dm_failures)} (they may have DMs disabled)"
         
         await interaction.followup.send(content=msg, ephemeral=True)
+        print(f"[CLAN] Clan creation confirmed by {interaction.user.name} for '{self.clan_name}'. Invitations sent to {len(self.members)} members.")
 
 
 class CancelButton(discord.ui.Button):
     """Generic cancel button."""
     
-    def __init__(self):
+    def __init__(self, ):
         super().__init__(label="Cancel", style=discord.ButtonStyle.grey)
     
     async def callback(self, interaction: discord.Interaction):
@@ -1023,6 +1026,7 @@ class ClanCog(commands.Cog):
             "MEMBER_LEAVE",
             f"{interaction.user.mention} left clan '{clan_name}'. Cooldown: {config.COOLDOWN_DAYS} days."
         )
+        print(f"[CLAN] User {interaction.user.name} left clan {clan_name}")
         
         await interaction.followup.send(
             f"✅ Bạn đã rời clan **{clan_name}**.\n"
@@ -1088,6 +1092,7 @@ class ClanCog(commands.Cog):
             "CLAN_DISBANDED",
             f"Clan '{clan_name}' disbanded by captain {interaction.user.mention}"
         )
+        print(f"[CLAN] Clan {clan_name} disbanded by {interaction.user.name}")
         
         await interaction.followup.send(
             f"✅ Clan **{clan_name}** đã được giải tán.\n"
@@ -1139,6 +1144,7 @@ class ClanCog(commands.Cog):
             "MEMBER_PROMOTED",
             f"{member.mention} promoted to Vice Captain in '{clan_data['name']}' by {interaction.user.mention}"
         )
+        print(f"[CLAN] Member {member.name} promoted to Vice Captain in {clan_data['name']} by {interaction.user.name}")
         
         await interaction.response.send_message(
             f"✅ {member.mention} đã được thăng chức thành **Vice Captain**!",
@@ -1272,6 +1278,7 @@ class ClanCog(commands.Cog):
                 "CLAN_INVITE_SENT",
                 f"{interaction.user.mention} invited {member.mention} to clan '{clan_data['name']}'"
             )
+            print(f"[CLAN] Invite sent: {interaction.user.name} invited {member.name} to {clan_data['name']}")
             
         except discord.Forbidden:
             await interaction.response.send_message(
@@ -1319,6 +1326,7 @@ class ClanCog(commands.Cog):
             "MEMBER_DEMOTED",
             f"{member.mention} demoted from Vice Captain in '{clan_data['name']}' by {interaction.user.mention}"
         )
+        print(f"[CLAN] Member {member.name} demoted from Vice Captain in {clan_data['name']} by {interaction.user.name}")
         
         await interaction.response.send_message(
             f"✅ {member.mention} đã bị giáng chức xuống **Thành viên**.",
@@ -1376,6 +1384,7 @@ class ClanCog(commands.Cog):
 
         # Remove from clan
         await db.remove_member(target_user["id"], clan_id)
+        print(f"[CLAN] Member {member.name} kicked from {clan_name} by {interaction.user.name}")
         
         # Apply cooldown to kicked member
         cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()

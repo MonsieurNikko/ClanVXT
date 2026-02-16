@@ -5,8 +5,9 @@ Tất cả các Agent (AI coding assistant) khi tham gia phát triển dự án 
 ## 1. Quy Trình Cập Nhật (Workflow)
 - **Changelog**: Bất kỳ thay đổi nào (tính năng mới, sửa lỗi) ĐỀU PHẢI được ghi vào file `historyUpdate.md`.
     - Format: Sử dụng heading `## [Version] - YYYY-MM-DD`.
-    - Tăng version (patch hoặc minor) cho mỗi lần commit.
-    - Cần có section `📢 Discord Update` (thông tin ngắn gọn cho user) và `🔧 Technical Details` (thông tin kỹ thuật cho dev/agent).
+    - **Versioning**: Sử dụng số thứ tự tăng dần cho mỗi bản cập nhật (ví dụ: `1.2.27` -> `1.2.28`). **KHÔNG** sử dụng chữ cái (ví dụ: `1.2.27a`) trừ khi có lý do cực kỳ đặc biệt.
+    - **📢 Discord Update**: Chỉ chứa các thông tin liên quan trực tiếp đến trải nghiệm của người chơi (Player-facing). KHÔNG ghi các thay đổi liên quan đến Admin, Mod hay Dev tại đây.
+    - **🔧 Technical Details**: Ghi nhận toàn bộ thay đổi kỹ thuật, bao gồm cả các công cụ/lệnh cho Admin/Mod và các thay đổi logic phía sau.
 - **Git Commit**: Commit message phải rõ ràng, ví dụ: `feat: add something`, `fix: resolve issue`. Đính kèm hash commit vào `walkthrough.md` nếu đang làm việc theo session.
 
 ## 2. Tiêu Chuẩn Code (Coding Standards)
