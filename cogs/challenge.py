@@ -674,8 +674,8 @@ async def _cancel_match(bot: commands.Bot, state: MapBanPickState, reason: str =
     except Exception as e:
         print(f"[CHALLENGE] Error cancelling match #{state.match_id} in DB: {e}")
 
-    # Remove from active sessions BEFORE delayed cleanup to prevent double-trigger
-    _active_sessions.pop(state.match_id, None)
+    # Keep session alive — _delayed_cleanup or _cleanup_checker will remove it
+    # after channels are actually deleted (survives bot restart)
     _save_sessions()
 
     # Schedule delayed cleanup (5 min)
@@ -703,6 +703,10 @@ async def _delayed_cleanup(bot: commands.Bot, state: MapBanPickState):
                 )
         await asyncio.sleep(config.MATCH_CHANNEL_CLEANUP_DELAY)
         await _delete_channels(bot, state)
+        # NOW remove from active sessions (after channels are actually deleted)
+        _active_sessions.pop(state.match_id, None)
+        _save_sessions()
+        print(f"[CHALLENGE] Session #{state.match_id} removed after cleanup")
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -1131,7 +1135,8 @@ class ChallengeCog(commands.Cog):
 
     @tasks.loop(minutes=2)
     async def _cleanup_checker(self):
-        """Periodically check if matches have been resolved → schedule delayed cleanup."""
+        """Periodically check if matches have been resolved → clean up channels immediately.
+        This handles cases where _delayed_cleanup was lost due to bot restart."""
         if not _active_sessions:
             return
 
@@ -1139,17 +1144,19 @@ class ChallengeCog(commands.Cog):
         for mid, state in list(_active_sessions.items()):
             try:
                 match = await db.get_match(mid)
-                if match and match["status"] in ("confirmed", "voided", "cancelled"):
+                if match and match["status"] in ("confirmed", "voided", "cancelled", "resolved"):
                     to_cleanup.append(state)
             except Exception:
                 pass
 
         for state in to_cleanup:
-            print(f"[CHALLENGE] Match #{state.match_id} resolved — scheduling cleanup in {config.MATCH_CHANNEL_CLEANUP_DELAY // 60} min")
-            # Remove from active sessions first so we don't trigger again
+            print(f"[CHALLENGE] Match #{state.match_id} resolved — cleaning up channels now (checker)")
+            try:
+                await _delete_channels(self.bot, state)
+            except Exception as e:
+                print(f"[CHALLENGE] Checker cleanup error for #{state.match_id}: {e}")
             _active_sessions.pop(state.match_id, None)
             _save_sessions()
-            asyncio.create_task(_delayed_cleanup(self.bot, state))
 
     @_cleanup_checker.before_loop
     async def _before_cleanup(self):

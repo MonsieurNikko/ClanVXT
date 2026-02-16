@@ -3,6 +3,21 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.3.13] - 2026-02-16
+### 🔧 Feat: Admin Match Resolve + Channel Cleanup Fix
+
+#### 📢 Discord Update
+> - `/admin match_resolve` — Tạo trận đấu thủ công và tự tính Elo theo công thức chuẩn. Dùng khi cần bù trận bị xóa nhầm.
+> - **Fix bug**: Kênh match không tự xóa sau 5 phút khi cancel. Nguyên nhân: session bị xóa trước khi cleanup chạy, nếu bot restart thì mất luôn.
+
+#### 🔧 Technical Details
+- **New DB function**: `create_admin_match()` — creates match directly in `resolved` status.
+- **New admin command**: `match_resolve` — validates clans, score, winner, applies Elo.
+- **Bugfix**: `_cancel_match` now keeps session alive until `_delayed_cleanup` finishes. `_cleanup_checker` deletes channels immediately on restart for cancelled/resolved matches.
+- Files: `services/db.py`, `cogs/admin.py`, `cogs/challenge.py`
+
+---
+
 ## [1.3.12] - 2026-02-16
 ### 🔧 Feat: Admin Match Management Commands
 

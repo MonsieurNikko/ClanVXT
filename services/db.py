@@ -924,6 +924,29 @@ async def get_pending_matches() -> list:
         return [dict(r) for r in rows]
 
 
+async def create_admin_match(
+    clan_a_id: int, 
+    clan_b_id: int, 
+    winner_clan_id: int,
+    score_a: int,
+    score_b: int,
+    admin_user_id: int,
+    note: str = "Admin force resolve"
+) -> int:
+    """Create a match directly in 'resolved' status for admin Elo correction."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """INSERT INTO matches 
+               (clan_a_id, clan_b_id, creator_user_id, status, score_a, score_b, 
+                winner_clan_id, note) 
+               VALUES (?, ?, ?, 'resolved', ?, ?, ?, ?)""",
+            (clan_a_id, clan_b_id, admin_user_id, score_a, score_b, 
+             winner_clan_id, note)
+        )
+        await conn.commit()
+        return cursor.lastrowid
+
+
 async def get_match_with_clans(match_id: int) -> Optional[Dict[str, Any]]:
     """Get match with clan names included."""
     async with get_connection() as conn:

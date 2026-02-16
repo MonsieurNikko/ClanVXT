@@ -76,6 +76,7 @@
 | `/admin loan fix_roles` | Scan all active loans and fix Discord roles for loaned members. | Mod Role. |
 | `/admin match_pending` | Xem danh sách trận đấu đang chờ kết quả (`created`/`reported`). | Mod Role. |
 | `/admin match_cancel <match_id> [reason]` | Hủy trận đấu rác/stale theo ID. | Mod Role. |
+| `/admin match_resolve <clan_a> <clan_b> <winner> <score_a> <score_b> [reason]` | Tạo trận thủ công + tự tính Elo. | Mod Role. |
 
 ### Report & Appeal Commands
 | Command | Description | Requirements |

@@ -13,7 +13,7 @@ import json
 
 import config
 from services import db, cooldowns, moderation, permissions
-from services import bot_utils
+from services import bot_utils, elo
 
 
 class AdminCog(commands.Cog):
@@ -998,6 +998,119 @@ class AdminCog(commands.Cog):
         else:
             await interaction.followup.send(
                 f"❌ Không thể hủy trận **#{match_id}**. Trận này không tồn tại hoặc đã được xử lý.",
+                ephemeral=True
+            )
+
+    @admin_group.command(name="match_resolve", description="Tạo và tính điểm trận đấu thủ công (Admin)")
+    @app_commands.describe(
+        clan_a="Tên clan A",
+        clan_b="Tên clan B",
+        winner="Tên clan thắng (phải trùng clan_a hoặc clan_b)",
+        score_a="Số trận thắng của clan A (VD: 2)",
+        score_b="Số trận thắng của clan B (VD: 1)",
+        reason="Ghi chú (không bắt buộc)"
+    )
+    async def match_resolve(
+        self, interaction: discord.Interaction,
+        clan_a: str, clan_b: str, winner: str,
+        score_a: int, score_b: int,
+        reason: str = "Admin manual resolve"
+    ):
+        """Create a match record and apply Elo manually."""
+        if not await self.check_mod(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Look up clans
+        clan_a_data = await db.get_clan(clan_a)
+        if not clan_a_data:
+            clan_a_data = await db.get_clan_any_status(clan_a)
+        if not clan_a_data:
+            return await interaction.followup.send(f"❌ Không tìm thấy clan **{clan_a}**.", ephemeral=True)
+
+        clan_b_data = await db.get_clan(clan_b)
+        if not clan_b_data:
+            clan_b_data = await db.get_clan_any_status(clan_b)
+        if not clan_b_data:
+            return await interaction.followup.send(f"❌ Không tìm thấy clan **{clan_b}**.", ephemeral=True)
+
+        if clan_a_data["id"] == clan_b_data["id"]:
+            return await interaction.followup.send("❌ Không thể tạo trận giữa cùng một clan.", ephemeral=True)
+
+        # Determine winner
+        winner_data = None
+        if winner.lower() == clan_a_data["name"].lower():
+            winner_data = clan_a_data
+        elif winner.lower() == clan_b_data["name"].lower():
+            winner_data = clan_b_data
+        else:
+            return await interaction.followup.send(
+                f"❌ Tên clan thắng phải trùng với **{clan_a_data['name']}** hoặc **{clan_b_data['name']}**.",
+                ephemeral=True
+            )
+
+        # Validate score matches winner
+        if winner_data["id"] == clan_a_data["id"] and score_a <= score_b:
+            return await interaction.followup.send(
+                f"❌ Score không hợp lệ: **{clan_a_data['name']}** thắng nhưng score_a ({score_a}) <= score_b ({score_b}).",
+                ephemeral=True
+            )
+        if winner_data["id"] == clan_b_data["id"] and score_b <= score_a:
+            return await interaction.followup.send(
+                f"❌ Score không hợp lệ: **{clan_b_data['name']}** thắng nhưng score_b ({score_b}) <= score_a ({score_a}).",
+                ephemeral=True
+            )
+
+        # Get admin user record
+        admin_user = await db.get_user(str(interaction.user.id))
+        admin_user_id = admin_user["id"] if admin_user else 0
+
+        # Create match in resolved status
+        match_id = await db.create_admin_match(
+            clan_a_id=clan_a_data["id"],
+            clan_b_id=clan_b_data["id"],
+            winner_clan_id=winner_data["id"],
+            score_a=score_a,
+            score_b=score_b,
+            admin_user_id=admin_user_id,
+            note=f"{reason} (by {interaction.user.display_name})"
+        )
+
+        # Apply Elo
+        elo_result = await elo.apply_match_result(match_id, winner_data["id"])
+
+        if elo_result["success"]:
+            loser_name = clan_b_data["name"] if winner_data["id"] == clan_a_data["id"] else clan_a_data["name"]
+            explanation = elo.format_elo_explanation_vn(elo_result)
+
+            embed = discord.Embed(
+                title="✅ Trận Đấu Đã Được Tạo & Tính Điểm",
+                description=(
+                    f"**{clan_a_data['name']}** vs **{clan_b_data['name']}**\n"
+                    f"Match #{match_id}\n\n"
+                    f"🏆 Kết quả: **{winner_data['name']}** thắng {score_a}-{score_b}\n\n"
+                    f"{explanation}"
+                ),
+                color=discord.Color.green()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+            log_msg = (
+                f"⚖️ {interaction.user.mention} tạo trận thủ công **#{match_id}**: "
+                f"{clan_a_data['name']} vs {clan_b_data['name']} — "
+                f"{winner_data['name']} thắng {score_a}-{score_b} "
+                f"(+{elo_result.get('final_delta_a', 0)}/{elo_result.get('final_delta_b', 0)}). "
+                f"Lý do: {reason}"
+            )
+            await bot_utils.log_event("MATCH_ADMIN_RESOLVE", log_msg)
+            print(f"[ADMIN] MATCH_RESOLVE: #{match_id} created by {interaction.user.name}")
+        else:
+            await interaction.followup.send(
+                f"⚠️ Trận #{match_id} đã tạo nhưng không thể tính Elo.\n"
+                f"Lý do: {elo_result.get('reason', 'Unknown')}\n"
+                f"Clans inactive: {', '.join(elo_result.get('inactive_clans', []))}\n"
+                f"Clans frozen: {', '.join(elo_result.get('frozen_clans', []))}",
                 ephemeral=True
             )
 
