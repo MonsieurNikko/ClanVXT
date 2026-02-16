@@ -14,6 +14,7 @@ This document provides a cumulative history of all technical improvements, fixes
 - **New DB function**: `create_admin_match()` — creates match directly in `resolved` status.
 - **New admin command**: `match_resolve` — validates clans, score, winner, applies Elo.
 - **New feature**: Donation System — added `/arena` Donate button with configurable info (PayPal/Bank).
+- **Map Pool Update**: Added full competitive map list (12 maps) to support Ban/Pick logic (8 bans). Added: Breeze, Fracture, Icebox, Abyss, Corrode.
 - **Bugfix**: `_cancel_match` now keeps session alive until `_delayed_cleanup` finishes. `_cleanup_checker` deletes channels immediately on restart for cancelled/resolved matches.
 - Files: `services/db.py`, `cogs/admin.py`, `cogs/challenge.py`, `cogs/arena.py`, `config.py`
 

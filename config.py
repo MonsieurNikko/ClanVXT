@@ -83,7 +83,8 @@ DONATE_IMAGE_URL: str = ""   # Ảnh QR hoặc banner (nếu có)
 # =============================================================================
 
 MAP_POOL: list = [
-    "Ascent", "Bind", "Haven", "Split", "Lotus", "Pearl", "Sunset"
+    "Ascent", "Bind", "Haven", "Split", "Lotus", "Pearl", "Sunset",
+    "Breeze", "Fracture", "Icebox", "Abyss", "Corrode"
 ]
 MAP_BAN_TIMEOUT_SECONDS: int = 180       # 3 phút mỗi lượt ban/pick
 MATCH_CHANNEL_CLEANUP_DELAY: int = 300   # 5 phút sau khi match kết thúc → xoá channels
