@@ -189,13 +189,25 @@ Thách đấu (Challenge)
 Clan có thể thách đấu clan khác thông qua nút ⚔️ Thách đấu trên bảng #arena.
 
 
+Khi gửi thách đấu, Captain/Vice chọn **thể thức** (BO1 / BO3 / BO5) và clan đối thủ.
+
+
 Lời thách đấu được gửi vào kênh chat riêng của clan đối thủ, với nút Chấp nhận và Từ chối.
 
 
-Bất kỳ thành viên của clan đối thủ đều có thể chấp nhận hoặc từ chối lời thách.
+Chỉ Captain hoặc Vice Captain của clan đối thủ mới có quyền chấp nhận hoặc từ chối lời thách.
 
 
-Nếu chấp nhận, trận đấu được tạo tự động trong #arena.
+**Giới hạn**: Mỗi clan chỉ được tham gia tối đa **1 trận đấu chưa hoàn thành** tại một thời điểm. Phải hoàn thành trận hiện tại trước khi gửi hoặc nhận thách đấu mới.
+
+
+Nếu chấp nhận, hai bên tiến hành **Ban/Pick Map** (Map Veto) ngay lập tức:
+- **BO1**: Hai bên lần lượt ban map cho đến khi còn lại 1 map thi đấu.
+- **BO3**: Ban 2 map mỗi bên → Pick 1 map mỗi bên → Ban 2 map mỗi bên → Map còn lại là Decider.
+- **BO5**: Ban 2 map mỗi bên → Pick 2 map mỗi bên → Map còn lại là Decider.
+
+
+Sau khi Map Veto hoàn tất, trận đấu được tạo tự động.
 
 
 Nếu từ chối, clan thách đấu sẽ được thông báo.

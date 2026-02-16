@@ -3,6 +3,20 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.3.12] - 2026-02-16
+### 🔧 Feat: Admin Match Management Commands
+
+#### 📢 Discord Update
+> - `/admin match_pending` — Xem danh sách tất cả trận đấu đang chờ kết quả.
+> - `/admin match_cancel <id> [reason]` — Hủy trận đấu rác/stale theo ID.
+
+#### 🔧 Technical Details
+- **New DB functions**: `force_cancel_match(match_id, reason)`, `get_pending_matches()`.
+- **New admin commands**: `match_pending`, `match_cancel` in `cogs/admin.py`.
+- Files: `services/db.py`, `cogs/admin.py`
+
+---
+
 ## [1.3.11] - 2026-02-16
 ### 🛡️ Feat: Giới hạn 1 trận đấu mỗi clan
 

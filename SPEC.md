@@ -25,6 +25,9 @@
 
 **Match Button Workflow:**
 - Sau khi tạo, tin nhắn hiển thị: `[Tên Clan A Thắng]` `[Tên Clan B Thắng]` `[Hủy]`
+- **Thể thức**: Captain chọn BO1, BO3, hoặc BO5 khi gửi thách đấu.
+- **Map Veto**: Sau khi đối thủ chấp nhận, hai bên tiến hành ban/pick map theo thể thức đã chọn.
+- **Giới hạn 1 trận**: Mỗi clan chỉ được tham gia tối đa 1 trận đấu chưa hoàn thành tại một thời điểm.
 - **Report**: Cả hai clan tham gia trận đều có thể bấm nút báo cáo kết quả (nhập tỉ số cụ thể VD: 2-1). Sau khi một bên báo, bot gửi tin nhắn kèm tỉ số vào **kênh chat riêng của đối phương** để xác nhận.
 - **Hủy Match đồng thuận**: Một bên yêu cầu hủy → Bên kia phải xác nhận hủy. Chỉ được phép trước khi kết quả được báo cáo.
 - **Cooldown**: Có thời gian chờ 10 phút giữa các lần tạo trận để tránh spam.
@@ -71,6 +74,8 @@
 | `/admin unfreeze <clan_name>` | Unfreeze a clan. | Mod Role. |
 | `/admin clan set_elo <clan_name> <value>` | Manually set Elo for a clan. | Mod Role. |
 | `/admin loan fix_roles` | Scan all active loans and fix Discord roles for loaned members. | Mod Role. |
+| `/admin match_pending` | Xem danh sách trận đấu đang chờ kết quả (`created`/`reported`). | Mod Role. |
+| `/admin match_cancel <match_id> [reason]` | Hủy trận đấu rác/stale theo ID. | Mod Role. |
 
 ### Report & Appeal Commands
 | Command | Description | Requirements |

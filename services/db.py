@@ -897,6 +897,33 @@ async def has_active_match(clan_id: int) -> bool:
         return row["cnt"] > 0 if row else False
 
 
+async def force_cancel_match(match_id: int, reason: str = None) -> bool:
+    """Force cancel a match by setting its status to 'cancelled'."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "UPDATE matches SET status = 'cancelled', note = COALESCE(?, note) WHERE id = ? AND status IN ('created', 'reported')",
+            (reason, match_id)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
+
+async def get_pending_matches() -> list:
+    """Get all matches that are in 'created' or 'reported' status."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT m.id, m.status, m.created_at, m.match_format,
+                      ca.name as clan_a_name, cb.name as clan_b_name
+               FROM matches m
+               JOIN clans ca ON m.clan_a_id = ca.id
+               JOIN clans cb ON m.clan_b_id = cb.id
+               WHERE m.status IN ('created', 'reported')
+               ORDER BY m.created_at DESC"""
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
 async def get_match_with_clans(match_id: int) -> Optional[Dict[str, Any]]:
     """Get match with clan names included."""
     async with get_connection() as conn:

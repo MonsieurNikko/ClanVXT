@@ -942,6 +942,66 @@ class AdminCog(commands.Cog):
         print(f"[ADMIN] ROLE_REMOVE: Management role removed from {user.name} in {clan_data['name']} by {interaction.user.name}. Reason: {reason}")
 
     # =========================================================================
+    # MATCH MANAGEMENT
+    # =========================================================================
+    
+    @admin_group.command(name="match_pending", description="Xem danh sách các trận đấu đang chờ kết quả")
+    async def match_pending(self, interaction: discord.Interaction):
+        """List all matches stuck in 'created' or 'reported' status."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        pending = await db.get_pending_matches()
+        
+        if not pending:
+            return await interaction.followup.send("✅ Không có trận đấu nào đang chờ kết quả.", ephemeral=True)
+        
+        lines = []
+        for m in pending:
+            fmt = f" ({m['match_format']})" if m.get('match_format') else ""
+            lines.append(
+                f"**#{m['id']}** — {m['clan_a_name']} vs {m['clan_b_name']}{fmt}\n"
+                f"└ Status: `{m['status']}` | 🕒 {m['created_at']}"
+            )
+        
+        embed = discord.Embed(
+            title=f"📋 Trận Đấu Đang Chờ ({len(pending)})",
+            description="\n\n".join(lines),
+            color=discord.Color.orange()
+        )
+        embed.set_footer(text="Dùng /admin match_cancel <id> để hủy trận rác")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        print(f"[ADMIN] MATCH_PENDING: {interaction.user.name} listed {len(pending)} pending matches")
+
+    @admin_group.command(name="match_cancel", description="Hủy trận đấu đang chờ kết quả (Admin)")
+    @app_commands.describe(
+        match_id="ID trận đấu cần hủy",
+        reason="Lý do hủy (không bắt buộc)"
+    )
+    async def match_cancel(self, interaction: discord.Interaction, match_id: int, reason: str = "Admin force cancel"):
+        """Force cancel a pending match."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        success = await db.force_cancel_match(match_id, reason)
+        if success:
+            await interaction.followup.send(
+                f"✅ Đã hủy trận đấu **#{match_id}**.\nLý do: {reason}",
+                ephemeral=True
+            )
+            log_msg = f"🗑️ {interaction.user.mention} đã hủy trận đấu **#{match_id}**. Lý do: {reason}"
+            await bot_utils.log_event("MATCH_FORCE_CANCEL", log_msg)
+            print(f"[ADMIN] MATCH_FORCE_CANCEL: #{match_id} cancelled by {interaction.user.name}. Reason: {reason}")
+        else:
+            await interaction.followup.send(
+                f"❌ Không thể hủy trận **#{match_id}**. Trận này không tồn tại hoặc đã được xử lý.",
+                ephemeral=True
+            )
+
+    # =========================================================================
     # DASHBOARD COMMAND
     # =========================================================================
     
