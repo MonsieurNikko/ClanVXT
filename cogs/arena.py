@@ -1364,6 +1364,30 @@ class ArenaView(discord.ui.View):
         print(f"[ARENA] Sent rules to {interaction.user}")
 
     @discord.ui.button(
+        label="Donate", 
+        style=discord.ButtonStyle.secondary,
+        emoji="☕",
+        custom_id="arena:donate",
+        row=1
+    )
+    async def donate_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show donation info."""
+        print(f"[ARENA] User {interaction.user} clicked: Donate")
+        
+        embed = discord.Embed(
+            title="☕ Ủng Hộ Đội Ngũ Phát Triển",
+            description=config.DONATE_DESCRIPTION,
+            color=discord.Color.gold()
+        )
+        
+        if config.DONATE_IMAGE_URL:
+            embed.set_image(url=config.DONATE_IMAGE_URL)
+        
+        embed.set_footer(text="Cảm ơn tấm lòng của bạn! ❤️ - Server không thu phí, tiền donate là tự nguyện.")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
         label="Đổi Tên Clan", 
         style=discord.ButtonStyle.secondary,
         emoji="🏷️",

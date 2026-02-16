@@ -59,6 +59,26 @@ CHALLENGE_COOLDOWN_MINUTES: int = 10  # Cooldown between challenges from same cl
 APPEAL_WINDOW_DAYS: int = 7           # Time to appeal a case
 
 # =============================================================================
+# DONATION INFO
+# =============================================================================
+
+# =============================================================================
+# DONATION INFO
+# =============================================================================
+
+DONATE_DESCRIPTION: str = """
+**☕ Support the Developer**
+
+Bạn có thể ủng hộ mình qua **PayPal**:
+📩 Gửi đến: **duy.win1903@gmail.com**
+⚠️ **Lưu ý**: Chọn chế độ **"Friends and Family" (Gửi cho bạn bè/người thân)** để **không mất phí**.
+
+*Mọi sự đóng góp dù nhỏ nhất đều giúp duy trì bot và giải thưởng cho server. Cảm ơn bạn! ❤️*
+"""
+DONATE_IMAGE_URL: str = ""   # Ảnh QR hoặc banner (nếu có)
+
+
+# =============================================================================
 # CHALLENGE UPGRADE — "ĐẠI CHIẾN CLANS"
 # =============================================================================
 
