@@ -157,8 +157,8 @@ Gõ `/report create` để báo cáo
 **Q: Làm sao để vào clan?**
 A: Được Captain hoặc Vice của clan mời bằng lệnh `/clan invite`, rồi bấm Accept trong DM.
 
-**Q: Clan tôi dưới 5 người thì sao?**
-A: Clan sẽ bị "Inactive" - không đánh trận được, không tính Elo. Mời thêm người bằng `/clan invite`!
+**Q: Captain clan tôi rời server thì sao?**
+A: Bot sẽ tự động đôn Vice Captain lên thay. Nếu không có Vice, clan sẽ tạm chuyển sang "Inactive" để chờ Mod xử lý.
 
 **Q: Tôi muốn đổi clan?**
 A: Gõ `/clan leave`, chờ 14 ngày, rồi xin được invite vào clan mới.

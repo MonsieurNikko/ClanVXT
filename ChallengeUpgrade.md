@@ -1,4 +1,5 @@
 # Feature Upgrade Request — Clan Challenge (Valorant) “ĐẠI CHIẾN CLANS”
+> ✅ **TRẠNG THÁI: ĐÃ TRIỂN KHAI THÀNH CÔNG (v1.3.0)**
 > Shared repo rules apply: minimal changes, no push, reuse existing logic.
 
 ---

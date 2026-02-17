@@ -10,6 +10,7 @@ A Discord bot for managing a competitive clan system for Valorant communities. I
 - **Loan System**: Temporarily loan members between clans
 - **Transfer System**: Permanent member transfers with atomic movement logic
 - **Moderation**: Reports, appeals, case management, bans
+- **User Cleanup**: Automatic handling of users leaving server (Captain inheritance, data anonymization)
 - **Localization**: Fully localized in Vietnamese for all user-facing interactions
 
 ## 📋 Requirements

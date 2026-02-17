@@ -9,8 +9,9 @@ stateDiagram-v2
     WAITING_ACCEPT --> CANCELLED: Timeout (48h) or Captain Cancel
     PENDING_APPROVAL --> ACTIVE: Mod Approve
     PENDING_APPROVAL --> REJECTED: Mod Reject
-    ACTIVE --> INACTIVE: Members < 5
+    ACTIVE --> INACTIVE: Members < 5 OR Captain leaves (No Vice)
     ACTIVE --> DISBANDED: Mod Disband
+    INACTIVE --> ACTIVE: Mod Activate / New Captain appointed
 ```
 
 ### States
@@ -114,7 +115,9 @@ stateDiagram-v2
     CLAN_SELECTED --> INVITATION_SENT: Bot sends invite to opponent channel
     INVITATION_SENT --> ACCEPTED: Opponent clicks Chấp nhận
     INVITATION_SENT --> DECLINED: Opponent clicks Từ chối
-    ACCEPTED --> MATCH_CREATED: Bot creates match in #arena
+    ACCEPTED --> MAP_VETO: Bot creates private channels
+    MAP_VETO --> MATCH_CREATED: Ban/Pick + Side Pick complete
+    MAP_VETO --> CANCELLED: Timeout or Manual Cancel
     MATCH_CREATED --> [*]: Normal match lifecycle begins
     DECLINED --> [*]: Challenger clan notified
 ```

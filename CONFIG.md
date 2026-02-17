@@ -29,6 +29,8 @@
 | `ELO_FLOOR` | `100` | Minimum Elo value (cannot drop below). |
 | `ELO_PLACEMENT_MATCHES` | `10` | Number of matches with high K-factor. |
 | `CHALLENGE_COOLDOWN_MINUTES` | `10` | Cooldown between challenge invitations from same clan. |
+| `MAP_BAN_TIMEOUT_SECONDS` | `180` | Time limit for each ban/pick step. |
+| `MATCH_CHANNEL_CLEANUP_DELAY` | `300` | Seconds to wait before deleting match channels. |
 | `APPEAL_WINDOW` | `7d` | Time window to appeal a case. |
 
 ## 2. Loading Mechanism

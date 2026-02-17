@@ -91,6 +91,7 @@ Cooldown là khoảng thời gian bạn không thể thực hiện một số h�
 | Confirm/Dispute | ✅ | ✅ | ✅ |
 | Loan request | ✅ | ✅ | ❌ |
 | Transfer request | ✅ | ✅ | ❌ |
+| Đổi tên clan | ✅ | ❌ | ❌ |
 ---
 
 ## 4. QUY TRÌNH TẠO CLAN

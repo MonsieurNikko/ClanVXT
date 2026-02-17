@@ -95,7 +95,13 @@ Kênh `#arena` chứa Dashboard với các nút bấm tương tác. User bấm n
 | 🏆 Bảng xếp hạng | Top 10 clan theo Elo với huy chương. |
 | ⚔️ Lịch sử Match | 10 trận đấu gần đây với winner/loser, Elo thay đổi (+/-), ngày tháng, và status chi tiết. |
 | 👤 Thông tin của tôi | Xem thông tin cá nhân: Riot ID, clan, role, cooldown, ban status. |
-| ⚔️ Thách đấu | Gửi lời thách đấu tới clan khác. Chọn clan đối thủ từ dropdown → Lời thách đấu được gửi vào kênh riêng của clan đối thủ với nút Accept/Decline. |
+| 🔎 Tra cứu người khác | Chọn user từ danh sách/gõ tên để xem thông tin clan/cooldown/ban. |
+| ➕ Tạo Clan | Mở modal tạo clan mới (Captain role). |
+| 🤝 Tìm Clan | Đăng tin tìm clan (Free Agent) vào kênh `#chat-arena`. |
+| ⚔️ Thách đấu | Gửi thách đấu tới clan khác. Chọn đối thủ từ dropdown → Gửi invitation vào kênh riêng clan đó. |
+| 🏷️ Đổi Tên Clan | Captain đổi tên clan (yêu cầu tên duy nhất). |
+| ☕ Donate | Xem thông tin ủng hộ team phát triển. |
+| 📜 Luật Lệ | Xem tóm tắt quy định hệ thống. |
 
 **Admin Command:** `/arena_refresh` — Làm mới dashboard (xóa và gửi lại).
 
@@ -209,3 +215,23 @@ All events must be logged to the **Mod Log Channel** (`log`).
 | `NOT_MOD` | "Bạn cần role '{role}' để sử dụng lệnh này." |
 | `BOT_MISSING_PERMS` | "Bot thiếu quyền: {perms}. Vui lòng cấp quyền Manage Roles và Manage Channels." |
 | `ROLE_HIERARCHY` | "Không thể tạo role - Role của bot phải nằm trên role clan trong danh sách Role." |
+
+## 5. Automatic User Cleanup
+Hệ thống tự động thực hiện các hành động sau khi một thành viên rời khỏi Discord server:
+
+### Logic Xử Lý
+- **Trường hợp 1: Không có lịch sử đấu**:
+    - Xóa hoàn toàn bản ghi trong bảng `users`.
+- **Trường hợp 2: Có lịch sử đấu (Matches) hoặc vẫn là Captain**:
+    - **Anonymization**: Đổi `riot_id` thành `DeletedUser#{id}`, `discord_id` thành `LEAVER_{original_id}`.
+    - Set `is_banned = 1` với lý do `User left server`.
+- **Dọn dẹp phụ trợ**:
+    - Xóa bản ghi trong `clan_members`.
+    - Xóa các bài đăng tìm clan (`lfg_posts`).
+    - Hủy (`cancelled/expired`) các yêu cầu `create_requests`, `invite_requests`, `loans`, `transfers`.
+
+### Captaincy Transition
+Nếu người rời là Captain của một clan đang hoạt động:
+1. Tìm **Vice Captain** có ngày gia nhập (`joined_at`) sớm nhất.
+2. Nếu có: Promote Vice lên làm Captain và cập nhật chủ sở hữu clan.
+3. Nếu không có: Chuyển trạng thái clan sang `inactive`.

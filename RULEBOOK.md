@@ -101,8 +101,9 @@ Member có quyền rời clan bất cứ lúc nào nhưng vẫn chịu cooldown 
 
 
 Captain có quyền kick thành viên. Kick vẫn áp dụng cooldown 14 ngày cho người bị kick.
-- **Bảo vệ lãnh đạo**: Không thể kick Captain. Vice Captain phải bị hạ cấp (demote) xuống Thành viên trước khi có thể bị kick.
-- **Tự động giải tán**: Nếu Captain rời clan mà không có Đội phó hoặc thành viên khác để thay thế, clan sẽ tự động giải tán.
+- **Thừa kế lãnh đạo**: Nếu Captain rời server hoặc hệ thống, bot sẽ tự động thực hiện quy trình thừa kế:
+    - Ưu tiên Đội phó (Vice Captain) gia nhập sớm nhất được đôn lên làm Captain.
+    - Nếu không có Đội phó, clan sẽ chuyển sang trạng thái **Không hoạt động (Inactive)** để chờ Mod can thiệp hoặc bổ nhiệm mới. Clan **không** tự động bị giải tán để bảo toàn lịch sử và thành viên.
 - **Mời thành viên mới**: Captain hoặc Vice có thể mời người vào clan bằng lệnh `/clan invite @user`. Người được mời nhận lời mời qua DM.
 
 
@@ -290,5 +291,14 @@ Mod có quyền giữ nguyên án, giảm án, hoặc hủy án.
 
 
 
-Ghi log và minh bạch
 Mọi quyết định duyệt clan, xử phạt, rollback Elo, giải tán clan đều được bot ghi log để ban quản trị kiểm tra lại khi cần.
+
+### Tự động dọn dẹp khi rời server
+Hệ thống tự động xử lý khi một thành viên rời khỏi Discord server:
+1. **Xóa dữ liệu**: Nếu người rời server không có lịch sử đấu (match history), họ sẽ bị xóa hoàn toàn khỏi database để bảo mật.
+2. **Ẩn danh (Anonymize)**: Nếu người đó có lịch sử đấu (đã từng tạo hoặc tham gia trận), hệ thống sẽ không xóa mà thực hiện:
+    - Đổi Riot ID thành `DeletedUser#ID`.
+    - Đổi Discord ID thành `LEAVER_ID`.
+    - Ban vĩnh viễn khỏi hệ thống clan.
+    - Việc này giúp bảo toàn tính toàn vẹn của lịch sử đấu và Elo cho các clan khác.
+3. **Dọn dẹp**: Tự động hủy các yêu cầu mượn/chuyển nhượng (loan/transfer) và bài đăng tìm clan của người đó.
