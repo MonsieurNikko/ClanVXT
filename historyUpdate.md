@@ -3,13 +3,21 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.3.15] - 2026-02-17
+### 🔧 Update: Agent Rules & Changelog Policy
+#### 📢 Discord Update
+> - Cập nhật quy trình ghi chép lịch sử phiên bản để phân tách rõ ràng thông tin cho Người chơi và Kỹ thuật.
+
+#### 🔧 Technical Details
+- **Agent Rules**: Cập nhật `AGENT_RULES.md` yêu cầu tuyệt đối không để các thông tin về Admin, Mod, Dev, code, log trong phần **Discord Update**.
+- **Changelog Refactor**: Rà soát và di chuyển các thông tin lệnh Admin/Mod từ phiên bản 1.3.13 và 1.3.14 xuống phần Technical Details.
+
 ## [1.3.14] - 2026-02-17
 ### 🔧 Feat: Auto User Cleanup + Sync updates
 
 #### 📢 Discord Update
 > - **Tự động dọn dẹp User**: Khi một thành viên rời khỏi Discord server, hệ thống sẽ tự động xóa thông tin của họ (hoặc ẩn danh nếu có lịch sử đấu) để giữ database sạch sẽ.
-> - **Kế thừa Clan**: Nếu Captain rời server, Vice-Captain sẽ được tự động đôn lên làm Captain. Nếu không có Vice, clan sẽ chuyển sang trạng thái `inactive` để chờ Admin xử lý.
-> - **Cập nhật hệ thống**: Đã kéo về và đồng bộ 66 bản cập nhật mới nhất từ hệ thống chính.
+> - **Kế thừa Clan**: Nếu Captain rời server, Vice-Captain sẽ được tự động đôn lên làm Captain. Nếu không có Vice, clan sẽ chuyển sang trạng thái `inactive` để chờ Mod can thiệp.
 
 #### 🔧 Technical Details
 - **Sync/Migration**: Pulled 66 commits. Applied DB migrations for `winner_clan_id`, `score_a`, and `score_b` (match scores).
@@ -26,10 +34,11 @@ This document provides a cumulative history of all technical improvements, fixes
 ### 🔧 Feat: Admin Match Resolve + Channel Cleanup Fix
 
 #### 📢 Discord Update
-> - `/admin match_resolve` — Tạo trận đấu thủ công và tự tính Elo theo công thức chuẩn. Dùng khi cần bù trận bị xóa nhầm.
-> - **Fix bug**: Kênh match không tự xóa sau 5 phút khi cancel. Nguyên nhân: session bị xóa trước khi cleanup chạy, nếu bot restart thì mất luôn.
+> - **Fix bug**: Kênh match không tự xóa sau 5 phút khi cancel.
+> - **Donation System**: Đã có thể ủng hộ team phát triển qua nút Donate trong Arena! (Xem thông tin qua `/arena` -> Donate).
 
 #### 🔧 Technical Details
+- **Admin Match Resolve**: Thêm lệnh `/admin match_resolve` — Tạo trận đấu thủ công và tự tính Elo.
 - **New DB function**: `create_admin_match()` — creates match directly in `resolved` status.
 - **New admin command**: `match_resolve` — validates clans, score, winner, applies Elo.
 - **New feature**: Donation System — added `/arena` Donate button with configurable info (PayPal/Bank).
