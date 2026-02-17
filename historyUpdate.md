@@ -3,6 +3,25 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.3.14] - 2026-02-17
+### 🔧 Feat: Auto User Cleanup + Sync updates
+
+#### 📢 Discord Update
+> - **Tự động dọn dẹp User**: Khi một thành viên rời khỏi Discord server, hệ thống sẽ tự động xóa thông tin của họ (hoặc ẩn danh nếu có lịch sử đấu) để giữ database sạch sẽ.
+> - **Kế thừa Clan**: Nếu Captain rời server, Vice-Captain sẽ được tự động đôn lên làm Captain. Nếu không có Vice, clan sẽ chuyển sang trạng thái `inactive` để chờ Admin xử lý.
+> - **Cập nhật hệ thống**: Đã kéo về và đồng bộ 66 bản cập nhật mới nhất từ hệ thống chính.
+
+#### 🔧 Technical Details
+- **Sync/Migration**: Pulled 66 commits. Applied DB migrations for `winner_clan_id`, `score_a`, and `score_b` (match scores).
+- **New DB function**: `cleanup_user_on_leave(discord_id)` — handles the multi-step cleanup/anonymization process.
+- **Event listener**: Added `on_member_remove` in `main.py` to trigger the cleanup flow.
+- **Logic**:
+    - Users with match history are "anonymized" (banned + `LEAVER_ID`) instead of deleted to maintain FK integrity.
+    - Automatic captain promotion logic (Earliest joined Vice -> Captain).
+    - Cleanup for `lfg_posts`, `create_requests`, `invite_requests`, `loans`, and `transfers`.
+- Files: `main.py`, `services/db.py`, `migrate_db.py`, `scripts/migration_v5_scores.py`
+
+
 ## [1.3.13] - 2026-02-16
 ### 🔧 Feat: Admin Match Resolve + Channel Cleanup Fix
 

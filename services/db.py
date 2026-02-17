@@ -228,6 +228,118 @@ async def unban_user(user_id: int) -> None:
         await conn.commit()
 
 
+async def cleanup_user_on_leave(discord_id: str) -> Dict[str, Any]:
+    """
+    Handle user leaving the Discord server.
+    - Promotes a vice-captain if they were a captain.
+    - Removes them from any clan memberships.
+    - Cancels/Deletes pending requests involving them.
+    - Deletes user if they have no match history (otherwise anonymizes/bans).
+    """
+    user = await get_user(discord_id)
+    if not user:
+        return {"success": False, "reason": "user_not_found"}
+
+    user_id = user["id"]
+    results = {"user_id": user_id, "actions": []}
+
+    async with get_connection() as conn:
+        await conn.execute("BEGIN")
+        try:
+            # 1. Handle Captaincy
+            cursor = await conn.execute(
+                "SELECT id, name FROM clans WHERE captain_id = ? AND status NOT IN ('disbanded', 'cancelled')",
+                (user_id,)
+            )
+            clans_led = await cursor.fetchall()
+            
+            for clan in clans_led:
+                clan_id = clan["id"]
+                # Find a vice to promote
+                cursor = await conn.execute(
+                    """SELECT user_id FROM clan_members 
+                       WHERE clan_id = ? AND role = 'vice' AND user_id != ?
+                       ORDER BY joined_at ASC LIMIT 1""",
+                    (clan_id, user_id)
+                )
+                vice_row = await cursor.fetchone()
+                
+                if vice_row:
+                    new_captain_id = vice_row["user_id"]
+                    # Promote vice
+                    await conn.execute(
+                        "UPDATE clan_members SET role = 'captain' WHERE clan_id = ? AND user_id = ?",
+                        (clan_id, new_captain_id)
+                    )
+                    await conn.execute(
+                        "UPDATE clans SET captain_id = ?, updated_at = datetime('now') WHERE id = ?",
+                        (new_captain_id, clan_id)
+                    )
+                    results["actions"].append(f"Promoted user {new_captain_id} to captain of clan '{clan['name']}'")
+                else:
+                    # No vice, set to inactive
+                    await conn.execute(
+                        "UPDATE clans SET status = 'inactive', updated_at = datetime('now') WHERE id = ?",
+                        (clan_id,)
+                    )
+                    results["actions"].append(f"Set clan '{clan['name']}' to inactive (no vice found)")
+
+            # 2. Cleanup memberships and requests
+            await conn.execute("DELETE FROM clan_members WHERE user_id = ?", (user_id,))
+            await conn.execute("DELETE FROM lfg_posts WHERE user_id = ?", (user_id,))
+            
+            # Cancel/Cleanup requests
+            await conn.execute("UPDATE create_requests SET status = 'expired' WHERE user_id = ? AND status = 'pending'", (user_id,))
+            await conn.execute("UPDATE invite_requests SET status = 'cancelled' WHERE user_id = ? AND status = 'pending'", (user_id,))
+            await conn.execute("UPDATE loans SET status = 'cancelled' WHERE member_user_id = ? AND status = 'requested'", (user_id,))
+            await conn.execute("UPDATE transfers SET status = 'cancelled' WHERE member_user_id = ? AND status = 'requested'", (user_id,))
+
+            # 3. Final Deletion or Anonymization
+            # Check for match history OR remaining captaincy (integrity constraints)
+            cursor = await conn.execute(
+                "SELECT id FROM matches WHERE creator_user_id = ? OR confirmed_by_user_id = ? OR disputed_by_user_id = ? LIMIT 1",
+                (user_id, user_id, user_id)
+            )
+            has_history = await cursor.fetchone()
+            
+            cursor = await conn.execute(
+                "SELECT id FROM clans WHERE captain_id = ? AND status NOT IN ('disbanded', 'cancelled')",
+                (user_id,)
+            )
+            is_still_captain = await cursor.fetchone()
+
+            if has_history or is_still_captain:
+                # Anonymize instead of delete
+                reasons = []
+                if has_history: reasons.append("Match History")
+                if is_still_captain: reasons.append("Captaincy")
+                reason_str = " + ".join(reasons)
+                
+                new_riot_id = f"DeletedUser#{user_id}"
+                await conn.execute(
+                    """UPDATE users SET 
+                       is_banned = 1, 
+                       ban_reason = ?,
+                       riot_id = ?,
+                       discord_id = ?,
+                       updated_at = datetime('now')
+                       WHERE id = ?""",
+                    (f"User left server ({reason_str})", new_riot_id, f"LEAVER_{discord_id}", user_id)
+                )
+                results["actions"].append(f"Anonymized user due to {reason_str}")
+            else:
+                # Safe to delete
+                await conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                results["actions"].append("Deleted user from database")
+
+            await conn.commit()
+            results["success"] = True
+            return results
+        except Exception as e:
+            await conn.rollback()
+            raise e
+
+
 # =============================================================================
 # CLAN CRUD
 # =============================================================================

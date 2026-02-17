@@ -175,6 +175,25 @@ async def on_ready():
     await bot_utils.log_event("BOT_STARTED", f"Clan System bot started. Commands synced: {len(synced)}")
 
 
+@bot.event
+async def on_member_remove(member):
+    """Event triggered when a member leaves the Discord server."""
+    print(f"User {member} (ID: {member.id}) left the server. Starting cleanup...")
+    try:
+        results = await db.cleanup_user_on_leave(str(member.id))
+        if results.get("success"):
+            actions_str = ", ".join(results["actions"])
+            log_msg = f"User cleanup for {member} ({member.id}): {actions_str}"
+            print(f"✓ {log_msg}")
+            await bot_utils.log_event("USER_LEAVE_CLEANUP", log_msg)
+        else:
+            reason = results.get("reason", "unknown")
+            if reason != "user_not_found":
+                print(f"⚠ Cleanup failed for {member}: {reason}")
+    except Exception as e:
+        print(f"❌ Error during cleanup for {member}: {e}")
+
+
 # =============================================================================
 # BACKGROUND TASKS
 # =============================================================================
