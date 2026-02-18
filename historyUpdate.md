@@ -3,6 +3,25 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.4.0] - 2026-02-17
+### 🎥 Feat: Highlight System & Community Voting
+
+#### 📢 Discord Update
+> - **Gửi Highlight (`/highlight submit`)**: Bạn có thể gửi link clip (YouTube, Outplayed...) của các trận đấu gần nhất để khoe với cộng đồng.
+> - **Community Vote**: Các highlight sẽ được đăng lên kênh `🏆┃2-𝙡𝙖𝙞-𝙠𝙝ô𝙣𝙜-𝙖𝙞-𝙡𝙖𝙞` để mọi người bình chọn (thả tim 🔥).
+> - **Share chuyên nghiệp**: Có nút `📤 Share` để bạn copy bài viết (kèm link mời server) đi khoe ở các nơi khác.
+> - **Giải thưởng tuần**: Clip được yêu thích nhất tuần (dựa trên lượng vote hợp lệ) sẽ mang về **+7 Elo** cho Clan và danh hiệu **Highlight God** cho khổ chủ.
+
+#### 🔧 Technical Details
+- **New Table**: `highlights` (linked to `users`, `matches`, `clans`).
+- **New Cog**: `cogs/highlights.py` handles submission flow and weekly cron job.
+- **Anti-Farm Logic**: Voting system automatically excludes reactions from members of the *same* clan to ensure fairness.
+- **Validation**:
+    - Users can only submit clips for matches their clan actually played.
+    - Match Selector dropdown shows context (Opponent, Map, Result).
+- **Config**: Added `CHANNEL_HIGHLIGHTS` and `SERVER_INVITE_URL`.
+- Files: `cogs/highlights.py`, `services/db.py`, `config.py`, `db/schema.sql`, `main.py`
+
 ## [1.3.15] - 2026-02-17
 ### 🔧 Update: Agent Rules & Changelog Policy
 #### 📢 Discord Update

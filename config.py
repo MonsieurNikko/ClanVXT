@@ -38,6 +38,9 @@ CHANNEL_ARENA: str = "arena"      # Arena dashboard channel (read-only for users
 CHANNEL_UPDATE_BOT: str = "update-bot"  # Update announcements channel (read-only for users)
 CATEGORY_CLANS: str = "CLANS"     # Category for clan private channels
 CHANNEL_CHAT_ARENA: str = "chat-arena"        # Public chat channel for announcements
+CHANNEL_HIGHLIGHTS: str = "🏆┃2-𝙡𝙖𝙞-𝙠𝙝ô𝙣𝙜-𝙖𝙞-𝙡𝙖𝙞" # Highlights channel
+
+SERVER_INVITE_URL: str = "https://discord.gg/qhtn"
 
 # =============================================================================
 # SYSTEM CONSTANTS

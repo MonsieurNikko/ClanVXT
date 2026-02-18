@@ -153,6 +153,9 @@ async def on_ready():
     await bot.load_extension("cogs.arena")
     print("✓ Loaded cog: cogs.arena")
     
+    await bot.load_extension("cogs.highlights")  # New Feature
+    print("✓ Loaded cog: cogs.highlights")
+    
     await bot.load_extension("cogs.challenge")
     print("✓ Loaded cog: cogs.challenge")
     

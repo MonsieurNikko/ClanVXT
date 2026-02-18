@@ -452,6 +452,30 @@ async def update_clan_elo(clan_id: int, new_elo: int, match_id: Optional[int], r
         await conn.commit()
 
 
+async def add_bonus_elo(clan_id: int, amount: int, reason: str) -> None:
+    """Add bonus Elo to a clan (e.g., for rewards). Wrapper around update_clan_elo."""
+    async with get_connection() as conn:
+        cursor = await conn.execute("SELECT elo FROM clans WHERE id = ?", (clan_id,))
+        row = await cursor.fetchone()
+        if not row:
+            print(f"[DB] add_bonus_elo: Clan {clan_id} not found.")
+            return
+        
+        current_elo = row["elo"]
+        new_elo = current_elo + amount
+        
+        # Borrow update_clan_elo logic but simplified or call it directly if possible?
+        # Since update_clan_elo is async, we can call it.
+        # But we are inside a context manager here if we used one.
+        # Ideally, we should just reuse update_clan_elo but it opens its own connection.
+        # So we just close this cursor/conn and call the other function.
+        pass
+
+    # Call the main function to handle history and updates
+    await update_clan_elo(clan_id, new_elo, None, reason, changed_by=None)
+    print(f"[DB] Bonus Elo (+{amount}) added to Clan ID {clan_id}. Reason: {reason}")
+
+
 async def increment_clan_matches(clan_id: int) -> None:
     """Increment matches_played counter."""
     async with get_connection() as conn:

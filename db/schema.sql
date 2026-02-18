@@ -395,3 +395,28 @@ CREATE TABLE IF NOT EXISTS lfg_posts (
 
 CREATE INDEX IF NOT EXISTS idx_lfg_posts_user ON lfg_posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_lfg_posts_status ON lfg_posts(status);
+
+-- -----------------------------------------------------------------------------
+-- HIGHLIGHTS TABLE
+-- Tracks user-submitted gameplay highlights for community voting
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS highlights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,                           -- FK to users.id (submitter)
+    match_id INTEGER NOT NULL,                          -- FK to matches.id
+    clan_id INTEGER NOT NULL,                           -- FK to clans.id (user's clan at time of match)
+    video_url TEXT NOT NULL,                            -- Link to video
+    caption TEXT,                                       -- User's caption
+    message_id TEXT,                                    -- Discord message ID in highlight channel
+    votes INTEGER DEFAULT 0,                            -- Cached vote count (valid votes)
+    created_at TEXT DEFAULT (datetime('now')),
+    status TEXT NOT NULL DEFAULT 'active',              -- active, deleted, winner
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+    FOREIGN KEY (clan_id) REFERENCES clans(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_highlights_user ON highlights(user_id);
+CREATE INDEX IF NOT EXISTS idx_highlights_match ON highlights(match_id);
+CREATE INDEX IF NOT EXISTS idx_highlights_created_at ON highlights(created_at);
+CREATE INDEX IF NOT EXISTS idx_highlights_status ON highlights(status);
