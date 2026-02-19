@@ -452,54 +452,7 @@ class MatchesCog(commands.Cog):
         await interaction.response.send_modal(modal)
         print(f"[MATCH] User {interaction.user.name} opened MatchScoreModal for Match #{match_id}")
 
-    async def handle_match_report(self, interaction: discord.Interaction, match_id: int, winner_clan_id: int, creator_id: str):
-        # Only match creator can report
-        if str(interaction.user.id) != creator_id:
-            await interaction.response.send_message(ERRORS["NOT_MATCH_CREATOR"], ephemeral=True)
-            return
-        
-        # Try to report (atomic check for status = 'created')
-        success = await db.report_match_v2(match_id, winner_clan_id)
-        
-        if not success:
-            # If failed, check if it was because it's already reported (might be double click or race)
-            # We fail silently or standard error
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(ERRORS["MATCH_ALREADY_PROCESSED"], ephemeral=True)
-            except Exception: pass
-            return
-        
-        # Get updated match data
-        match = await db.get_match_with_clans(match_id)
-        
-        # Determine opponent clan for Confirm/Dispute
-        if winner_clan_id == match["clan_a_id"]:
-            opponent_clan_id = match["clan_b_id"]
-            opponent_name = match["clan_b_name"]
-            winner_name = match["clan_a_name"]
-        else:
-            opponent_clan_id = match["clan_a_id"]
-            opponent_name = match["clan_a_name"]
-            winner_name = match["clan_b_name"]
-        
-        # Update embed
-        embed = create_match_embed(
-            match,
-            f"📝 Đã báo cáo: **{winner_name}** thắng\nChờ {opponent_name} xác nhận...",
-            discord.Color.yellow()
-        )
-        
-        # New view with Confirm/Dispute buttons
-        view = MatchReportedView(match_id, opponent_clan_id, winner_clan_id)
-        
-        await interaction.response.edit_message(embed=embed, view=view)
-        
-        await bot_utils.log_event(
-            "MATCH_REPORTED",
-            f"Match #{match_id}: {interaction.user.mention} báo cáo {winner_name} thắng"
-        )
-        print(f"[MATCH] Match #{match_id} REPORTED by {interaction.user.name}. {winner_name} won.")
+
 
     async def handle_match_cancel(self, interaction: discord.Interaction, match_id: int, creator_id: str):
         # 1. Get user clan
@@ -647,6 +600,73 @@ class MatchesCog(commands.Cog):
         # Show modal for reason
         modal = DisputeReasonModal(match_id, opponent_clan_id)
         await interaction.response.send_modal(modal)
+
+    async def create_match_v2(self, interaction: discord.Interaction, clan_a: dict, clan_b: dict, creator_user: discord.User, match_format: str):
+        """
+        Programmatically create a match (called from Arena).
+        clan_a: Challenger
+        clan_b: Target (Accepter)
+        creator_user: User object of Challenger
+        """
+        # 1. Get creator internal ID
+        creator_db = await db.get_user(str(creator_user.id))
+        if not creator_db:
+            # Ensure user exists (should exist if they initiated, but safety)
+            await db.create_user(str(creator_user.id), creator_user.display_name)
+            creator_db = await db.get_user(str(creator_user.id))
+        
+        # 2. Create Match in DB
+        note = f"Format: {match_format}"
+        match_id = await db.create_match_v2(
+            clan_a_id=clan_a["id"],
+            clan_b_id=clan_b["id"],
+            creator_user_id=creator_db["id"],
+            note=note
+        )
+        
+        # 3. Get Full Match Data
+        match = await db.get_match_with_clans(match_id)
+        
+        # 4. Create Embed
+        embed = create_match_embed(
+            match,
+            f"🆕 **Trận đấu bắt đầu!**\n\nThể thức: **{match_format}**\nNgười tạo: {creator_user.mention}\nNgười nhận: {interaction.user.mention}\n\nNgười tạo match hãy báo cáo kết quả sau khi thi đấu xong.",
+            discord.Color.green()
+        )
+        
+        # 5. Create View
+        view = MatchCreatedView(
+            match_id=match_id,
+            creator_id=str(creator_user.id),
+            clan_a_id=clan_a["id"],
+            clan_b_id=clan_b["id"],
+            clan_a_name=clan_a["name"],
+            clan_b_name=clan_b["name"]
+        )
+        
+        # 6. Send to Interaction Channel (Target's Channel)
+        msg = await interaction.followup.send(embed=embed, view=view)
+        
+        # 7. Notify Challenger's Channel
+        if clan_a.get("discord_channel_id"):
+            try:
+                chan_a = self.bot.get_channel(int(clan_a["discord_channel_id"]))
+                if chan_a:
+                    await chan_a.send(
+                        f"✅ **{clan_b['name']}** đã chấp nhận lời thách đấu **{match_format}**!\n"
+                        f"Match #{match_id} đã được tạo. Vui lòng thi đấu và báo cáo kết quả."
+                    )
+            except Exception as e:
+                print(f"[MATCH] Failed to notify challenger: {e}")
+        
+        # 8. Store Message IDs
+        await db.update_match_message_ids(match_id, str(msg.id), str(interaction.channel_id))
+        
+        # 9. Log
+        await bot_utils.log_event(
+            "MATCH_STARTED",
+            f"Match #{match_id} started (Arena). {clan_a['name']} vs {clan_b['name']} ({match_format})"
+        )
     
     # =========================================================================
     # MATCH COMMANDS

@@ -674,6 +674,17 @@ async def get_clan_members(clan_id: int) -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
+async def get_clan_member(user_id: int, clan_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific member record from a clan."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM clan_members WHERE user_id = ? AND clan_id = ?",
+            (user_id, clan_id)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
 async def get_user_clan(user_id: int) -> Optional[Dict[str, Any]]:
     """Get the clan a user belongs to (excludes disbanded/cancelled clans)."""
     async with get_connection() as conn:
@@ -1952,15 +1963,6 @@ async def get_all_active_clans() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
-async def count_clan_members(clan_id: int) -> int:
-    """Count number of members in a clan."""
-    async with get_connection() as conn:
-        cursor = await conn.execute(
-            "SELECT COUNT(*) as cnt FROM clan_members WHERE clan_id = ?",
-            (clan_id,)
-        )
-        row = await cursor.fetchone()
-        return row["cnt"] if row else 0
 
 
 async def get_recent_matches(limit: int = 10, include_cancelled: bool = False) -> List[Dict[str, Any]]:

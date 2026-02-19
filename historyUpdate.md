@@ -4,6 +4,56 @@ This document provides a cumulative history of all technical improvements, fixes
 
 
 
+## [1.5.5] - 2026-02-19
+### 🧹 Maintenance: Codebase Integrity & Dead Code Removal
+
+#### 📢 Discord Update
+> - **Bảo trì hệ thống**: Rà soát toàn bộ mã nguồn để đảm bảo tính ổn định tối đa.
+> - **Tối ưu hóa**: Loại bỏ các đoạn mã thừa (dead code) trong hệ thống Match, giúp bot chạy nhẹ và ít lỗi tiềm ẩn hơn.
+
+#### 🔧 Technical Details
+- **Cleanup**: Removed dead method `handle_match_report` in `MatchesCog` (`cogs/matches.py`).
+- **Context**: This method was referencing a non-existent `db.report_match_v2` function. The actual active flow uses `ReportScoreButton` -> `MatchScoreModal` -> `db.report_match_v3`.
+- **Integrity Check**: Verified cross-cog dependencies for `matches.py`, `challenge.py`, `arena.py`, and `db.py`.
+- **Files**: `cogs/matches.py`
+
+## [1.5.4] - 2026-02-19
+### 🚑 Hotfix: Arena Challenge Acceptance
+
+#### 📢 Discord Update
+> - **Sửa lỗi nghiêm trọng**: Khắc phục lỗi không thể chấp nhận thách đấu trong Arena (lỗi `AttributeError`).
+> - **Ổn định hệ thống**: Đảm bảo quy trình tạo match từ Arena hoạt động trơn tru.
+
+#### 🔧 Technical Details
+- **Fix**: Implemented missing `create_match_v2` method in `MatchesCog` to support Arena-initiated matches.
+- **Files**: `cogs/matches.py`
+
+## [1.5.3] - 2026-02-19
+### 🛡️ Fix: Transfer System Safeguards & Notifications
+
+#### 📢 Discord Update
+> - **Chuyển nhượng an toàn**: Hệ thống Transfer được bổ sung các lớp bảo vệ quan trọng.
+> - **Ngăn chặn lỗi**: Không cho phép chuyển nhượng Captain (tránh lỗi clan mất chủ) và đảm bảo clan nguồn luôn giữ đủ số lượng thành viên tối thiểu.
+> - **Thông báo minh bạch**: Gửi tin nhắn riêng (DM) cho tất cả các bên liên quan (Thành viên, Captain cũ, Captain mới) để xác nhận giao dịch.
+
+#### 🔧 Technical Details
+- **Guard Clauses**: Added checks in `transfer_request`:
+    - `captain` role cannot participate in transfer.
+    - Source clan must have `> MIN_MEMBERS_ACTIVE` members.
+- **Notifications**: Implemented DM notifications to Member, Source Captain, and Dest Captain upon request and completion.
+- **Files**: `cogs/transfers.py`
+
+## [1.5.2] - 2026-02-19
+### 🔧 Bugfix: Stability & DB Cleanup
+
+#### 📢 Discord Update
+> - **Sửa lỗi hệ thống**: Khắc phục triệt để lỗi crash bot khi chấp nhận thách đấu trong Arena. Hệ thống vận hành ổn định trở lại.
+
+#### 🔧 Technical Details
+- **Fix**: Re-implemented missing `get_clan_member` function in `services/db.py`.
+- **Cleanup**: Removed duplicate `count_clan_members` function and redundant sections in `services/db.py` to prevent logic conflicts.
+- **Files**: `services/db.py`, `cogs/arena.py`
+
 ## [1.5.1] - 2026-02-19
 ### 🐛 Hotfix: Database Auto-Migration
 
