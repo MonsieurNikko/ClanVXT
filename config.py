@@ -28,6 +28,7 @@ if not GUILD_ID:
 
 ROLE_VERIFIED: str = "Thiểu Năng Con"  # Required to participate
 ROLE_MOD: str = "Hội đồng quản trị"     # Admin privileges
+ROLE_PLAYER: str = "player"          # Auto-assigned to all clan members
 
 # =============================================================================
 # CHANNELS & CATEGORIES

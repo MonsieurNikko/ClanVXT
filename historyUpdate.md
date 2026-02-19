@@ -3,6 +3,73 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+
+## [1.4.3] - 2026-02-18
+### ✨ Feat: Auto Player Role System
+
+#### 📢 Discord Update
+> - **Tự động gán Role 'player'**: Tất cả thành viên clan giờ đây sẽ tự động nhận role `player` khi gia nhập clan hoặc khi clan được phê duyệt.
+> - **Tự động thu hồi**: Khi một người rời clan, bị kick, hoặc clan bị giải tán/xóa, role `player` sẽ được thu hồi tự động để đảm bảo danh sách member server chính xác.
+> - **Đồng bộ hóa Admin**: Admin có lệnh mới `/admin clan sync_player_role` để gán role cho tất cả thành viên hiện tại chỉ với 1 click.
+> - **Sửa lỗi Arena**: Khắc phục lỗi khi bấm "Thách Đấu" hiện thông báo lỗi thay vì thời gian chờ (cooldown).
+
+#### 🔧 Technical Details
+- **Configuration**: Added `ROLE_PLAYER` check in `config.py`.
+- **New Admin Command**: `/admin clan sync_player_role` — scans all active/inactive/frozen clans and syncs the player role.
+- **Logic Integration**:
+    - `ClanCog.handle_invite_accept` & `AdminCog.admin_set_member_clan`: Assigns player role on join.
+    - `ClanCog.mod_clan_approve`: Assigns player role to all 5 starter members.
+    - `ClanCog.clan_leave` & `ClanCog.mod_clan_kick`: Removes player role on exit.
+    - `ClanCog.clan_disband` & `ClanCog.mod_clan_delete`: Bulk removes player role from all members.
+- **Fix**: Updated `get_won_matches_by_clan` with `COALESCE` for robust legacy match history searching.
+- **Fix**: Resolved `NameError` in `cogs/arena.py` by adding missing `datetime`/`timezone` imports and removing redundant local imports.
+- **Cleanup**: Fixed typo `TRANSFER_SICKNESS` in `services/cooldowns.py`.
+- **Files**: `config.py`, `cogs/admin.py`, `cogs/clan.py`, `services/db.py`, `services/cooldowns.py`
+
+## [1.4.2] - 2026-02-18
+### 🔒 Feat: Global Matchmaking Lock
+
+#### 📢 Discord Update
+> - **Bảo trì hệ thống**: Admin hiện có thể **tạm khóa** tính năng Thách đấu (War Clan) khi cần bảo trì hoặc tổ chức giải đấu.
+> - **Trải nghiệm**: Khi hệ thống bị khóa, nút "Gửi Thách Đấu" sẽ bị vô hiệu hóa kèm lý do cụ thể. Các trận đấu đang diễn ra không bị ảnh hưởng.
+
+#### 🔧 Technical Details
+- **New Table**: `system_settings` (key-value storage for global configs).
+- **Commands**:
+    - `/admin matchmaking lock [reason]`
+    - `/admin matchmaking unlock`
+- **UI Enforce**: `ChallengeSelectView` checks `is_matchmaking_locked()` before processing.
+- **Cleanup**: Removed duplicate/dead code in `cogs/arena.py`.
+- **Files**: `services/db.py`, `cogs/admin.py`, `cogs/arena.py`, `db/schema.sql`
+
+### 🚫 Feat: Soft Ban (Cấm thi đấu có thời hạn)
+
+#### 📢 Discord Update
+> - **Cấm thi đấu (Soft Ban)**: Admin giờ có thể cấm một clan thi đấu trong một khoảng thời gian nhất định (ví dụ: 3 ngày, 1 tuần) mà không cần ban vĩnh viễn hay đóng băng toàn bộ clan.
+> - **Cơ chế**: Clan bị cấm sẽ **không thể gửi lời thách đấu** và cũng **không thể chấp nhận** lời thách đấu từ người khác.
+
+#### 🔧 Technical Details
+- **Command Update**: `/admin cooldown set` now supports `kind="match_create"`.
+- **Fix**: Updated `/admin cooldown view` to display `match_create` cooldowns.
+- **Fix**: Updated `get_won_matches_by_clan` logic to support legacy matches (pre-v1.3.2) where `winner_clan_id` is NULL.
+- **Logic Update**: `ChallengeAcceptView` now checks for `match_create` cooldown (preventing banned clans from accepting matches).
+- **Consistency**: Added `is_matchmaking_locked()` check to `ChallengeAcceptView` as well.
+- **Files**: `cogs/admin.py`, `cogs/arena.py`, `services/cooldowns.py`
+
+## [1.4.1] - 2026-02-18
+### ⚖️ Feat: Elo Refund System (Fair Play)
+
+#### 📢 Discord Update
+> - **Fair Play Update**: Hệ thống đã bổ sung tính năng **Hoàn trả Elo** (Elo Rollback).
+> - **Công bằng cho mọi người**: Nếu phát hiện Clan gian lận hoặc vi phạm nghiêm trọng, Admin có thể hủy kết quả các trận thắng của họ.
+> - **Quyền lợi nạn nhân**: Các Clan thua cuộc trong các trận đấu này sẽ được **hoàn lại toàn bộ số điểm Elo đã mất**. Hệ thống sẽ gửi thông báo đính chính đến kênh riêng của Clan.
+
+#### 🔧 Technical Details
+- **New Admin Command**: `/admin elo_rollback_matches <clan_name>` — Interactive UI to select and rollback specific wins.
+- **Rollback Logic**: Reverts Elo changes for both sides (Winner loses gains, Loser regains losses).
+- **Notifications**: Auto-sends Embed to victim's channel upon rollback.
+- **Files**: `cogs/admin.py`, `services/db.py`
+
 ## [1.4.0] - 2026-02-17
 ### 🎥 Feat: Highlight System & Community Voting
 
@@ -20,7 +87,8 @@ This document provides a cumulative history of all technical improvements, fixes
     - Users can only submit clips for matches their clan actually played.
     - Match Selector dropdown shows context (Opponent, Map, Result).
 - **Config**: Added `CHANNEL_HIGHLIGHTS` and `SERVER_INVITE_URL`.
-- Files: `cogs/highlights.py`, `services/db.py`, `config.py`, `db/schema.sql`, `main.py`
+- **Files**: `cogs/highlights.py`, `services/db.py`, `config.py`, `db/schema.sql`, `main.py`
+
 
 ## [1.3.15] - 2026-02-17
 ### 🔧 Update: Agent Rules & Changelog Policy

@@ -77,6 +77,10 @@ Cooldown là khoảng thời gian bạn không thể thực hiện một số h�
 - Quyền: Tham gia trận đấu, xác nhận kết quả, rời clan
 - Không có quyền quản lý
 
+**🎮 Player (Người chơi)**
+- Role hệ thống, tự động gán cho bất kỳ ai tham gia clan.
+- Tự động thu hồi khi rời clan hoặc clan giải tán.
+
 ### 3.2. Phân quyền chi tiết
 
 | Hành động | Captain | Vice | Member |

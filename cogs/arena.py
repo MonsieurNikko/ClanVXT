@@ -7,6 +7,7 @@ Auto-sends dashboard to #arena channel on bot startup.
 import discord
 from discord import app_commands
 from discord.ext import commands
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
 from services import db, bot_utils, cooldowns, permissions
@@ -144,6 +145,14 @@ class ChallengeSelectView(discord.ui.View):
 
     @discord.ui.button(label="Gửi Thách Đấu", style=discord.ButtonStyle.green, row=2)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 1. Check Global Lock
+        is_locked, reason = await db.is_matchmaking_locked()
+        if is_locked:
+            return await interaction.response.send_message(
+                f"🚫 **Hệ thống thi đấu đang tạm khóa.**\nLý do: {reason}",
+                ephemeral=True
+            )
+
         if not self.selected_clan_id:
             return await interaction.response.send_message("❌ Vui lòng chọn clan đối thủ.", ephemeral=True)
             
@@ -223,6 +232,34 @@ class AcceptDeclineView(discord.ui.View):
             return await interaction.response.send_message("❌ Chỉ **Captain** hoặc **Vice** mới được quyền chấp nhận.", ephemeral=True)
 
         # Check: only 1 active match per clan
+        # 2. Check Global Lock
+        is_locked, reason = await db.is_matchmaking_locked()
+        if is_locked:
+            return await interaction.response.send_message(
+                f"🚫 **Hệ thống thi đấu đang tạm khóa.**\nLý do: {reason}",
+                ephemeral=True
+            )
+
+        # 3. Check Cooldown (Match Ban)
+        is_cd, cd_until = await cooldowns.check_cooldown("clan", self.target_clan["id"], "match_create")
+        if is_cd:
+             try:
+                # Standardize format (FUSED & ROBUST)
+                until_str = cd_until.replace('Z', '+00:00')
+                if ' ' in until_str and 'T' not in until_str:
+                    until_str = until_str.replace(' ', 'T')
+                
+                until_dt = datetime.fromisoformat(until_str)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=timezone.utc)
+                    
+                msg = f"⏳ Clan của bạn đang bị cấm thi đấu đến **{until_dt.strftime('%d/%m/%Y %H:%M')}**."
+             except:
+                msg = "⏳ Clan của bạn đang bị cấm thi đấu."
+             
+             return await interaction.response.send_message(msg, ephemeral=True)
+
+        # 4. Check active match
         if await db.has_active_match(self.target_clan["id"]):
             return await interaction.response.send_message(
                 "❌ Clan của bạn hiện đang có một trận đấu chưa hoàn thành. Vui lòng hoàn thành trận hiện tại trước.",
@@ -543,155 +580,6 @@ class ChallengeAcceptView(discord.ui.View):
         )
 
 
-class ChallengeSelectView(discord.ui.View):
-    """View with dropdown to select an opponent clan and send a challenge invitation."""
-
-    def __init__(self, user_clan: Dict[str, Any], all_clans: List[Dict[str, Any]],
-                 creator: discord.Member, arena_channel_id: int):
-        super().__init__(timeout=120)
-        self.user_clan = user_clan
-        self.creator = creator
-        self.arena_channel_id = arena_channel_id
-
-        # Filter out own clan, build options
-        options = [
-            discord.SelectOption(
-                label=c["name"][:25],
-                value=str(c["id"]),
-                description=f"Elo: {c.get('elo', 1000)}",
-                emoji="⚔️"
-            )
-            for c in all_clans
-            if c["id"] != user_clan["id"]
-        ][:25]
-
-        select = discord.ui.Select(
-            placeholder="⚔️ Chọn clan đối thủ để thách đấu...",
-            options=options,
-            min_values=1,
-            max_values=1,
-        )
-        select.callback = self.on_select
-        self.add_item(select)
-
-    async def on_select(self, interaction: discord.Interaction):
-        opponent_clan_id = int(interaction.data["values"][0])
-        opponent = await db.get_clan_by_id(opponent_clan_id)
-
-        if not opponent:
-            await interaction.response.send_message("❌ Không tìm thấy clan đối thủ.", ephemeral=True)
-            return
-
-        if opponent["status"] != "active":
-            await interaction.response.send_message(
-                f"❌ Clan **{opponent['name']}** không ở trạng thái active.", ephemeral=True
-            )
-            return
-
-        # Check opponent has a private channel
-        if not opponent.get("discord_channel_id"):
-            await interaction.response.send_message(
-                f"❌ Clan **{opponent['name']}** chưa có kênh chat riêng. Không thể gửi lời thách đấu.",
-                ephemeral=True,
-            )
-            return
-
-        # Anti-spam: check challenge cooldown for the clan (10 min)
-        is_cd, cd_until = await cooldowns.check_cooldown("clan", self.user_clan["id"], "match_create")
-        if is_cd:
-            try:
-                # Standardize format (FUSED & ROBUST)
-                until_str = cd_until.replace('Z', '+00:00')
-                if ' ' in until_str and 'T' not in until_str:
-                    until_str = until_str.replace(' ', 'T')
-                
-                until_dt = datetime.fromisoformat(until_str)
-                if until_dt.tzinfo is None:
-                    until_dt = until_dt.replace(tzinfo=timezone.utc)
-                
-                now_dt = datetime.now(timezone.utc)
-                diff = until_dt - now_dt
-                secs = max(0, int(diff.total_seconds()))
-                
-                if secs == 0:
-                    time_str = "vài giây"
-                else:
-                    mins, s = divmod(secs, 60)
-                    time_str = f"{mins} phút {s} giây" if mins else f"{s} giây"
-            except Exception as e:
-                print(f"[DEBUG] Arena cooldown parse error: {e}")
-                time_str = "một lát"
-            await interaction.response.send_message(
-                f"⏳ Clan của bạn vừa gửi lời thách đấu. Vui lòng chờ **{time_str}**.",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        # Set cooldown
-        await db.set_cooldown_minutes(
-            "clan", self.user_clan["id"], "match_create",
-            config.CHALLENGE_COOLDOWN_MINUTES, "Challenge sent",
-        )
-
-        # Send challenge invitation to opponent clan channel
-        opp_channel = interaction.client.get_channel(int(opponent["discord_channel_id"]))
-        if not opp_channel:
-            await interaction.followup.send(
-                f"❌ Không tìm thấy kênh chat của clan **{opponent['name']}**.",
-                ephemeral=True,
-            )
-            return
-
-        challenge_embed = discord.Embed(
-            title="⚔️ Lời Thách Đấu!",
-            description=(
-                f"Clan **{self.user_clan['name']}** (Elo: `{self.user_clan.get('elo', 1000)}`) "
-                f"thách đấu clan **{opponent['name']}** (Elo: `{opponent.get('elo', 1000)}`)!\n\n"
-                f"📩 Gửi bởi: {self.creator.mention}\n\n"
-                f"Thành viên clan **{opponent['name']}** hãy bấm nút bên dưới để trả lời!"
-            ),
-            color=discord.Color.orange(),
-        )
-        challenge_embed.set_footer(text="Lời thách đấu này không hết hạn cho đến khi có người trả lời.")
-
-        opp_role_mention = f"<@&{opponent['role_id']}>" if opponent.get("role_id") else ""
-
-        challenge_view = ChallengeAcceptView(
-            challenger_clan=self.user_clan,
-            opponent_clan=opponent,
-            creator_id=str(self.creator.id),
-            arena_channel_id=self.arena_channel_id,
-        )
-
-        await opp_channel.send(
-            f"{opp_role_mention}" if opp_role_mention else None,
-            embed=challenge_embed,
-            view=challenge_view,
-        )
-
-        # Also notify challenger's own clan channel
-        if self.user_clan.get("discord_channel_id"):
-            try:
-                own_channel = interaction.client.get_channel(int(self.user_clan["discord_channel_id"]))
-                if own_channel:
-                    await own_channel.send(
-                        f"📨 Lời thách đấu đã được gửi đến clan **{opponent['name']}**! Đang chờ phản hồi..."
-                    )
-            except Exception:
-                pass
-
-        await interaction.followup.send(
-            f"📨 Đã gửi lời thách đấu đến kênh của clan **{opponent['name']}**! Đang chờ họ phản hồi.",
-            ephemeral=True,
-        )
-
-        await bot_utils.log_event(
-            "CHALLENGE_SENT",
-            f"{self.user_clan['name']} thách đấu {opponent['name']} (bởi {self.creator.mention})",
-        )
-        self.stop()
 
 
 # =============================================================================
@@ -1175,7 +1063,6 @@ class ArenaView(discord.ui.View):
             cooldowns_list = await db.get_all_user_cooldowns(user["id"])
             join_leave_cd = next((cd for cd in cooldowns_list if cd["kind"] == "join_leave"), None)
             if join_leave_cd:
-                from datetime import datetime, timezone
                 cd_until = datetime.fromisoformat(join_leave_cd["until"].replace("Z", "+00:00"))
                 if cd_until > datetime.now(timezone.utc):
                     await interaction.response.send_message(

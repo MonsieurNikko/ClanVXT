@@ -661,6 +661,12 @@ class ClanCog(commands.Cog):
                         if member:
                             await member.add_roles(role)
                             print(f"[DEBUG] Assigned role {role.name} to {member.name}")
+
+                            # Assign player role as well
+                            player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+                            if player_role and player_role not in member.roles:
+                                await member.add_roles(player_role, reason="Clan join auto-role")
+                                print(f"[DEBUG] Assigned {config.ROLE_PLAYER} role to {member.name}")
                         else:
                             print(f"[DEBUG] Could not find member {interaction.user.id} in guild")
                     else:
@@ -981,9 +987,15 @@ class ClanCog(commands.Cog):
         # Remove Discord role if exists
         if clan_data.get("discord_role_id"):
             try:
-                role = interaction.guild.get_role(int(clan_data["discord_role_id"]))
+                guild = interaction.guild
+                role = guild.get_role(int(clan_data["discord_role_id"]))
                 if role:
                     await interaction.user.remove_roles(role)
+                
+                # Also remove player role
+                player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+                if player_role and player_role in interaction.user.roles:
+                    await interaction.user.remove_roles(player_role, reason="Left clan")
             except Exception:
                 pass
         
@@ -1084,9 +1096,24 @@ class ClanCog(commands.Cog):
         
         # Remove all members and update clan status to disbanded
         async with db.get_connection() as conn:
+            # Get all member discord IDs before deleting from DB
+            cursor = await conn.execute("SELECT u.discord_id FROM users u JOIN clan_members cm ON u.id = cm.user_id WHERE cm.clan_id = ?", (clan_id,))
+            member_rows = await cursor.fetchall()
+            
             await conn.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
             await conn.execute("UPDATE clans SET status = 'disbanded', updated_at = datetime('now') WHERE id = ?", (clan_id,))
             await conn.commit()
+            
+        # Clean up 'player' role for all members
+        player_role = discord.utils.get(interaction.guild.roles, name=config.ROLE_PLAYER)
+        if player_role:
+            for row in member_rows:
+                try:
+                    m = interaction.guild.get_member(int(row[0]))
+                    if m and player_role in m.roles:
+                        await m.remove_roles(player_role, reason="Clan disbanded")
+                except Exception:
+                    pass
         
         await bot_utils.log_event(
             "CLAN_DISBANDED",
@@ -1549,15 +1576,22 @@ class ClanCog(commands.Cog):
         await db.set_clan_discord_ids(clan_id, str(clan_role.id), str(clan_channel.id))
         await db.update_clan_status(clan_id, "active")
         
-        # Assign role to all members
+        # Assign roles to all members
         members = await db.get_clan_members(clan_id)
         role_assign_failures = []
+        
+        # Get player role once
+        player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
         
         for member_data in members:
             try:
                 discord_member = guild.get_member(int(member_data["discord_id"]))
                 if discord_member:
+                    # Assign clan role
                     await discord_member.add_roles(clan_role)
+                    # Assign player role
+                    if player_role and player_role not in discord_member.roles:
+                        await discord_member.add_roles(player_role, reason="Clan approved auto-role")
             except Exception:
                 role_assign_failures.append(member_data["discord_id"])
         
@@ -1669,7 +1703,23 @@ class ClanCog(commands.Cog):
                 pass
         
         # Safe hard delete clan from DB
+        async with db.get_connection() as conn:
+            # Get members for role cleanup
+            cursor = await conn.execute("SELECT u.discord_id FROM users u JOIN clan_members cm ON u.id = cm.user_id WHERE cm.clan_id = ?", (clan_id,))
+            member_rows = await cursor.fetchall()
+            
         await db.hard_delete_clan(clan_id)
+        
+        # Cleanup 'player' role
+        player_role = discord.utils.get(interaction.guild.roles, name=config.ROLE_PLAYER)
+        if player_role:
+            for row in member_rows:
+                try:
+                    m = interaction.guild.get_member(int(row[0]))
+                    if m and player_role in m.roles:
+                        await m.remove_roles(player_role, reason="Clan deleted by mod")
+                except Exception:
+                    pass
         
         await bot_utils.log_event(
             "CLAN_DELETED_BY_MOD",
@@ -1757,9 +1807,15 @@ class ClanCog(commands.Cog):
         # Remove Discord role if exists
         if target_clan.get("discord_role_id"):
             try:
-                role = interaction.guild.get_role(int(target_clan["discord_role_id"]))
+                guild = interaction.guild
+                role = guild.get_role(int(target_clan["discord_role_id"]))
                 if role:
                     await member.remove_roles(role)
+                
+                # Also remove player role
+                player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+                if player_role and player_role in member.roles:
+                    await member.remove_roles(player_role, reason="Kicked from clan")
             except Exception:
                 pass
 

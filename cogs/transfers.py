@@ -160,6 +160,14 @@ class TransferAcceptView(discord.ui.View):
                 if dest_clan.get("discord_role_id"):
                     role = guild.get_role(int(dest_clan["discord_role_id"]))
                     if role: await member.add_roles(role)
+                
+                # Also ensure player role (just in case)
+                player_role = bot_utils.get_player_role()
+                if not player_role:
+                     player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+                
+                if player_role and player_role not in member.roles:
+                    await member.add_roles(player_role, reason="Transfer completed")
             except Exception:
                 pass
                 

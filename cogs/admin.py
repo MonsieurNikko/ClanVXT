@@ -30,6 +30,7 @@ class AdminCog(commands.Cog):
     clan_group = app_commands.Group(name="clan", description="Admin clan management", parent=admin_group)
     loan_admin_group = app_commands.Group(name="loan", description="Admin loan management", parent=admin_group)
     role_group = app_commands.Group(name="role", description="Admin role management", parent=admin_group)
+    matchmaking_group = app_commands.Group(name="matchmaking", description="Manage matchmaking settings", parent=admin_group)
     
     async def check_mod(self, interaction: discord.Interaction) -> bool:
         """Check if user has mod role."""
@@ -83,7 +84,7 @@ class AdminCog(commands.Cog):
                 active_cooldowns.append(f"• **{cd['kind']}**: Đến {cd['until']}")
         else:
             # Clans don't have legacy columns
-            for kind in [cooldowns.KIND_JOIN_LEAVE, cooldowns.KIND_LOAN]:
+            for kind in [cooldowns.KIND_JOIN_LEAVE, cooldowns.KIND_LOAN, cooldowns.KIND_MATCH_CREATE]:
                 is_cd, until = await cooldowns.check_cooldown("clan", target_id, kind)
                 if is_cd:
                     active_cooldowns.append(f"• **{kind}**: Đến {until}")
@@ -102,7 +103,7 @@ class AdminCog(commands.Cog):
         user="Target user (if type is User)",
         clan_name="Target clan name (if type is Clan)"
     )
-    async def cooldown_set(self, interaction: discord.Interaction, target_type: Literal["user", "clan"], kind: Literal["join_leave", "loan", "transfer_sickness"], duration_days: int, reason: str, user: Optional[discord.User] = None, clan_name: Optional[str] = None):
+    async def cooldown_set(self, interaction: discord.Interaction, target_type: Literal["user", "clan"], kind: Literal["join_leave", "loan", "transfer_sickness", "match_create"], duration_days: int, reason: str, user: Optional[discord.User] = None, clan_name: Optional[str] = None):
         """Set a cooldown."""
         if not await self.check_mod(interaction):
             return
@@ -155,7 +156,7 @@ class AdminCog(commands.Cog):
         user="Target user (if type is User)",
         clan_name="Target clan name (if type is Clan)"
     )
-    async def cooldown_clear(self, interaction: discord.Interaction, target_type: Literal["user", "clan"], kind: Optional[Literal["join_leave", "loan", "transfer_sickness"]] = None, user: Optional[discord.User] = None, clan_name: Optional[str] = None):
+    async def cooldown_clear(self, interaction: discord.Interaction, target_type: Literal["user", "clan"], kind: Optional[Literal["join_leave", "loan", "transfer_sickness", "match_create"]] = None, user: Optional[discord.User] = None, clan_name: Optional[str] = None):
         """Clear cooldowns."""
         if not await self.check_mod(interaction):
             return
@@ -809,6 +810,11 @@ class AdminCog(commands.Cog):
                         new_discord_role = guild.get_role(int(target_clan["discord_role_id"]))
                         if new_discord_role and new_discord_role not in discord_member.roles:
                             await discord_member.add_roles(new_discord_role, reason=f"Admin set_member: {reason}")
+                    
+                    # Also ensure 'player' role is assigned
+                    player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+                    if player_role and player_role not in discord_member.roles:
+                        await discord_member.add_roles(player_role, reason=f"Admin set_member: {reason}")
                 else:
                     role_sync_note = "\n⚠️ User không có trong guild, chỉ cập nhật DB."
             else:
@@ -829,6 +835,47 @@ class AdminCog(commands.Cog):
             print(f"[ADMIN] SET_MEMBER_CLAN: {user.name} moved {old_clan_name} -> {target_clan['name']} | Role: {role_result.get('new_role')} by {interaction.user.name}. Reason: {reason}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi điều chỉnh clan: {e}", ephemeral=True)
+
+    @clan_group.command(name="sync_player_role", description="Gán role 'player' cho tất cả thành viên của mọi clan")
+    async def admin_sync_player_role(self, interaction: discord.Interaction):
+        """Sync 'player' role to all members of active/inactive clans."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        guild = interaction.guild
+        if not guild:
+            return await interaction.followup.send("❌ Chỉ sử dụng được trong server.", ephemeral=True)
+            
+        player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+        if not player_role:
+            return await interaction.followup.send(f"❌ Không tìm thấy role **{config.ROLE_PLAYER}**.", ephemeral=True)
+            
+        async with db.get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT DISTINCT u.discord_id FROM users u
+                JOIN clan_members cm ON u.id = cm.user_id
+                JOIN clans c ON cm.clan_id = c.id
+                WHERE c.status IN ('active', 'inactive', 'frozen')
+            """)
+            members_to_sync = await cursor.fetchall()
+            
+        fixed = 0
+        failed = 0
+        for row in members_to_sync:
+            try:
+                member = guild.get_member(int(row[0]))
+                if member and player_role not in member.roles:
+                    await member.add_roles(player_role, reason="Admin sync_player_role")
+                    fixed += 1
+                elif not member:
+                    failed += 1
+            except Exception:
+                failed += 1
+                
+        await interaction.followup.send(f"✅ Đã đồng bộ role **{config.ROLE_PLAYER}**:\n• Đã gán: {fixed}\n• Thất bại/Không tìm thấy: {failed}", ephemeral=True)
+        await bot_utils.log_event("ADMIN_SYNC_PLAYER_ROLE", f"{interaction.user.mention} synced role: {fixed} assigned.")
 
     @role_group.command(name="grant", description="Grant clan management role to a member (DB update)")
     @app_commands.describe(
@@ -940,6 +987,34 @@ class AdminCog(commands.Cog):
             f"{interaction.user.mention} removed elevated role for {user.mention} in clan '{clan_data['name']}': {old_role} -> {new_role}. Reason: {reason}"
         )
         print(f"[ADMIN] ROLE_REMOVE: Management role removed from {user.name} in {clan_data['name']} by {interaction.user.name}. Reason: {reason}")
+
+    @admin_group.command(name="elo_rollback_matches", description="Rollback Elo for matches won by a specific clan (Fair Play)")
+    @app_commands.describe(clan_name="Clan to check for wins")
+    async def elo_rollback_matches(self, interaction: discord.Interaction, clan_name: str):
+        """View recent wins of a clan and select matches to rollback Elo."""
+        if not await self.check_mod(interaction):
+            return
+
+        clan = await db.get_clan_any_status(clan_name)
+        if not clan:
+            await interaction.response.send_message(f"❌ Clan **{clan_name}** không tồn tại.", ephemeral=True)
+            return
+
+        # Get recent wins
+        matches = await db.get_won_matches_by_clan(clan["id"], limit=25)
+        
+        if not matches:
+            await interaction.response.send_message(f"ℹ️ Clan **{clan['name']}** chưa thắng trận nào có tính điểm Elo (trong 25 trận gần nhất).", ephemeral=True)
+            return
+
+        # view defined later
+        view = EloRollbackSelectView(matches, clan, interaction.user)
+        await interaction.response.send_message(
+            f"🔍 **Fair Play Check**: Tìm thấy {len(matches)} trận thắng của **{clan['name']}**.\n"
+            "Chọn các trận đấu cần rollback Elo (hoàn điểm cho đội thua, trừ điểm đội thắng):",
+            view=view,
+            ephemeral=True
+        )
 
     # =========================================================================
     # MATCH MANAGEMENT
@@ -1117,6 +1192,38 @@ class AdminCog(commands.Cog):
     # =========================================================================
     # DASHBOARD COMMAND
     # =========================================================================
+
+    @matchmaking_group.command(name="lock", description="Temporarily lock all matchmaking challenges")
+    @app_commands.describe(reason="Reason for the lock")
+    async def match_lock(self, interaction: discord.Interaction, reason: str = "System maintenance"):
+        """Lock matchmaking."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await db.set_system_setting("matchmaking_locked", "1")
+        await db.set_system_setting("matchmaking_lock_reason", reason)
+        
+        await interaction.response.send_message(
+            f"🔒 **Đã khóa hệ thống War/Thách đấu.**\nLý do: {reason}",
+            ephemeral=False 
+        )
+        await bot_utils.log_event("MATCHMAKING_LOCKED", f"{interaction.user.mention} locked matchmaking. Reason: {reason}")
+        print(f"[ADMIN] MATCHMAKING_LOCKED by {interaction.user.name}. Reason: {reason}")
+
+    @matchmaking_group.command(name="unlock", description="Unlock matchmaking challenges")
+    async def match_unlock(self, interaction: discord.Interaction):
+        """Unlock matchmaking."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await db.set_system_setting("matchmaking_locked", "0")
+        
+        await interaction.response.send_message(
+            f"🔓 **Đã mở lại hệ thống War/Thách đấu.**",
+            ephemeral=False
+        )
+        await bot_utils.log_event("MATCHMAKING_UNLOCKED", f"{interaction.user.mention} unlocked matchmaking.")
+        print(f"[ADMIN] MATCHMAKING_UNLOCKED by {interaction.user.name}")
     
     @admin_group.command(name="dashboard", description="View database overview with all clans, members, matches")
     async def admin_dashboard(self, interaction: discord.Interaction):
@@ -1210,6 +1317,118 @@ class AdminCog(commands.Cog):
             "ADMIN_LOAN_FIX_ROLES",
             f"{interaction.user.mention} ran fix_roles: {len(active_loans)} loans checked, {fixed} fixed."
         )
+
+
+
+# =============================================================================
+# ELO ROLLBACK VIEW
+# =============================================================================
+
+class EloRollbackSelectView(discord.ui.View):
+    def __init__(self, matches: list, target_clan: dict, author: discord.User):
+        super().__init__(timeout=180)
+        self.matches = matches
+        self.target_clan = target_clan
+        self.author = author
+        self.selected_matches = []
+
+        # Create Select Menu
+        options = []
+        for m in matches:
+            # Determine opponent (Victim)
+            opponent_name = m["clan_b_name"] if m["clan_a_id"] == target_clan["id"] else m["clan_a_name"]
+            
+            # Formatting timestamp
+            dt = datetime.fromisoformat(m["created_at"])
+            date_str = dt.strftime("%d/%m")
+            
+            # Points gained by winner (target_clan)
+            # We need to check which delta belongs to target clan
+            points = 0
+            if m["clan_a_id"] == target_clan["id"]:
+                points = m["final_delta_a"]
+            else:
+                points = m["final_delta_b"]
+                
+            label = f"{date_str} vs {opponent_name}"
+            desc = f"Match #{m['id']} | +{points} Elo won"
+            
+            options.append(discord.SelectOption(
+                label=label,
+                description=desc,
+                value=str(m["id"])
+            ))
+
+        # Split into chunks if > 25 (though DB limits to 25)
+        # Discord allows max 25 options per select
+        self.select = discord.ui.Select(
+            placeholder="Chọn các trận đấu cần Rollback...",
+            min_values=1,
+            max_values=len(options),
+            options=options
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message("Không phải lệnh của bạn.", ephemeral=True)
+        
+        self.selected_matches = self.select.values
+        await interaction.response.defer(ephemeral=True)
+        
+        # Disable view
+        for child in self.children:
+            child.disabled = True
+        await interaction.edit_original_response(view=self)
+
+        # Process Rollbacks
+        results = []
+        mod_user = await db.get_user(str(self.author.id))
+        mod_id = mod_user["id"] if mod_user else 0
+        
+        for match_id_str in self.selected_matches:
+            match_id = int(match_id_str)
+            res = await moderation.rollback_match_elo(match_id, mod_id)
+            
+            if res["success"]:
+                # Parse details for notification
+                victim_info = None
+                for d in res["rollback_details"]:
+                    if d["clan_id"] != self.target_clan["id"]:
+                        victim_info = d
+                        break
+                
+                results.append(f"✅ Match #{match_id}: Rolled back.")
+                
+                # Notify Victim
+                if victim_info:
+                    try:
+                        victim_clan = await db.get_clan_by_id(victim_info["clan_id"])
+                        if victim_clan and victim_clan.get("discord_channel_id"):
+                            guild = interaction.guild
+                            chan = guild.get_channel(int(victim_clan["discord_channel_id"]))
+                            if chan:
+                                embed = discord.Embed(
+                                    title="⚖️ Fair Play Update (Hoàn điểm Elo)",
+                                    description=(
+                                        f"Kết quả trận đấu **#{match_id}** đã bị hủy bỏ do phát hiện vi phạm từ đối thủ.\n\n"
+                                        f"✅ **Điểm Elo được hoàn trả**: {victim_info['after']} (Hồi phục {victim_info['reverted_change']:+d})\n"
+                                        f"Chúng tôi cam kết môi trường thi đấu công bằng cho ClanVXT."
+                                    ),
+                                    color=discord.Color.green()
+                                )
+                                await chan.send(embed=embed)
+                    except Exception as e:
+                        print(f"[ROLLBACK] Failed to notify victim clan {victim_info['clan_id']}: {e}")
+
+            else:
+                results.append(f"❌ Match #{match_id}: Failed ({res['reason']})")
+
+        # Summary Report
+        embed = discord.Embed(title="🔄 Elo Rollback Report", color=discord.Color.orange())
+        embed.description = "\n".join(results)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # =============================================================================

@@ -66,6 +66,15 @@ async def on_ready():
     bot_utils.set_mod_role(mod_role)
     print(f"✓ Found mod role: {mod_role.name}")
     
+    player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+    if not player_role:
+        print(f"ERROR: Required role '{config.ROLE_PLAYER}' not found!")
+        print("This role must exist on the server. DO NOT CREATE it manually here.")
+        await bot.close()
+        return
+    bot_utils.set_player_role(player_role)
+    print(f"✓ Found player role: {player_role.name}")
+    
     # ==========================================================================
     # VALIDATE/CREATE CHANNELS
     # ==========================================================================

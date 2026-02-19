@@ -20,6 +20,7 @@ Hệ thống Clan được vận hành bởi bot, đảm bảo tính công bằn
 | **Captain** | 👑 | Toàn quyền quản lý, mời/kick thành viên, đổi tên, giải tán clan. |
 | **Vice Captain** | ⚔️ | Mời thành viên, tạo trận, thách đấu, yêu cầu mượn/chuyển người. |
 | **Member** | 👥 | Tham gia thi đấu, báo cáo kết quả trận đấu, rời clan. |
+| **Player** | 🎮 | Role tự động dành cho tất cả thành viên thuộc bất kỳ clan nào. |
 
 ---
 

@@ -11,6 +11,7 @@ from services import db
 KIND_JOIN_LEAVE = "join_leave"
 KIND_LOAN = "loan"
 KIND_TRANSFER_SICKNESS = "transfer_sickness"
+KIND_MATCH_CREATE = "match_create"
 
 # Default Durations (Days)
 DURATION_JOIN_LEAVE = 14

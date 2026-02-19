@@ -420,3 +420,13 @@ CREATE INDEX IF NOT EXISTS idx_highlights_user ON highlights(user_id);
 CREATE INDEX IF NOT EXISTS idx_highlights_match ON highlights(match_id);
 CREATE INDEX IF NOT EXISTS idx_highlights_created_at ON highlights(created_at);
 CREATE INDEX IF NOT EXISTS idx_highlights_status ON highlights(status);
+
+-- -----------------------------------------------------------------------------
+-- SYSTEM SETTINGS TABLE
+-- Stores global system configuration (key-value)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+);

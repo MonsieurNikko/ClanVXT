@@ -98,9 +98,10 @@ async def init_db() -> None:
             await conn.execute("ALTER TABLE loans ADD COLUMN note TEXT")
             await conn.commit()
             print("  ✓ Column added.")
-            
-            await conn.commit()
-            print("  ✓ Column added.")
+
+
+        # Check for system_settings table (created via schema, but good to check if we need to seed)
+        # No seed needed for now.
 
         # Check for Veto columns in matches
         if "match_format" not in match_columns:
@@ -2024,3 +2025,64 @@ async def get_lfg_post_by_id(post_id: int) -> Optional[Dict[str, Any]]:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+
+# =============================================================================
+# ELO REFUND / ROLLBACK HELPERS
+# =============================================================================
+
+async def get_won_matches_by_clan(clan_id: int, limit: int = 25) -> List[Dict[str, Any]]:
+    """Get recent confirmed/resolved matches where the specified clan was the winner."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT m.*, 
+                      c1.name as clan_a_name, c2.name as clan_b_name
+               FROM matches m
+               JOIN clans c1 ON m.clan_a_id = c1.id
+               JOIN clans c2 ON m.clan_b_id = c2.id
+               WHERE (
+                    COALESCE(m.winner_clan_id, m.resolved_winner_clan_id, m.reported_winner_clan_id) = ?
+               )
+               AND m.status IN ('confirmed', 'resolved')
+               AND m.elo_applied = 1
+               ORDER BY m.created_at DESC LIMIT ?""",
+            (clan_id, limit)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+# =============================================================================
+# SYSTEM SETTINGS
+# =============================================================================
+
+async def set_system_setting(key: str, value: Any) -> None:
+    """Set a system setting."""
+    async with get_connection() as conn:
+        await conn.execute(
+            """INSERT INTO system_settings (key, value, updated_at) 
+               VALUES (?, ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET 
+               value = excluded.value, 
+               updated_at = excluded.updated_at""",
+            (key, str(value))
+        )
+        await conn.commit()
+
+async def get_system_setting(key: str, default: Any = None) -> Any:
+    """Get a system setting."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT value FROM system_settings WHERE key = ?",
+            (key,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else default
+
+async def is_matchmaking_locked() -> tuple[bool, str]:
+    """Check if matchmaking is locked. Returns (is_locked, reason)."""
+    val = await get_system_setting("matchmaking_locked")
+    if val and val == "1":
+        reason = await get_system_setting("matchmaking_lock_reason", "Admin locked")
+        return True, reason
+    return False, ""
