@@ -40,14 +40,34 @@ async def clear_cooldown(target_type: str, target_id: int, kind: Optional[str] =
 # SPECIFIC HELPERS
 # =============================================================================
 
-async def check_member_join_cooldown(user_id: int) -> Tuple[bool, Optional[str]]:
-    """Check if user has a join/leave cooldown. FUSED: Includes lazy migration."""
+async def check_member_join_cooldown(user_id: int, target_clan_id: Optional[int] = None) -> Tuple[bool, Optional[str]]:
+    """
+    Check if user has a join/leave cooldown. 
+    If target_clan_id is provided (Try-out mode), checks if the cooldown is from THIS specific clan.
+    """
     # 1. Check new table
     is_cd, until = await check_cooldown("user", user_id, KIND_JOIN_LEAVE)
-    if is_cd:
-        return True, until
     
-    # 2. Backward compatibility & Lazy Migration
+    if is_cd:
+        if target_clan_id:
+            # TRY-OUT MODE: Only block if cooldown is from the SAME clan
+            # We stored the clan ID in the reason field: "... (ClanID: 123)"
+            cooldown = await db.get_cooldown("user", user_id, KIND_JOIN_LEAVE)
+            reason = cooldown.get("reason", "")
+            
+            # Check if reason contains the target clan ID
+            # Ideally we would have a structured column, but for now we parse the reason
+            expected_tag = f"(ClanID: {target_clan_id})"
+            if expected_tag in reason:
+                return True, until
+            else:
+                # Cooldown exists but from a DIFFERENT clan -> ALLOW Try-out
+                return False, None
+        else:
+            # NORMAL JOIN MODE: Block regardless of source clan
+            return True, until
+    
+    # 2. Backward compatibility & Lazy Migration (Can be skipped if migrated)
     user = await db.get_user_by_id(user_id)
     if user and user.get("cooldown_until"):
         legacy_until = user["cooldown_until"]
@@ -67,29 +87,27 @@ async def check_member_join_cooldown(user_id: int) -> Tuple[bool, Optional[str]]
             if until_dt > now:
                 # Migrate to the new system
                 print(f"[COOLDOWN] Lazy migrating user {user_id} cooldown: {legacy_until}")
+                # We don't know the source clan from legacy column, so assume strict cooldown
                 await db.set_cooldown("user", user_id, KIND_JOIN_LEAVE, (until_dt - now).days + 1, "Lazy migration from legacy column")
-                
-                # Clear legacy column
                 await db.update_user_cooldown(user_id, None) 
-                
                 return True, until_dt.isoformat()
             else:
-                # Expired legacy cooldown - just clear it
                 await db.update_user_cooldown(user_id, None)
         except Exception as e:
             print(f"[COOLDOWN] Error during lazy migration for user {user_id}: {e}")
-            # Clear invalid legacy data
             await db.update_user_cooldown(user_id, None)
             
     return False, None
 
-async def apply_member_join_cooldown(user_id: int, reason: str = "Left clan") -> None:
-    """Apply 14-day join/leave cooldown to a member."""
-    await apply_cooldown("user", user_id, KIND_JOIN_LEAVE, DURATION_JOIN_LEAVE, reason)
-    # Sync with users table for backward compatibility
-    # We can just update the users table directly here or let the new system take over.
-    # For safety, let's update users table too via db helper if it existed, but we didn't add that specific update method.
-    # We'll rely on the new table primarily.
+async def apply_member_join_cooldown(user_id: int, reason: str = "Left clan", source_clan_id: Optional[int] = None) -> None:
+    """Apply join/leave cooldown to a member. Includes ClanID in reason for try-out logic."""
+    final_reason = reason
+    if source_clan_id:
+        final_reason = f"{reason} (ClanID: {source_clan_id})"
+        
+    await apply_cooldown("user", user_id, KIND_JOIN_LEAVE, DURATION_JOIN_LEAVE, final_reason)
+    # Sync with users table for backward compatibility is skipped as we moved to new system
+
 
 async def apply_loan_cooldowns(source_clan_id: int, target_clan_id: int, member_id: int) -> None:
     """Apply 14-day loan cooldown to all parties after loan ends."""

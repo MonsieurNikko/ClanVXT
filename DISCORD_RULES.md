@@ -83,9 +83,23 @@ Có thể thách đấu clan khác từ bảng **#arena**:
 
 | Khi nào | Phải chờ |
 |---------|---------|
-| Rời clan | **14 ngày** mới được vào clan khác |
-| Bị kick | **14 ngày** mới được vào clan khác |
+| Rời clan | **03 ngày** mới được vào clan khác |
+| Bị kick | **03 ngày** mới được vào clan khác |
 | Chuyển clan (transfer) | Cấm đánh trận **3 ngày** |
+
+---
+
+## 🛡️ HỆ THỐNG TRY-OUT (THỬ VIỆC)
+
+Bạn có thể gia nhập clan dưới dạng **Recruit** (Thử việc):
+- **Thời hạn:** 24 giờ.
+- **Quyền lợi:** Tham gia thi đấu như thành viên chính thức.
+- **Kết thúc:**
+  - ✅ **Được Promote:** Trở thành thành viên chính thức.
+  - ❌ **Bị Fire/Tự rời:** Rời clan ngay lập tức, **KHÔNG BỊ COOLDOWN**.
+  - ⏳ **Hết 24h:** Tự động bị kick khỏi clan.
+
+**Lệnh:** Captain dùng `/clan recruit` để mời Try-out.
 
 ---
 
@@ -97,7 +111,7 @@ Muốn mượn người từ clan khác chơi tạm?
 - Tối đa **7 ngày**, mỗi clan mượn/cho mượn tối đa **2 người**
 - Yêu cầu loan được gửi vào kênh riêng của clan cho mượn
 - Khi thành công → Thông báo công khai tại `#chat-arena`
-- Sau khi trả người → Cooldown 14 ngày
+- Sau khi trả người → Cooldown **03 ngày**
 
 **Lệnh:** `/loan request <@người> <số ngày> [ghi chú]`
 
@@ -108,7 +122,7 @@ Muốn mượn người từ clan khác chơi tạm?
 Muốn chuyển hẳn sang clan khác?
 - Cần **3 bên đồng ý**
 - Clan cũ phải còn đủ 5 người sau khi chuyển
-- Sau khi chuyển → **Cấm đánh trận 3 ngày** + Cooldown 14 ngày
+- Sau khi chuyển → **Cấm đánh trận 3 ngày** + Cooldown **03 ngày**
 
 **Lệnh:** `/transfer request <@người> <tên clan>`
 

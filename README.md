@@ -5,6 +5,7 @@ A Discord bot for managing a competitive clan system for Valorant communities. I
 ## ✨ Features
 
 - **Clan Management**: Create, approve, invite/kick members, promote officers
+- **Try-Out System**: Recruit new members with a 24-hour probation period (auto-kick if not promoted)
 - **Elo System**: Automated Elo calculation with anti-farm mechanics
 - **Match Tracking**: Create matches, report results, handle disputes
 - **Loan System**: Temporarily loan members between clans

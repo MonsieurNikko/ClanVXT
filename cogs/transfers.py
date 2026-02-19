@@ -99,7 +99,7 @@ class TransferAcceptView(discord.ui.View):
             await cooldowns.apply_transfer_sickness(self.member_id)
             
             # Apply join/leave cooldown (14 days)
-            await cooldowns.apply_member_join_cooldown(self.member_id, "Transferred to new clan")
+            await cooldowns.apply_member_join_cooldown(self.member_id, "Transferred to new clan", self.source_clan_id)
             
             # Disable buttons
             for child in self.children:

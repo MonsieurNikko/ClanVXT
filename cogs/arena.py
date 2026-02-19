@@ -1153,11 +1153,23 @@ class ArenaView(discord.ui.View):
             inline=False
         )
         
+        # New Section: Try-Out
+        embed.add_field(
+            name="🛡️ Chế độ Thử Việc (Try-Out)",
+            value=(
+                "• Dành cho thành viên mới (Recruit) thời hạn **24h**\n"
+                "• Được tham gia thi đấu ngay lập tức\n"
+                "• Nếu bị kick/tự rời trong 24h: **KHÔNG BỊ COOLDOWN**\n"
+                "• Sau 24h không được Promote → **Tự động Kick**"
+            ),
+            inline=False
+        )
+        
         # Section 4: Cooldown & Rời Clan
         embed.add_field(
             name="⏳ Cooldown",
             value=(
-                "• Rời clan/bị kick → chờ **14 ngày** mới vào clan khác\n"
+                "• Rời clan/bị kick → chờ **03 ngày** mới vào clan khác\n"
                 "• Captain rời clan → phải **chuyển Captain** trước\n"
                 "• Clan < 5 người → **tạm khóa** tính năng thi đấu"
             ),
@@ -1170,8 +1182,8 @@ class ArenaView(discord.ui.View):
             value=(
                 "• Elo **thay đổi** dựa trên chênh lệch sức mạnh (K=32)\n"
                 "• **10 trận đầu** = placement: Elo thay đổi nhanh hơn (K=40)\n"
-                "• Thắng đối thủ **mạnh hơn** → nhận **nhiều Elo hơn**\n"
-                "• **Elo sàn**: không dưới 100 — cùng 2 clan: giảm dần sau mỗi trận/24h"
+                "• **Ban/Pick Map**: BO1/BO3 theo chuẩn giải đấu\n"
+                "• **Giới hạn**: Mỗi clan chỉ được 1 trận chưa hoàn thành (Active)"
             ),
             inline=False
         )
@@ -1180,10 +1192,10 @@ class ArenaView(discord.ui.View):
         embed.add_field(
             name="🤝 Cho Mượn Thành Viên",
             value=(
-                "• Tối đa **1 người** cho mượn/mỗi clan\n"
+                "• Tối đa **2 người** cho mượn/mỗi clan\n"
                 "• Cần **3 bên đồng ý**: 2 Captain + người được mượn\n"
                 "• Thời hạn tối đa **7 ngày**\n"
-                "• Cooldown **14 ngày** sau khi kết thúc"
+                "• Cooldown **03 ngày** sau khi kết thúc"
             ),
             inline=True
         )
@@ -1195,7 +1207,7 @@ class ArenaView(discord.ui.View):
                 "• Cần **3 bên đồng ý** (giống Cho mượn)\n"
                 "• Clan nguồn phải còn **≥5 người** sau chuyển\n"
                 "• **Transfer Sickness**: cấm thi đấu **3 ngày**\n"
-                "• Cooldown **14 ngày** không rời clan mới"
+                "• Cooldown **03 ngày** không rời clan mới"
             ),
             inline=True
         )

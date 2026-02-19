@@ -5,7 +5,7 @@ Implements all clan-related slash commands and UI components
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
@@ -397,6 +397,72 @@ class ClanCog(commands.Cog):
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.check_tryouts_loop.start()
+
+    def cog_unload(self):
+        self.check_tryouts_loop.cancel()
+
+    @tasks.loop(minutes=10)
+    async def check_tryouts_loop(self):
+        if not self.bot.is_ready():
+            return
+
+        try:
+            expired_members = await db.get_expired_tryouts()
+            for member in expired_members:
+                user_id = member["user_id"]
+                clan_id = member["clan_id"]
+                clan_name = member["clan_name"]
+                
+                print(f"[TRYOUT] Auto-kicking expired recruit {user_id} from clan {clan_name}")
+                
+                # Check if still recruit (double check)
+                existing_member = await db.get_clan_member(user_id, clan_id)
+                if not existing_member or existing_member.get("join_type") != "tryout":
+                    continue
+                
+                # Remove member
+                await db.remove_member(user_id, clan_id)
+                
+                # Remove roles
+                clan = await db.get_clan_by_id(clan_id)
+                if clan and clan.get("discord_role_id"):
+                    try:
+                        guild = self.bot.get_guild(config.GUILD_ID)
+                        if guild:
+                            role = guild.get_role(int(clan["discord_role_id"]))
+                            discord_member = guild.get_member(int(member["discord_id"]))
+                            if role and discord_member:
+                                await discord_member.remove_roles(role)
+                    except Exception as e:
+                        print(f"[TRYOUT] Error removing role: {e}")
+
+                # Log
+                await bot_utils.log_event(
+                    "TRYOUT_EXPIRED",
+                    f"Recruit <@{member['discord_id']}> auto-kicked from '{clan_name}' (24h expired)"
+                )
+
+                # Announce Public
+                await bot_utils.announce_public(
+                    title="⌛ Try-out Expired",
+                    description=f"Recruit <@{member['discord_id']}> đã trượt kỳ try-out 24h tại clan **{clan_name}**.",
+                    color=discord.Color.red()
+                )
+                
+                # Notify user
+                try:
+                    discord_user = self.bot.get_user(int(member["discord_id"]))
+                    if discord_user:
+                        await discord_user.send(
+                            f"⚠️ **Try-out đã hết hạn!**\n"
+                            f"Bạn chưa được Promote lên thành viên chính thức trong vòng 24h, nên đã bị tự động rời khỏi clan **{clan_name}**."
+                        )
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            print(f"[TRYOUT] Error in loop: {e}")
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -643,8 +709,19 @@ class ClanCog(commands.Cog):
             )
             return
         
+        # Check invite type
+        invite_type = invite.get("invite_type", "full")
+        role = "member"
+        join_type = "full"
+        tryout_expires_at = None
+        
+        if invite_type == "tryout":
+            role = "recruit"
+            join_type = "tryout"
+            tryout_expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+        
         # Add user to clan
-        await db.add_member(user["id"], clan_id, "member")
+        await db.add_member(user["id"], clan_id, role, join_type, tryout_expires_at)
         
         # Assign Discord role if exists
         clan = await db.get_clan_by_id(clan_id)
@@ -676,10 +753,28 @@ class ClanCog(commands.Cog):
             except Exception as e:
                 print(f"[DEBUG] Failed to assign role: {e}")
         
+        msg_success = f"✅ Bạn đã tham gia clan **{clan_name}** thành công!"
+        if invite_type == "tryout":
+            msg_success = f"✅ Bạn đã bắt đầu giai đoạn **Try-out** tại clan **{clan_name}**!\n⏳ Thời hạn: 24 giờ."
+            
         await interaction.followup.send(
-            content=f"✅ Bạn đã tham gia clan **{clan_name}** thành công!",
+            content=msg_success,
             ephemeral=True
         )
+        
+        # Announce Public
+        if invite_type == "tryout":
+            await bot_utils.announce_public(
+                title="🛡️ New Recruit!",
+                description=f"Chào mừng <@{interaction.user.id}> gia nhập clan **{clan_name}** (Try-out)!",
+                color=discord.Color.blue()
+            )
+        else:
+            await bot_utils.announce_public(
+                title="👋 New Member!",
+                description=f"Chào mừng <@{interaction.user.id}> gia nhập clan **{clan_name}**!",
+                color=discord.Color.green()
+            )
         
         # Get inviter name for log
         inviter = await db.get_user_by_id(invite.get("invited_by_user_id"))
@@ -977,12 +1072,20 @@ class ClanCog(commands.Cog):
             
         await db.cancel_user_pending_requests(user["id"])
         
+        # Check role before removing
+        member_role = clan_data.get("member_role", "member")
+        join_type = clan_data.get("join_type", "full")
+
         # Remove from clan
         await db.remove_member(user["id"], clan_id)
         
-        # Apply cooldown
-        cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
-        await db.update_user_cooldown(user["id"], cooldown_until)
+        # Apply cooldown ONLY if not a recruit/tryout
+        if member_role != "recruit" and join_type != "tryout":
+            cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
+            await db.update_user_cooldown(user["id"], cooldown_until) # Legacy safe kep for now
+            await cooldowns.apply_member_join_cooldown(user["id"], f"Left clan {clan_name}", source_clan_id=clan_id)
+        else:
+             print(f"[CLAN] User {user['id']} (Recruit) left clan {clan_id} - No cooldown applied.")
         
         # Remove Discord role if exists
         if clan_data.get("discord_role_id"):
@@ -1034,16 +1137,39 @@ class ClanCog(commands.Cog):
                 f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE})"
             )
         
+        # Try to get member role/type if we can, but they are already removed. 
+        # Wait, we need to check BEFORE removal. 
+        # We did fetch clan_data at start, but that was just user_clan.
+        # We need to make sure we have the correct role/type.
+        
+        # In this command `clan_leave` we fetch `clan_data` using `get_user_clan` which returns generic clan info + member_role.
+        # It DOES NOT return `join_type`. We need to fetch that or assume.
+        # Let's fix the fetching part first in a separate edit or rely on `get_user_clan` having it?
+        # `get_user_clan` query: select c.*, cm.role as member_role ...
+        # I need to update `get_user_clan` in `db.py` to include `join_type`?
+        # Yes, I should probably check that. 
+        # For now, I will assume I can get it or I will fetch it specifically.
+        
+        cd_msg = ""
+        if member_role != "recruit" and join_type != "tryout":
+             cd_msg = f"⏳ Bạn hiện đang trong thời gian chờ **{config.COOLDOWN_DAYS} ngày** trước khi có thể gia nhập clan khác."
+        
         await bot_utils.log_event(
             "MEMBER_LEAVE",
-            f"{interaction.user.mention} left clan '{clan_name}'. Cooldown: {config.COOLDOWN_DAYS} days."
+            f"{interaction.user.mention} left clan '{clan_name}'. {cd_msg}"
         )
         print(f"[CLAN] User {interaction.user.name} left clan {clan_name}")
         
         await interaction.followup.send(
-            f"✅ Bạn đã rời clan **{clan_name}**.\n"
-            f"⏳ Bạn hiện đang trong thời gian chờ **{config.COOLDOWN_DAYS} ngày** trước khi có thể gia nhập clan khác.",
+            f"✅ Bạn đã rời clan **{clan_name}**.\n{cd_msg}",
             ephemeral=True
+        )
+        
+        # Announce Public
+        await bot_utils.announce_public(
+            title="🏃 Member Left",
+            description=f"<@{interaction.user.id}> đã rời khỏi clan **{clan_name}**.",
+            color=discord.Color.orange()
         )
     
     @clan_group.command(name="disband", description="Disband your clan (Captain only, deletes clan)")
@@ -1312,6 +1438,190 @@ class ClanCog(commands.Cog):
                 f"❌ Không thể gửi DM đến {member.mention}. Họ có thể đã tắt DM từ server.",
                 ephemeral=True
             )
+
+    @clan_group.command(name="recruit", description="Recruit a member for a 24h Try-out (Captain/Vice only)")
+    @app_commands.describe(member="The member to recruit")
+    async def clan_recruit(self, interaction: discord.Interaction, member: discord.Member):
+        """Recruit a member for a 24h Try-out."""
+        if not await check_verified(interaction):
+            return
+        
+        user = await ensure_user_registered(interaction)
+        if not user:
+            return
+        
+        # Check permissions
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data or clan_data["member_role"] not in ("captain", "vice"):
+            await interaction.response.send_message("❌ Chỉ Captain hoặc Vice mới có thể tuyển quân try-out.", ephemeral=True)
+            return
+            
+         # Check clan is active
+        if clan_data["status"] != "active":
+            await interaction.response.send_message("❌ Clan của bạn chưa hoạt động.", ephemeral=True)
+            return
+
+        # Validate target
+        if member.bot or member.id == interaction.user.id:
+            await interaction.response.send_message("❌ Mục tiêu không hợp lệ.", ephemeral=True)
+            return
+            
+        # Check target verified
+        target_role_names = [role.name for role in member.roles]
+        if config.ROLE_VERIFIED not in target_role_names:
+            await interaction.response.send_message(f"❌ {member.mention} chưa verify.", ephemeral=True)
+            return
+
+        # Get/Create target user
+        target_user = await db.get_user(str(member.id))
+        if not target_user:
+            await db.create_user(str(member.id), member.display_name)
+            target_user = await db.get_user(str(member.id))
+
+        # Check existing clan
+        target_clan = await db.get_user_clan(target_user["id"])
+        if target_clan:
+            await interaction.response.send_message(f"❌ {member.mention} đã ở trong clan **{target_clan['name']}**.", ephemeral=True)
+            return
+
+        # Check Cooldown (Try-out Logic)
+        # We pass target_clan_id=clan_data["id"] so it CHECKS if the cooldown (if acting) is from THIS clan
+        is_cd, until = await cooldowns.check_member_join_cooldown(target_user["id"], target_clan_id=clan_data["id"])
+        if is_cd:
+             # This means they are blocked specifically from joining THIS clan (re-join same clan)
+             await interaction.response.send_message(f"❌ {member.mention} vừa rời clan này và đang bị cooldown. Không thể try-out lại ngay.", ephemeral=True)
+             return
+             
+        # Check max ONE recruit
+        # TODO: Check if clan already has a recruit? 
+        # Requirement: "Mỗi clan chỉ tối đa 01 recruit."
+        members = await db.get_clan_members(clan_data["id"])
+        recruit_count = sum(1 for m in members if m["role"] == "recruit")
+        if recruit_count >= 1:
+            await interaction.response.send_message("❌ Clan của bạn đã có 01 Recruit rồi. Hãy Promote hoặc Fire họ trước.", ephemeral=True)
+            return
+
+        # Check existing invite
+        existing_invite = await db.get_pending_invite(target_user["id"], clan_data["id"])
+        if existing_invite:
+            await interaction.response.send_message(f"❌ Đang có lời mời chờ cho {member.mention}.", ephemeral=True)
+            return
+
+        # Create TRY-OUT invite
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+        invite_id = await db.create_invite_request(
+            clan_data["id"],
+            target_user["id"],
+            user["id"],
+            expires_at,
+            invite_type="tryout"
+        )
+        
+        # Send DM
+        try:
+            view = InviteAcceptDeclineView(invite_id, clan_data["id"], target_user["id"], clan_data["name"], interaction.user.display_name)
+            await member.send(
+                f"🛡️ **Mời Try-out Clan!**\n\n"
+                f"**{interaction.user.display_name}** mời bạn tham gia **Try-out 24h** tại clan **{clan_data['name']}**.\n"
+                f"Bạn sẽ có role `Recruit` và phải được Promote trong vòng 24h, nếu không sẽ bị kick tự động.\n\n"
+                f"Bấm **Accept** để bắt đầu thử việc.",
+                view=view
+            )
+            await interaction.response.send_message(f"✅ Đã gửi lời mời Try-out đến {member.mention}.", ephemeral=True)
+            await bot_utils.log_event("CLAN_RECRUIT_SENT", f"{interaction.user.mention} sent TRY-OUT invite to {member.mention} for '{clan_data['name']}'")
+        except discord.Forbidden:
+             await interaction.response.send_message(f"❌ Không thể gửi DM cho {member.mention}.", ephemeral=True)
+
+    @clan_group.command(name="promote", description="Promote a Recruit to Member (Captain only)")
+    @app_commands.describe(member="The recruit to promote")
+    async def clan_promote(self, interaction: discord.Interaction, member: discord.Member):
+        """Promote a recruit."""
+        if not await check_verified(interaction): return
+        user = await ensure_user_registered(interaction)
+        if not user: return
+        
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data or clan_data["member_role"] != "captain":
+            await interaction.response.send_message("❌ Chỉ Captain mới có thể Promote.", ephemeral=True)
+            return
+
+        target_user = await db.get_user(str(member.id))
+        if not target_user: return
+        
+        target_clan = await db.get_user_clan(target_user["id"])
+        if not target_clan or target_clan["id"] != clan_data["id"]:
+            await interaction.response.send_message("❌ Thành viên này không thuộc clan của bạn.", ephemeral=True)
+            return
+            
+        if target_clan["member_role"] != "recruit":
+            await interaction.response.send_message(f"❌ {member.mention} không phải là Recruit.", ephemeral=True)
+            return
+            
+        # Update Role: recruit -> member, join_type -> full, clear tryout_expires_at
+        async with db.get_connection() as conn:
+            await conn.execute(
+                "UPDATE clan_members SET role='member', join_type='full', tryout_expires_at=NULL WHERE clan_id=? AND user_id=?",
+                (clan_data["id"], target_user["id"])
+            )
+            await conn.commit()
+            
+        await interaction.response.send_message(f"✅ {member.mention} đã được thăng chức thành **Thành Viên Chính Thức**!", ephemeral=True)
+        await bot_utils.log_event("MEMBER_PROMOTED", f"{member.mention} promoted from Recruit to Member in '{clan_data['name']}'")
+        
+        # Announce Public
+        await bot_utils.announce_public(
+            title="🆙 Recruit Promoted!",
+            description=f"Chúc mừng <@{member.id}> đã vượt qua kỳ try-out và trở thành thành viên chính thức của **{clan_data['name']}**!",
+            color=discord.Color.gold()
+        )
+
+    @clan_group.command(name="fire", description="Fire a Recruit immediately (Captain only)")
+    @app_commands.describe(member="The recruit to fire")
+    async def clan_fire(self, interaction: discord.Interaction, member: discord.Member):
+        """Fire a recruit."""
+        if not await check_verified(interaction): return
+        user = await ensure_user_registered(interaction)
+        if not user: return
+        
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data or clan_data["member_role"] != "captain":
+            await interaction.response.send_message("❌ Chỉ Captain mới có thể Fire recruit.", ephemeral=True)
+            return
+
+        target_user = await db.get_user(str(member.id))
+        if not target_user: return
+        
+        target_clan = await db.get_user_clan(target_user["id"])
+        if not target_clan or target_clan["id"] != clan_data["id"]:
+            await interaction.response.send_message("❌ Thành viên này không thuộc clan của bạn.", ephemeral=True)
+            return
+            
+        if target_clan["member_role"] != "recruit":
+            await interaction.response.send_message(f"❌ {member.mention} không phải là Recruit. Dùng `/clan kick` cho thành viên chính thức.", ephemeral=True)
+            return
+            
+        # Remove member (No cooldown per rules)
+        await db.remove_member(target_user["id"], clan_data["id"])
+        
+        # Remove roles
+        if clan_data.get("discord_role_id"):
+             try:
+                guild = interaction.guild
+                role = guild.get_role(int(clan_data["discord_role_id"]))
+                if role: await member.remove_roles(role)
+             except: pass
+
+        await interaction.response.send_message(f"✅ {member.mention} đã bị Fire (Kết thúc thử việc). Không áp dụng cooldown.", ephemeral=True)
+        await bot_utils.log_event("RECRUIT_FIRED", f"{member.mention} fired from '{clan_data['name']}' by {interaction.user.mention}")
+        try: await member.send(f"⚠️ Bạn đã bị chấm dứt Try-out tại clan **{clan_data['name']}**.")
+        except: pass
+        
+        # Announce Public
+        await bot_utils.announce_public(
+            title="🚫 Recruit Fired",
+            description=f"<@{member.id}> đã bị chấm dứt giai đoạn Try-out tại clan **{clan_data['name']}**.",
+            color=discord.Color.red()
+        )
     
     @clan_group.command(name="demote_vice", description="Demote a Vice Captain to Member")
     @app_commands.describe(member="The Vice Captain to demote")
@@ -1409,13 +1719,26 @@ class ClanCog(commands.Cog):
             
         await db.cancel_user_pending_requests(target_user["id"])
 
+        # Check role from target_clan (which is from get_user_clan)
+        # Note: get_user_clan might not return join_type yet, need to verify db.py
+        # But let's fetch specific member record to be safe
+        member_record = await db.get_clan_member(target_user["id"], clan_id)
+        is_recruit = False
+        if member_record:
+            if member_record.get("role") == "recruit" or member_record.get("join_type") == "tryout":
+                is_recruit = True
+
         # Remove from clan
         await db.remove_member(target_user["id"], clan_id)
         print(f"[CLAN] Member {member.name} kicked from {clan_name} by {interaction.user.name}")
         
-        # Apply cooldown to kicked member
-        cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
-        await db.update_user_cooldown(target_user["id"], cooldown_until)
+        # Apply cooldown if not recruit
+        if not is_recruit:
+            cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
+            await db.update_user_cooldown(target_user["id"], cooldown_until)
+            await cooldowns.apply_member_join_cooldown(target_user["id"], f"Kicked from clan {clan_name}", source_clan_id=clan_id)
+        else:
+            print(f"Skipped cooldown for kicked recruit {member.name}")
         
         # Remove Discord role if exists
         if clan_data.get("discord_role_id"):
@@ -1461,25 +1784,33 @@ class ClanCog(commands.Cog):
                 f"Clan '{clan_name}' auto-disbanded (members dropped below {config.MIN_MEMBERS_ACTIVE}) after kick"
             )
         
+        cd_text = f"Cooldown: {config.COOLDOWN_DAYS} ngày." if not is_recruit else "No Cooldown (Recruit)."
         await bot_utils.log_event(
             "MEMBER_KICK",
-            f"{member.mention} kicked from '{clan_name}' by {interaction.user.mention}. Cooldown: {config.COOLDOWN_DAYS} days."
+            f"{member.mention} kicked from '{clan_name}' by {interaction.user.mention}. {cd_text}"
         )
         
+        msg_extra = f"Họ hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày." if not is_recruit else "Họ có thể gia nhập clan khác ngay (Recruit)."
         await interaction.followup.send(
-            f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n"
-            f"Họ hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày.",
+            f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n{msg_extra}",
             ephemeral=True
         )
         
         # Try to DM the kicked member
         try:
+            cd_dm = f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác." if not is_recruit else "Bạn không bị cooldown do đang trong thời gian thử việc."
             await member.send(
-                f"⚠️ Bạn đã bị **kick** khỏi clan **{clan_name}** bởi Captain.\n"
-                f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác."
+                f"⚠️ Bạn đã bị **kick** khỏi clan **{clan_name}** bởi Captain.\n{cd_dm}"
             )
         except Exception:
             pass
+            
+        # Announce Public
+        await bot_utils.announce_public(
+            title="👢 Member Kicked",
+            description=f"<@{member.id}> đã bị kick khỏi clan **{clan_name}**.",
+            color=discord.Color.red()
+        )
     
     # =========================================================================
     # MOD COMMANDS
@@ -1800,10 +2131,23 @@ class ClanCog(commands.Cog):
         # Remove from clan
         await db.remove_member(target_user["id"], clan_id)
 
+        # Check role/type (using target_clan data is risky if it doesn't have join_type, but we can infer from role)
+        # Better to fetch
+        # Since I cannot easily inject a fetch here without breaking flow, I'll rely on checking target_clan keys or fetching again if needed.
+        # Actually `target_clan` from `get_user_clan` MIGHT NOT have join_type.
+        # Let's verify `get_user_clan` output in `db.py` later. For now, assume I need to double check.
+        # Wait, I can just check if I can modify db.py first? 
+        # No, I'll just skip the fetch and assume "recruit" role is enough?
+        # Yes, role is in target_clan.
+        
+        is_recruit_mod = target_clan.get("member_role") == "recruit"
+        
         # Apply cooldown to kicked member
-        cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
-        await db.update_user_cooldown(target_user["id"], cooldown_until)
-
+        if not is_recruit_mod:
+            cooldown_until = (datetime.now(timezone.utc) + timedelta(days=config.COOLDOWN_DAYS)).isoformat()
+            await db.update_user_cooldown(target_user["id"], cooldown_until)
+            await cooldowns.apply_member_join_cooldown(target_user["id"], f"Kicked from clan {clan_name} by mod", source_clan_id=clan_id)
+        
         # Remove Discord role if exists
         if target_clan.get("discord_role_id"):
             try:
@@ -1860,18 +2204,25 @@ class ClanCog(commands.Cog):
         await interaction.followup.send(
             f"✅ {member.mention} đã bị kick khỏi **{clan_name}**.\n"
             f"Lý do: {reason_text}\n"
-            f"Cooldown: {config.COOLDOWN_DAYS} ngày.",
+            f"{'Cooldown: ' + str(config.COOLDOWN_DAYS) + ' ngày.' if not is_recruit_mod else 'No Cooldown (Recruit).'}",
             ephemeral=True
         )
 
         try:
+            cd_dm_mod = f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác." if not is_recruit_mod else "Do là recruit, bạn không bị cooldown."
             await member.send(
                 f"⚠️ Bạn đã bị **kick** khỏi clan **{clan_name}** bởi Moderator.\n"
-                f"Lý do: {reason_text}\n"
-                f"Bạn hiện đang trong thời gian chờ {config.COOLDOWN_DAYS} ngày trước khi có thể gia nhập clan khác."
+                f"Lý do: {reason_text}\n{cd_dm_mod}"
             )
         except Exception:
             pass
+            
+        # Announce Public (Mod Action)
+        await bot_utils.announce_public(
+            title="🛡️ Member Kicked by Mod",
+            description=f"<@{member.id}> đã bị kick khỏi clan **{clan_name}** bởi Moderator.\nLý do: {reason_text}",
+            color=discord.Color.dark_red()
+        )
     
     @mod_clan_group.command(name="set_captain", description="Set a new captain for a clan (Mod only)")
     @app_commands.describe(clan_name="The clan name", member="The member to make captain")

@@ -122,6 +122,32 @@ async def init_db() -> None:
             await conn.commit()
             print("  ✓ Column added.")
 
+        # Check for Try-out columns in clan_members
+        cursor = await conn.execute("PRAGMA table_info(clan_members)")
+        member_columns = [row[1] for row in await cursor.fetchall()]
+        
+        if "join_type" not in member_columns:
+            print("[DB] Migrating: Adding 'join_type' to 'clan_members' table...")
+            await conn.execute("ALTER TABLE clan_members ADD COLUMN join_type TEXT DEFAULT 'full'")
+            await conn.commit()
+            print("  ✓ Column added.")
+            
+        if "tryout_expires_at" not in member_columns:
+            print("[DB] Migrating: Adding 'tryout_expires_at' to 'clan_members' table...")
+            await conn.execute("ALTER TABLE clan_members ADD COLUMN tryout_expires_at TEXT DEFAULT NULL")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        # Check for invite_type in invite_requests
+        cursor = await conn.execute("PRAGMA table_info(invite_requests)")
+        invite_columns = [row[1] for row in await cursor.fetchall()]
+        
+        if "invite_type" not in invite_columns:
+            print("[DB] Migrating: Adding 'invite_type' to 'invite_requests' table...")
+            await conn.execute("ALTER TABLE invite_requests ADD COLUMN invite_type TEXT DEFAULT 'full'")
+            await conn.commit()
+            print("  ✓ Column added.")
+
         # Ensure lfg_posts table exists (handled by executescript but for clarity)
         if "lfg_posts" not in all_tables:
              print("[DB] Initializing 'lfg_posts' table...")
@@ -516,12 +542,12 @@ async def update_clan_name(clan_id: int, new_name: str) -> bool:
 # CLAN MEMBERS CRUD
 # =============================================================================
 
-async def add_member(user_id: int, clan_id: int, role: str = "member") -> None:
+async def add_member(user_id: int, clan_id: int, role: str = "member", join_type: str = "full", tryout_expires_at: Optional[str] = None) -> None:
     """Add a member to a clan. Idempotent: uses INSERT OR IGNORE."""
     async with get_connection() as conn:
         await conn.execute(
-            "INSERT OR IGNORE INTO clan_members (user_id, clan_id, role) VALUES (?, ?, ?)",
-            (user_id, clan_id, role)
+            "INSERT OR IGNORE INTO clan_members (user_id, clan_id, role, join_type, tryout_expires_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, clan_id, role, join_type, tryout_expires_at)
         )
         await conn.commit()
 
@@ -652,7 +678,10 @@ async def get_user_clan(user_id: int) -> Optional[Dict[str, Any]]:
     """Get the clan a user belongs to (excludes disbanded/cancelled clans)."""
     async with get_connection() as conn:
         cursor = await conn.execute(
-            """SELECT c.*, cm.role as member_role
+            """SELECT c.*, 
+                      cm.role as member_role, 
+                      cm.join_type, 
+                      cm.tryout_expires_at
                FROM clans c
                JOIN clan_members cm ON c.id = cm.clan_id
                WHERE cm.user_id = ? AND c.status NOT IN ('disbanded', 'cancelled', 'rejected')""",
@@ -756,20 +785,31 @@ async def check_all_accepted(clan_id: int) -> bool:
 # INVITE REQUESTS CRUD (Invite to existing active clan)
 # =============================================================================
 
-async def create_invite_request(clan_id: int, user_id: int, invited_by_user_id: int, expires_at: str) -> int:
+async def create_invite_request(clan_id: int, user_id: int, invited_by_user_id: int, expires_at: str, invite_type: str = "full") -> int:
     """Create a new invite request for joining an existing clan. Returns invite ID."""
     async with get_connection() as conn:
-        # Cancel any existing pending invites for this user to this clan
-        await conn.execute(
-            "UPDATE invite_requests SET status = 'cancelled' WHERE clan_id = ? AND user_id = ? AND status = 'pending'",
-            (clan_id, user_id)
-        )
-        cursor = await conn.execute(
-            "INSERT INTO invite_requests (clan_id, user_id, invited_by_user_id, expires_at) VALUES (?, ?, ?, ?)",
-            (clan_id, user_id, invited_by_user_id, expires_at)
-        )
-        await conn.commit()
-        return cursor.lastrowid
+        await conn.execute("BEGIN")
+        try:
+            # Cancel any existing pending invites for this user to this clan
+            # First, ensure we don't hit UNIQUE constraint on 'cancelled'
+            await conn.execute(
+                "UPDATE invite_requests SET status = 'cancelled_' || id WHERE clan_id = ? AND user_id = ? AND status = 'cancelled'",
+                (clan_id, user_id)
+            )
+            
+            await conn.execute(
+                "UPDATE invite_requests SET status = 'cancelled' WHERE clan_id = ? AND user_id = ? AND status = 'pending'",
+                (clan_id, user_id)
+            )
+            cursor = await conn.execute(
+                "INSERT INTO invite_requests (clan_id, user_id, invited_by_user_id, expires_at, invite_type) VALUES (?, ?, ?, ?, ?)",
+                (clan_id, user_id, invited_by_user_id, expires_at, invite_type)
+            )
+            await conn.commit()
+            return cursor.lastrowid
+        except Exception as e:
+            await conn.rollback()
+            raise e
 
 
 async def get_pending_invite(user_id: int, clan_id: int = None) -> Optional[Dict[str, Any]]:
@@ -792,23 +832,59 @@ async def get_pending_invite(user_id: int, clan_id: int = None) -> Optional[Dict
 async def accept_invite(invite_id: int) -> bool:
     """Accept an invite. Returns True if successful."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
-            "UPDATE invite_requests SET status = 'accepted', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
-            (invite_id,)
-        )
-        await conn.commit()
-        return cursor.rowcount > 0
+        await conn.execute("BEGIN")
+        try:
+            # Get invite details first to handle duplicates
+            cursor = await conn.execute("SELECT clan_id, user_id FROM invite_requests WHERE id = ?", (invite_id,))
+            row = await cursor.fetchone()
+            
+            if row:
+                clan_id = row["clan_id"]
+                user_id = row["user_id"]
+                # Rename old accepted invites to avoid UNIQUE(clan_id, user_id, status) violation
+                await conn.execute(
+                    "UPDATE invite_requests SET status = 'accepted_' || id WHERE clan_id = ? AND user_id = ? AND status = 'accepted'",
+                    (clan_id, user_id)
+                )
+
+            cursor = await conn.execute(
+                "UPDATE invite_requests SET status = 'accepted', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
+                (invite_id,)
+            )
+            await conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            await conn.rollback()
+            return False
 
 
 async def decline_invite(invite_id: int) -> bool:
     """Decline an invite. Returns True if successful."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
-            "UPDATE invite_requests SET status = 'declined', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
-            (invite_id,)
-        )
-        await conn.commit()
-        return cursor.rowcount > 0
+        await conn.execute("BEGIN")
+        try:
+            # Get invite details first to handle duplicates
+            cursor = await conn.execute("SELECT clan_id, user_id FROM invite_requests WHERE id = ?", (invite_id,))
+            row = await cursor.fetchone()
+            
+            if row:
+                clan_id = row["clan_id"]
+                user_id = row["user_id"]
+                # Rename old declined invites to avoid UNIQUE constraint violation
+                await conn.execute(
+                    "UPDATE invite_requests SET status = 'declined_' || id WHERE clan_id = ? AND user_id = ? AND status = 'declined'",
+                    (clan_id, user_id)
+                )
+
+            cursor = await conn.execute(
+                "UPDATE invite_requests SET status = 'declined', responded_at = datetime('now') WHERE id = ? AND status = 'pending'",
+                (invite_id,)
+            )
+            await conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            await conn.rollback()
+            return False
 
 
 async def get_invite_by_id(invite_id: int) -> Optional[Dict[str, Any]]:
@@ -2086,3 +2162,23 @@ async def is_matchmaking_locked() -> tuple[bool, str]:
         reason = await get_system_setting("matchmaking_lock_reason", "Admin locked")
         return True, reason
     return False, ""
+
+
+# =============================================================================
+# TRY-OUT CRUD
+# =============================================================================
+
+async def get_expired_tryouts() -> List[Dict[str, Any]]:
+    """Get all members whose tryout period has expired."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT cm.*, c.name as clan_name, c.status as clan_status, u.discord_id
+               FROM clan_members cm
+               JOIN clans c ON cm.clan_id = c.id
+               JOIN users u ON cm.user_id = u.id
+               WHERE cm.join_type = 'tryout' 
+                 AND cm.tryout_expires_at IS NOT NULL 
+                 AND cm.tryout_expires_at < datetime('now')"""
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]

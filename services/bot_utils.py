@@ -134,3 +134,29 @@ async def post_update(title: str, description: str, version: str = None) -> bool
         print(f"[UPDATE] Failed to post: {e}")
         return False
 
+
+async def announce_public(title: str, description: str, color: discord.Color = discord.Color.blue()) -> bool:
+    """
+    Gửi thông báo công khai lên kênh #chat-arena.
+    Dùng cho: Try-out, Join, Leave, Kick, Match Result, etc.
+    """
+    channel = get_chat_channel()
+    if not channel:
+        # Try to fallback to finding by name if not set yet (optional safety)
+        # But better to rely on set_chat_channel being called in main.py
+        return False
+    
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=color,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    try:
+        await channel.send(embed=embed)
+        return True
+    except Exception as e:
+        print(f"[ANNOUNCE] Failed to post: {e}")
+        return False
+

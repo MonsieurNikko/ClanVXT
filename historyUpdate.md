@@ -4,6 +4,65 @@ This document provides a cumulative history of all technical improvements, fixes
 
 
 
+## [1.5.1] - 2026-02-19
+### 🐛 Hotfix: Database Auto-Migration
+
+#### 📢 Discord Update
+> - **Sửa lỗi hệ thống**: Cập nhật cơ chế tự động sửa lỗi cơ sở dữ liệu khi khởi động bot. Đảm bảo tính năng Try-Out hoạt động ổn định cho tất cả các clan.
+
+#### 🔧 Technical Details
+- **Fix**: Added auto-migration logic in `services/db.py` to ensure `clan_members` (columns `join_type`, `tryout_expires_at`) and `invite_requests` (column `invite_type`) are correctly updated on startup.
+- **Files**: `services/db.py`
+
+## [1.5.0] - 2026-02-19
+### 🛡️ Feat: Try-Out System & Public Announcements
+
+#### 📢 Discord Update
+> - **Chế độ Thử việc (Try-Out)**: Captain có thể mời thành viên mới vào clan dưới dạng recruit (lính mới) với thời hạn 24 giờ.
+> - **Quyền lợi & Nghĩa vụ**: Recruit có thể tham gia thi đấu ngay lập tức. Nếu không được thăng chức (Promote) sau 24h, sẽ tự động bị kick.
+> - **Không Cooldown**: Nếu recruit bị kick hoặc tự rời trong thời gian thử việc, hoàn toàn **không bị cooldown** gia nhập clan khác.
+> - **Thông báo Công khai**: Các sự kiện quan trọng (Gia nhập, Rời clan, Kick, Thăng chức, Kết quả trận đấu) sẽ được thông báo tự động tại kênh `#chat-arena`.
+>
+> **📜 Cách dùng lệnh mới (Dành cho Captain/Vice):**
+> - `/clan recruit <@user>`: Mời thành viên thử việc (Try-out 24h).
+> - `/clan promote <@user>`: Thăng chức Recruit lên Member chính thức.
+> - `/clan fire <@user>`: Chấm dứt thử việc ngay lập tức (Kick Recruit).
+
+#### 🔧 Technical Details
+- **Schema Update**: Added `join_type` ('full'/'tryout') and `tryout_expires_at` to `clan_members`. Added `invite_type` to `invite_requests`.
+- **New Commands**:
+    - `/clan recruit <user>`: Invite user as Try-out (24h).
+    - `/clan promote <user>`: Upgrade Recruit to Member.
+    - `/clan fire <user>`: Kick Recruit immediately (bypass cooldown).
+- **Background Task**: `check_tryouts_loop` (10 min interval) auto-kicks expired recruits.
+- **Cooldown Logic**: Updated `services/cooldowns.py` to allow re-joining *other* clans immediately if `join_type` was 'tryout'. Enforced 3-day cooldown for full members.
+- **Announcements**: Implemented `announce_public` service to post embeds to `#chat-arena`. Integrated into all member management flows.
+- **Files**: `cogs/clan.py`, `services/db.py`, `services/bot_utils.py`, `services/cooldowns.py`, `db/schema.sql`
+
+
+
+## [1.4.5] - 2026-02-19
+### ⏳ Config: Giảm Cooldown Rời Clan (14 -> 3 ngày)
+
+#### 📢 Discord Update
+> - **Giảm thời gian chờ**: Thời gian cooldown khi rời clan (hoặc bị kick) đã được giảm từ **14 ngày** xuống còn **03 ngày** để tăng tính linh hoạt cho việc chuyển nhượng.
+
+#### 🔧 Technical Details
+- **Config Update**: `COOLDOWN_DAYS = 3` (was 14) in `config.py`.
+- **Note**: Applies to new cooldowns only. Existing cooldowns remain unchanged unless manually cleared by Admin.
+
+## [1.4.4] - 2026-02-19
+### 🐛 Fix: Duplicate Invite Status Error & Safety Update
+
+#### 📢 Discord Update
+> - **Sửa lỗi kỹ thuật**: Khắc phục lỗi hệ thống khi người dùng chấp nhận/từ chối lời mời vào clan (do dữ liệu cũ bị trùng lặp).
+
+#### 🔧 Technical Details
+- **Database Fix**: Updated `accept_invite`, `decline_invite`, and `create_invite_request` in `services/db.py`.
+- **Logic**: Implemented auto-renaming of old `accepted`/`declined`/`cancelled` statuses to prevent `UNIQUE constraint failed` errors when a user re-joins a clan.
+- **Safety**: Wrapped DB operations in explicit `BEGIN...COMMIT/ROLLBACK` transactions for atomicity.
+- **Files**: `services/db.py`
+
 ## [1.4.3] - 2026-02-18
 ### ✨ Feat: Auto Player Role System
 
@@ -24,7 +83,7 @@ This document provides a cumulative history of all technical improvements, fixes
 - **Fix**: Updated `get_won_matches_by_clan` with `COALESCE` for robust legacy match history searching.
 - **Fix**: Resolved `NameError` in `cogs/arena.py` by adding missing `datetime`/`timezone` imports and removing redundant local imports.
 - **Cleanup**: Fixed typo `TRANSFER_SICKNESS` in `services/cooldowns.py`.
-- **Files**: `config.py`, `cogs/admin.py`, `cogs/clan.py`, `services/db.py`, `services/cooldowns.py`
+- **Files**: `config.py`, `cogs/admin.py`, `cogs/clan.py`, `services/db.py`, `services/cooldowns.py`, `cogs/arena.py`
 
 ## [1.4.2] - 2026-02-18
 ### 🔒 Feat: Global Matchmaking Lock

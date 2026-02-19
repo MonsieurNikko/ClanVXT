@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS clan_members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,                           -- FK to users.id
     clan_id INTEGER NOT NULL,                           -- FK to clans.id
-    role TEXT NOT NULL DEFAULT 'member',                -- captain, vice, member
+    role TEXT NOT NULL DEFAULT 'member',                -- captain, vice, member, recruit
+    join_type TEXT NOT NULL DEFAULT 'full',             -- full, tryout
+    tryout_expires_at TEXT,                             -- ISO timestamp for tryout expiration
     joined_at TEXT DEFAULT (datetime('now')),
     UNIQUE(user_id, clan_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
