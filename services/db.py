@@ -1104,6 +1104,25 @@ async def clear_match_cancel_request(match_id: int) -> bool:
         return cursor.rowcount > 0
 
 
+async def create_finished_match(clan_a_id: int, clan_b_id: int, score_a: int, score_b: int, map_name: Optional[str] = None) -> int:
+    """
+    Create a match directly in 'resolved' status (Backfill).
+    Returns match_id.
+    """
+    winner_id = clan_a_id if score_a > score_b else clan_b_id
+    
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """INSERT INTO matches 
+               (clan_a_id, clan_b_id, score_a, score_b, reported_winner_clan_id, status, map, created_at, resolved_at)
+               VALUES (?, ?, ?, ?, ?, 'resolved', ?, datetime('now'), datetime('now'))""",
+            (clan_a_id, clan_b_id, score_a, score_b, winner_id, map_name)
+        )
+        match_id = cursor.lastrowid
+        await conn.commit()
+        return match_id
+
+
 async def has_active_match(clan_id: int) -> bool:
     """Check if a clan already has an active (unresolved) match.
     
@@ -1347,6 +1366,25 @@ async def get_active_loan_for_member(user_id: int) -> Optional[Dict[str, Any]]:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+
+async def get_all_active_loans() -> List[Dict[str, Any]]:
+    """Get all active loans system-wide."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT l.*, 
+                      c1.name as lending_clan_name, 
+                      c2.name as borrowing_clan_name,
+                      u.discord_id as member_discord_id
+               FROM loans l
+               JOIN clans c1 ON l.lending_clan_id = c1.id
+               JOIN clans c2 ON l.borrowing_clan_id = c2.id
+               JOIN users u ON l.member_user_id = u.id
+               WHERE l.status = 'active'
+               ORDER BY l.end_date"""
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 # =============================================================================

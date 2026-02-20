@@ -4,6 +4,31 @@ This document provides a cumulative history of all technical improvements, fixes
 
 
 
+## [1.5.7] - 2026-02-19
+### 🛠️ Feat: Admin Match Backfill
+
+#### 📢 Discord Update
+> - **Tạo trận thủ công**: Admin có thể tạo và nhập kết quả trận đấu ngay lập tức bằng lệnh `/admin matchmaking create_result`.
+> - **Công dụng**: Dùng để nhập lại kết quả các trận đấu diễn ra trong lúc bot bảo trì hoặc bị lỗi, đảm bảo Elo được tính toán chính xác.
+
+#### 🔧 Technical Details
+- **New Command**: `/admin matchmaking create_result` in `AdminCog`.
+- **DB Helper**: Added `create_finished_match()` in `services/db.py` to insert fully resolved matches.
+- **Logic**: Creates match -> Sets status 'resolved' -> Calculates & Applies Elo immediately.
+- **Files**: `cogs/admin.py`, `services/db.py`
+
+## [1.5.6] - 2026-02-19
+### 📋 Feat: Admin Loan Status
+
+#### 📢 Discord Update
+> - **Quản lý Loan**: Admin/Mod có thể xem danh sách tất cả các thành viên đang được loan bằng lệnh `/admin loan status`.
+> - **Chi tiết**: Hiển thị rõ ràng thành viên, clan cho mượn/mượn, thời gian bắt đầu/kết thúc và thời gian còn lại.
+
+#### 🔧 Technical Details
+- **New Command**: `/admin loan status` in `AdminCog`.
+- **DB Helper**: Added `get_all_active_loans()` in `services/db.py` to fetch system-wide active loans with clan names.
+- **Files**: `cogs/admin.py`, `services/db.py`
+
 ## [1.5.5] - 2026-02-19
 ### 🧹 Maintenance: Codebase Integrity & Dead Code Removal
 

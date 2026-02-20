@@ -1224,6 +1224,81 @@ class AdminCog(commands.Cog):
         )
         await bot_utils.log_event("MATCHMAKING_UNLOCKED", f"{interaction.user.mention} unlocked matchmaking.")
         print(f"[ADMIN] MATCHMAKING_UNLOCKED by {interaction.user.name}")
+
+    @matchmaking_group.command(name="create_result", description="Manually create a finished match with results (Backfill)")
+    @app_commands.describe(
+        clan_a_name="Name of Clan A",
+        clan_b_name="Name of Clan B",
+        score_a="Score of Clan A",
+        score_b="Score of Clan B",
+        map_name="Map name (optional)"
+    )
+    async def match_create_result(
+        self, 
+        interaction: discord.Interaction, 
+        clan_a_name: str, 
+        clan_b_name: str, 
+        score_a: int, 
+        score_b: int, 
+        map_name: Optional[str] = None
+    ):
+        """Manually create and resolve a match (for backfilling/fixing)."""
+        if not await self.check_mod(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=False)
+        
+        # 1. Validate Clans
+        clan_a = await db.get_clan_any_status(clan_a_name)
+        if not clan_a:
+            await interaction.followup.send(f"❌ Clan **{clan_a_name}** không tồn tại.", ephemeral=True)
+            return
+            
+        clan_b = await db.get_clan_any_status(clan_b_name)
+        if not clan_b:
+            await interaction.followup.send(f"❌ Clan **{clan_b_name}** không tồn tại.", ephemeral=True)
+            return
+            
+        if clan_a["id"] == clan_b["id"]:
+            await interaction.followup.send("❌ Hai clan phải khác nhau.", ephemeral=True)
+            return
+
+        # 2. Validate Scores
+        if score_a == score_b:
+            await interaction.followup.send("❌ Tỉ số hòa không được hỗ trợ tính Elo.", ephemeral=True)
+            return
+        
+        winner_id = clan_a["id"] if score_a > score_b else clan_b["id"]
+        winner_name = clan_a["name"] if score_a > score_b else clan_b["name"]
+        
+        # 3. Create Match
+        match_id = await db.create_finished_match(clan_a["id"], clan_b["id"], score_a, score_b, map_name)
+        
+        # 4. Apply Elo
+        elo_result = await elo.apply_match_result(match_id, winner_id)
+        
+        if elo_result["success"]:
+            # Success
+            msg = (
+                f"✅ **Đã tạo và xử lý Match #{match_id} (Backfill)**\n"
+                f"⚔️ **{clan_a['name']}** {score_a} - {score_b} **{clan_b['name']}**\n"
+                f"🗺️ Map: {map_name or 'N/A'}\n\n"
+                f"{elo.format_elo_explanation_vn(elo_result)}"
+            )
+            await interaction.followup.send(msg)
+            
+            # Log
+            log_msg = f"Backfill Match #{match_id}: {clan_a['name']} vs {clan_b['name']} ({score_a}-{score_b}). Created by {interaction.user.mention}"
+            await bot_utils.log_event("ADMIN_MATCH_CREATE", log_msg)
+            print(f"[ADMIN] MATCH_BACKFILL: #{match_id} created by {interaction.user.name}")
+        else:
+            # Failed to apply Elo (e.g. frozen/banned clans)
+            await interaction.followup.send(
+                f"⚠️ Trận #{match_id} đã được tạo nhưng **không thể tính Elo**.\n"
+                f"Lý do: {elo_result.get('reason', 'Unknown')}\n"
+                f"Chi tiết: {elo_result}",
+                ephemeral=True
+            )
     
     @admin_group.command(name="dashboard", description="View database overview with all clans, members, matches")
     async def admin_dashboard(self, interaction: discord.Interaction):
@@ -1317,6 +1392,70 @@ class AdminCog(commands.Cog):
             "ADMIN_LOAN_FIX_ROLES",
             f"{interaction.user.mention} ran fix_roles: {len(active_loans)} loans checked, {fixed} fixed."
         )
+
+    @loan_admin_group.command(name="status", description="Xem danh sách tất cả các thành viên đang được loan")
+    async def loan_status(self, interaction: discord.Interaction):
+        """View all active loans."""
+        if not await self.check_mod(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        
+        loans = await db.get_all_active_loans()
+        
+        if not loans:
+            await interaction.followup.send("✅ Hiện tại không có thành viên nào đang được loan.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="📋 Danh Sách Active Loans",
+            description=f"Tổng cộng: **{len(loans)}** members",
+            color=discord.Color.blue()
+        )
+
+        lines = []
+        now = datetime.now(timezone.utc)
+        
+        for loan in loans:
+            # Calculate remaining time
+            try:
+                end_str = loan['end_date'].replace('Z', '+00:00')
+                if ' ' in end_str and 'T' not in end_str:
+                    end_str = end_str.replace(' ', 'T')
+                end_dt = datetime.fromisoformat(end_str)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                
+                remaining = end_dt - now
+                days = remaining.days
+                hours = remaining.seconds // 3600
+                
+                if remaining.total_seconds() < 0:
+                    time_str = "⚠️ Đã hết hạn"
+                else:
+                    time_str = f"Còn **{days} ngày {hours} giờ**"
+            except Exception:
+                time_str = "N/A"
+
+            member_line = f"<@{loan['member_discord_id']}>"
+            clans_line = f"**{loan['lending_clan_name']}** ➡️ **{loan['borrowing_clan_name']}**"
+            detail_line = f"📅 {(loan['start_date'] or '')[:10]} đến {(loan['end_date'] or '')[:10]} • {time_str}"
+            
+            lines.append(f"{member_line}\n{clans_line}\n{detail_line}")
+        
+        # Paginate if too long (simple split for now)
+        chunks = [lines[i:i + 10] for i in range(0, len(lines), 10)]
+        
+        for i, chunk in enumerate(chunks):
+            if i == 0:
+                embed.description = f"Tổng cộng: **{len(loans)}** members\n\n" + "\n\n".join(chunk)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                extra_embed = discord.Embed(
+                    description="\n\n".join(chunk),
+                    color=discord.Color.blue()
+                )
+                await interaction.followup.send(embed=extra_embed, ephemeral=True)
 
 
 
