@@ -7,7 +7,7 @@ system bans, clan freeze, and Elo operations.
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime, timezone, timedelta
 import json
 
@@ -1225,22 +1225,30 @@ class AdminCog(commands.Cog):
         await bot_utils.log_event("MATCHMAKING_UNLOCKED", f"{interaction.user.mention} unlocked matchmaking.")
         print(f"[ADMIN] MATCHMAKING_UNLOCKED by {interaction.user.name}")
 
+
+    async def clan_name_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for clan names."""
+        clans = await db.search_clans(current, limit=25)
+        return [
+            app_commands.Choice(name=c["name"], value=c["name"])
+            for c in clans
+        ]
+
     @matchmaking_group.command(name="create_result", description="Manually create a finished match with results (Backfill)")
     @app_commands.describe(
         clan_a_name="Name of Clan A",
         clan_b_name="Name of Clan B",
         score_a="Score of Clan A",
-        score_b="Score of Clan B",
-        map_name="Map name (optional)"
+        score_b="Score of Clan B"
     )
+    @app_commands.autocomplete(clan_a_name=clan_name_autocomplete, clan_b_name=clan_name_autocomplete)
     async def match_create_result(
         self, 
         interaction: discord.Interaction, 
         clan_a_name: str, 
         clan_b_name: str, 
         score_a: int, 
-        score_b: int, 
-        map_name: Optional[str] = None
+        score_b: int
     ):
         """Manually create and resolve a match (for backfilling/fixing)."""
         if not await self.check_mod(interaction):
@@ -1272,7 +1280,7 @@ class AdminCog(commands.Cog):
         winner_name = clan_a["name"] if score_a > score_b else clan_b["name"]
         
         # 3. Create Match
-        match_id = await db.create_finished_match(clan_a["id"], clan_b["id"], score_a, score_b, map_name)
+        match_id = await db.create_finished_match(clan_a["id"], clan_b["id"], score_a, score_b)
         
         # 4. Apply Elo
         elo_result = await elo.apply_match_result(match_id, winner_id)
@@ -1281,8 +1289,7 @@ class AdminCog(commands.Cog):
             # Success
             msg = (
                 f"✅ **Đã tạo và xử lý Match #{match_id} (Backfill)**\n"
-                f"⚔️ **{clan_a['name']}** {score_a} - {score_b} **{clan_b['name']}**\n"
-                f"🗺️ Map: {map_name or 'N/A'}\n\n"
+                f"⚔️ **{clan_a['name']}** {score_a} - {score_b} **{clan_b['name']}**\n\n"
                 f"{elo.format_elo_explanation_vn(elo_result)}"
             )
             await interaction.followup.send(msg)

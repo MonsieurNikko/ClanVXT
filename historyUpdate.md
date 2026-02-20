@@ -4,6 +4,38 @@ This document provides a cumulative history of all technical improvements, fixes
 
 
 
+## [1.6.0] - 2026-02-20
+### 🚑 Hotfix: Backfill OperationalError (Map column)
+
+#### 📢 Discord Update
+> - **Sửa lỗi Backfill**: Khắc phục lỗi không thể tạo trận thủ công do xung đột cột dữ liệu Map.
+
+#### 🔧 Technical Details
+- **Fix**: Removed `map` column from manual match creation in `services/db.py` and `cogs/admin.py` as it doesn't exist in the current schema.
+- **Files**: `cogs/admin.py`, `services/db.py`
+
+## [1.5.9] - 2026-02-20
+### 🚑 Hotfix: AdminCog NameError
+
+#### 📢 Discord Update
+> - **Sửa lỗi khởi động**: Khắc phục lỗi `NameError` khiến bot không thể khởi động sau cập nhật tính năng Autocomplete.
+
+#### 🔧 Technical Details
+- **Fix**: Added missing `List` import in `cogs/admin.py`.
+- **Files**: `cogs/admin.py`
+
+## [1.5.8] - 2026-02-20
+### ⚡ Feat: Clan Autocomplete
+
+#### 📢 Discord Update
+> - **Tiện ích Admin**: Lệnh `/admin matchmaking create_result` giờ hỗ trợ gợi ý tên clan (Autocomplete).
+> - **Dễ dàng sử dụng**: Không cần nhớ chính xác tên clan, chỉ cần gõ vài ký tự đầu để chọn từ danh sách.
+
+#### 🔧 Technical Details
+- **Autocomplete**: Added `clan_name_autocomplete` to `AdminCog`.
+- **DB Helper**: Added `search_clans(query)` using `LIKE %query%`.
+- **Files**: `cogs/admin.py`, `services/db.py`
+
 ## [1.5.7] - 2026-02-19
 ### 🛠️ Feat: Admin Match Backfill
 

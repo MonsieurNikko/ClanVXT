@@ -538,6 +538,17 @@ async def update_clan_name(clan_id: int, new_name: str) -> bool:
             return False
 
 
+async def search_clans(query: str, limit: int = 25) -> List[Dict[str, Any]]:
+    """Search clans by name (partial match)."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT id, name FROM clans WHERE name LIKE ? ORDER BY matches_played DESC LIMIT ?",
+            (f"%{query}%", limit)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
 # =============================================================================
 # CLAN MEMBERS CRUD
 # =============================================================================
@@ -1104,7 +1115,7 @@ async def clear_match_cancel_request(match_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-async def create_finished_match(clan_a_id: int, clan_b_id: int, score_a: int, score_b: int, map_name: Optional[str] = None) -> int:
+async def create_finished_match(clan_a_id: int, clan_b_id: int, score_a: int, score_b: int) -> int:
     """
     Create a match directly in 'resolved' status (Backfill).
     Returns match_id.
@@ -1114,9 +1125,9 @@ async def create_finished_match(clan_a_id: int, clan_b_id: int, score_a: int, sc
     async with get_connection() as conn:
         cursor = await conn.execute(
             """INSERT INTO matches 
-               (clan_a_id, clan_b_id, score_a, score_b, reported_winner_clan_id, status, map, created_at, resolved_at)
-               VALUES (?, ?, ?, ?, ?, 'resolved', ?, datetime('now'), datetime('now'))""",
-            (clan_a_id, clan_b_id, score_a, score_b, winner_id, map_name)
+               (clan_a_id, clan_b_id, score_a, score_b, reported_winner_clan_id, status, created_at, resolved_at)
+               VALUES (?, ?, ?, ?, ?, 'resolved', datetime('now'), datetime('now'))""",
+            (clan_a_id, clan_b_id, score_a, score_b, winner_id)
         )
         match_id = cursor.lastrowid
         await conn.commit()
