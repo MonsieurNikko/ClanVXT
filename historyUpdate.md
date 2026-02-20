@@ -4,6 +4,21 @@ This document provides a cumulative history of all technical improvements, fixes
 
 
 
+## [1.6.1] - 2026-02-20
+### 🐛 Fix: Challenge Flow Bị Bỏ Qua (Ban/Pick + Channels Không Hoạt Động)
+
+>**Author: ImDaMinh**
+
+#### 📢 Discord Update
+> - **Sửa lỗi Thách Đấu**: Khắc phục lỗi khi chấp nhận thách đấu, bot bỏ qua bước Ban/Pick Map và tạo kênh Voice/Text — nhảy thẳng tới tạo match. Lỗi interaction trong ban/pick bị xử lý 2 lần.
+
+#### 🔧 Technical Details
+- **Root Cause**: `ChallengeSelectView.confirm()` trong `arena.py` dùng class cũ `AcceptDeclineView` (gọi thẳng `matches_cog.create_match_v2()`) thay vì `ChallengeAcceptView` (gọi `start_challenge_flow()` để tạo channels + ban/pick map).
+- **Fix 1**: Thay `AcceptDeclineView` bằng `ChallengeAcceptView` trong `ChallengeSelectView.confirm()`.
+- **Fix 2**: Thêm `asyncio.sleep(0.5)` trong `ChallengeCog.on_interaction` để tránh double-acknowledge lỗi 40060.
+- **Cleanup**: Xóa class `AcceptDeclineView` cũ (99 dòng dead code).
+- **Files**: `cogs/arena.py`, `cogs/challenge.py`
+
 ## [1.6.0] - 2026-02-20
 ### 🚑 Hotfix: Backfill OperationalError (Map column)
 

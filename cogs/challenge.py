@@ -1173,6 +1173,9 @@ class ChallengeCog(commands.Cog):
         if not custom_id.startswith("mapbp_"):
             return
 
+        # Give the View's _handle callback time to acknowledge first
+        await asyncio.sleep(0.5)
+
         # If the View's _handle callback already handled this, skip
         if interaction.response.is_done():
             return
