@@ -6,6 +6,7 @@ Async SQLite operations using aiosqlite
 import aiosqlite
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
@@ -2212,6 +2213,15 @@ async def is_matchmaking_locked() -> tuple[bool, str]:
     if val and val == "1":
         reason = await get_system_setting("matchmaking_lock_reason", "Admin locked")
         return True, reason
+
+    # === BATTLE HOUR CHECK ===
+    # Allowed from 20:00 to 01:00 EU time (Europe/Berlin)
+    now_eu = datetime.now(ZoneInfo("Europe/Berlin"))
+    valid_hours = [20, 21, 22, 23, 0]
+    
+    if now_eu.hour not in valid_hours:
+        return True, f"Hệ thống chỉ mở từ 20:00 đến 01:00 (Giờ Châu Âu - CET/CEST).\\nGiờ hiện tại của EU là **{now_eu.strftime('%H:%M')}**."
+
     return False, ""
 
 
