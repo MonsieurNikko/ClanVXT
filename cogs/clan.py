@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
+import json
 
 import config
 from services import db, cooldowns
@@ -389,6 +390,95 @@ class InviteAcceptDeclineView(discord.ui.View):
 
 
 # =============================================================================
+# RANK DECLARATION UI (Balance System - Feature 6)
+# =============================================================================
+
+# 25 Valorant ranks mapped to score
+RANK_OPTIONS = [
+    discord.SelectOption(label="Iron 1", value="1"),
+    discord.SelectOption(label="Iron 2", value="2"),
+    discord.SelectOption(label="Iron 3", value="3"),
+    discord.SelectOption(label="Bronze 1", value="4"),
+    discord.SelectOption(label="Bronze 2", value="5"),
+    discord.SelectOption(label="Bronze 3", value="6"),
+    discord.SelectOption(label="Silver 1", value="7"),
+    discord.SelectOption(label="Silver 2", value="8"),
+    discord.SelectOption(label="Silver 3", value="9"),
+    discord.SelectOption(label="Gold 1", value="10"),
+    discord.SelectOption(label="Gold 2", value="11"),
+    discord.SelectOption(label="Gold 3", value="12"),
+    discord.SelectOption(label="Platinum 1", value="13"),
+    discord.SelectOption(label="Platinum 2", value="14"),
+    discord.SelectOption(label="Platinum 3", value="15"),
+    discord.SelectOption(label="Diamond 1", value="16"),
+    discord.SelectOption(label="Diamond 2", value="17"),
+    discord.SelectOption(label="Diamond 3", value="18"),
+    discord.SelectOption(label="Ascendant 1", value="19"),
+    discord.SelectOption(label="Ascendant 2", value="20"),
+    discord.SelectOption(label="Ascendant 3", value="21"),
+    discord.SelectOption(label="Immortal 1", value="22"),
+    discord.SelectOption(label="Immortal 2", value="23"),
+    discord.SelectOption(label="Immortal 3", value="24"),
+    discord.SelectOption(label="Radiant", value="25"),
+]
+
+from services.elo import RANK_SCORE_TO_NAME
+
+
+class RankDeclarationView(discord.ui.View):
+    """View with a Select Menu for declaring Valorant rank."""
+    
+    def __init__(self, user_id: int, clan_id: int):
+        super().__init__(timeout=300)  # 5 min timeout
+        self.db_user_id = user_id
+        self.clan_id = clan_id
+        
+        select = discord.ui.Select(
+            placeholder="Chọn rank Valorant của bạn...",
+            options=RANK_OPTIONS,
+            custom_id=f"rank_declare:{user_id}:{clan_id}",
+            min_values=1,
+            max_values=1,
+        )
+        select.callback = self.rank_selected
+        self.add_item(select)
+    
+    async def rank_selected(self, interaction: discord.Interaction):
+        # Respond to interaction FIRST (within 3s) to avoid 'This interaction failed'
+        try:
+            rank_score = int(interaction.data["values"][0])
+            rank_name = RANK_SCORE_TO_NAME.get(rank_score, f"Unknown ({rank_score})")
+        except Exception:
+            await interaction.response.send_message("\u274c Lỗi xử lý dữ liệu. Vui lòng thử lại.", ephemeral=True)
+            return
+        
+        # Respond immediately (edit the message with the select menu, or fallback to new message)
+        try:
+            await interaction.response.edit_message(
+                content=f"\u2705 Đã khai rank: **{rank_name}**! Cảm ơn bạn đã cập nhật thông tin.",
+                view=None
+            )
+        except Exception:
+            # In DM context, just ack with a new message (no ephemeral in DMs)
+            try:
+                await interaction.response.send_message(
+                    f"\u2705 Đã khai rank: **{rank_name}**! Cảm ơn bạn."
+                )
+            except Exception:
+                pass  # If even this fails, interaction already timed out, just proceed
+        
+        # Save to DB after responding
+        try:
+            await db.update_member_rank(self.db_user_id, self.clan_id, rank_name, rank_score)
+            await bot_utils.log_event(
+                "RANK_DECLARED",
+                f"User ID {self.db_user_id} declared rank **{rank_name}** (score={rank_score}) in clan ID {self.clan_id}"
+            )
+        except Exception as e:
+            print(f"[RANK] DB update failed after responding: {e}")
+
+
+# =============================================================================
 # COG DEFINITION
 # =============================================================================
 
@@ -504,6 +594,11 @@ class ClanCog(commands.Cog):
                 user_id = int(parts[2])
                 await self.handle_invite_decline(interaction, invite_id, user_id)
                 return
+        
+        # Handle rank declaration select (Balance System)
+        if custom_id.startswith("rank_declare:"):
+            # Handled by RankDeclarationView callback directly
+            return
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
         """Handle clan accept button click."""
@@ -732,18 +827,18 @@ class ClanCog(commands.Cog):
             try:
                 guild = self.bot.get_guild(config.GUILD_ID)
                 if guild:
-                    role = guild.get_role(int(clan["discord_role_id"]))
-                    if role:
-                        member = guild.get_member(interaction.user.id)
-                        if member:
-                            await member.add_roles(role)
-                            print(f"[DEBUG] Assigned role {role.name} to {member.name}")
+                    discord_role = guild.get_role(int(clan["discord_role_id"]))
+                    if discord_role:
+                        guild_member = guild.get_member(interaction.user.id)
+                        if guild_member:
+                            await guild_member.add_roles(discord_role)
+                            print(f"[DEBUG] Assigned role {discord_role.name} to {guild_member.name}")
 
                             # Assign player role as well
                             player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
-                            if player_role and player_role not in member.roles:
-                                await member.add_roles(player_role, reason="Clan join auto-role")
-                                print(f"[DEBUG] Assigned {config.ROLE_PLAYER} role to {member.name}")
+                            if player_role and player_role not in guild_member.roles:
+                                await guild_member.add_roles(player_role, reason="Clan join auto-role")
+                                print(f"[DEBUG] Assigned {config.ROLE_PLAYER} role to {guild_member.name}")
                         else:
                             print(f"[DEBUG] Could not find member {interaction.user.id} in guild")
                     else:
@@ -761,6 +856,22 @@ class ClanCog(commands.Cog):
             content=msg_success,
             ephemeral=True
         )
+        
+        # --- Balance System: Rank Declaration Prompt (Feature 6) ---
+        try:
+            rank_view = RankDeclarationView(user["id"], clan_id)
+            await interaction.followup.send(
+                content=(
+                    f"🎯 **Khai Rank Valorant**\n\n"
+                    f"Để tham gia thi đấu, bạn cần khai rank Valorant hiện tại.\n"
+                    f"Hãy chọn rank của bạn bên dưới:"
+                ),
+                view=rank_view,
+                ephemeral=True
+            )
+        except Exception as e:
+            print(f"[RANK] Failed to send rank declaration prompt: {e}")
+
         
         # Announce Public
         if invite_type == "tryout":
@@ -890,6 +1001,7 @@ class ClanCog(commands.Cog):
         if clan_role in ("captain", "vice"):
             capvice_cmds = """
 `/clan invite @user` - Gửi lời mời gia nhập clan (qua DM)
+`/clan update_rank` - Nhắc khai báo Rank cho thành viên chưa khai
 `/transfer request @user <tên_clan>` - Yêu cầu chuyển nhượng thành viên
 `/loan request @user <tên_clan> <số_ngày>` - Yêu cầu mượn thành viên (có thời hạn)
 """
@@ -913,15 +1025,18 @@ class ClanCog(commands.Cog):
 `/mod clan approve/reject/delete` - Quản lý clan
 `/matchadmin match resolve` - Xử lý tranh chấp match
 `/admin dashboard/cooldown/ban/freeze` - Quản trị hệ thống
+`/admin balance toggle/status/set_rank` - Quản lý Balance System
 """
             embed.add_field(name="⚖️ Lệnh Quản Trị", value=mod_cmds, inline=False)
         
         # Elo info (show if in clan)
         if clan_role:
             elo_txt = """
-• **K-Factor**: 24 | **Elo Khởi Điểm**: 1000
+• **K-Factor**: 32 | **Elo Khởi Điểm**: 1000
 • **Chống farm**: Trận 1=100%, Trận 2=70%, Trận 3=40%, Trận 4+=20%
 • Elo chỉ tính khi cả 2 clan đều **active**
+• **Balance**: Win rate modifier, Underdog bonus, Rank modifier
+• **Decay**: Elo giảm nếu clan không hoạt động lâu
 """
             embed.add_field(name="📊 Quy Tắc Elo", value=elo_txt, inline=False)
         
@@ -1395,6 +1510,18 @@ class ClanCog(commands.Cog):
             )
             return
         
+        # --- Balance System: Recruitment Cap (Feature 1) ---
+        if await db.is_balance_feature_enabled("recruitment_cap"):
+            clan = await db.get_clan_by_id(clan_data["id"])
+            if clan and clan["matches_played"] > config.RECRUITMENT_CAP_EXEMPT_MATCHES:
+                recent_count = await db.count_recent_recruits(clan_data["id"])
+                if recent_count >= config.RECRUITMENT_CAP_PER_WEEK:
+                    await interaction.response.send_message(
+                        f"❌ Clan đã đạt giới hạn tuyển quân ({config.RECRUITMENT_CAP_PER_WEEK} thành viên/tuần).",
+                        ephemeral=True
+                    )
+                    return
+        
         # Create invite request (expires in 48 hours)
         expires_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
         invite_id = await db.create_invite_request(
@@ -1500,6 +1627,18 @@ class ClanCog(commands.Cog):
         if recruit_count >= 1:
             await interaction.response.send_message("❌ Clan của bạn đã có 01 Recruit rồi. Hãy Promote hoặc Fire họ trước.", ephemeral=True)
             return
+
+        # --- Balance System: Recruitment Cap (Feature 1) ---
+        if await db.is_balance_feature_enabled("recruitment_cap"):
+            clan = await db.get_clan_by_id(clan_data["id"])
+            if clan and clan["matches_played"] > config.RECRUITMENT_CAP_EXEMPT_MATCHES:
+                recent_count = await db.count_recent_recruits(clan_data["id"])
+                if recent_count >= config.RECRUITMENT_CAP_PER_WEEK:
+                    await interaction.response.send_message(
+                        f"❌ Clan đã đạt giới hạn tuyển quân ({config.RECRUITMENT_CAP_PER_WEEK} thành viên/tuần).",
+                        ephemeral=True
+                    )
+                    return
 
         # Check existing invite
         existing_invite = await db.get_pending_invite(target_user["id"], clan_data["id"])
@@ -1621,6 +1760,59 @@ class ClanCog(commands.Cog):
             title="🚫 Recruit Fired",
             description=f"<@{member.id}> đã bị chấm dứt giai đoạn Try-out tại clan **{clan_data['name']}**.",
             color=discord.Color.red()
+        )
+    
+    @clan_group.command(name="update_rank", description="Send rank declaration to all undeclared members")
+    async def clan_update_rank(self, interaction: discord.Interaction):
+        """Captain/Vice can request all undeclared members to declare rank."""
+        if not await check_verified(interaction):
+            return
+        
+        user = await ensure_user_registered(interaction)
+        if not user:
+            return
+        
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data or clan_data["member_role"] not in ("captain", "vice"):
+            await interaction.response.send_message("❌ Chỉ Captain hoặc Vice mới có thể yêu cầu khai rank.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        undeclared = await db.get_undeclared_members(clan_data["id"])
+        if not undeclared:
+            await interaction.followup.send("✅ Tất cả thành viên đã khai rank!", ephemeral=True)
+            return
+        
+        sent_count = 0
+        failed_count = 0
+        for m in undeclared:
+            try:
+                discord_user = self.bot.get_user(int(m["discord_id"]))
+                if not discord_user:
+                    discord_user = await self.bot.fetch_user(int(m["discord_id"]))
+                if discord_user:
+                    rank_view = RankDeclarationView(m["user_id"], clan_data["id"])
+                    await discord_user.send(
+                        f"🎯 **Khai Rank Valorant — Clan {clan_data['name']}**\n\n"
+                        f"Captain/Vice yêu cầu bạn khai rank Valorant hiện tại.\n"
+                        f"Clan của bạn cần tất cả thành viên khai rank trước khi có thể thi đấu.\n\n"
+                        f"Hãy chọn rank bên dưới:",
+                        view=rank_view
+                    )
+                    sent_count += 1
+            except Exception as e:
+                print(f"[RANK] Failed to DM user {m['discord_id']}: {e}")
+                failed_count += 1
+        
+        result_msg = f"📤 Đã gửi yêu cầu khai rank cho **{sent_count}/{len(undeclared)}** thành viên."
+        if failed_count > 0:
+            result_msg += f"\n⚠️ {failed_count} thành viên không nhận được DM."
+        
+        await interaction.followup.send(result_msg, ephemeral=True)
+        await bot_utils.log_event(
+            "RANK_UPDATE_REQUEST",
+            f"{interaction.user.mention} requested rank update for clan '{clan_data['name']}' ({sent_count} DMs sent)"
         )
     
     @clan_group.command(name="demote_vice", description="Demote a Vice Captain to Member")

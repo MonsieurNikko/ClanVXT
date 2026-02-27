@@ -3,6 +3,84 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.7.2] - 2026-02-27
+### ✨ Cải thiện UX: Rank & Thông báo
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Xem Rank trong Team**: Khi bấm xem thông tin Clan tại Arena, danh sách thành viên giờ hiển thị Rank Valorant của từng người. Thành viên chưa khai hiển thị `❓ Chưa khai`.
+> - **Sửa lỗi Khai Rank**: Khắc phục lỗi "This interaction failed" khi thành viên chọn rank trong DM.
+>
+> **📜 Cải thiện lệnh:**
+> - `/admin balance set_rank` — Admin giờ chọn rank từ dropdown đầy đủ thay vì nhập số thủ công.
+> - `/admin announce` — Đổi sang popup form (Modal) để hỗ trợ paste nội dung nhiều dòng với xuống dòng đúng chuẩn.
+
+#### 🔧 Technical Details
+- **Critical Bug Fix (Hotfix 2)**: `cogs/clan.py` — Root cause of "This interaction failed": `db.update_member_rank` was called BEFORE `interaction.response`, so any delay or error prevented Discord from receiving a timely response. Rewrote `rank_selected` to **respond to the interaction immediately first**, then save to DB afterward. Also removed `ephemeral=True` from the DM fallback path (not valid in DM context).
+- **UX Upgrade**: `cogs/admin.py` — `/admin balance set_rank` replaced numeric input with a dynamic `discord.ui.Select` (25 rank options) generated from `RANK_OPTIONS` in `cogs/clan.py`.
+- **UX Upgrade**: `cogs/admin.py` — `/admin announce` replaced slash command text params with `AnnounceModal` (Discord UI Modal with paragraph TextInput), preserving newlines correctly. Auto-splits messages at 1900-char boundary.
+- **UI Enhancement**: `cogs/arena.py` — `ClanDetailSelectView.on_select()` now includes `valorant_rank` for each member. `get_clan_members` already returns `valorant_rank` via `SELECT cm.*`.
+- **Files**: `cogs/clan.py`, `cogs/admin.py`, `cogs/arena.py`
+
+## [1.7.1] - 2026-02-27
+### 🚑 Hotfix: Weekly Balance Task Errors
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Chi tiết Tính điểm Elo**: Giờ đây, khi các Clan báo cáo kết quả trận đấu, bảng tổng kết sẽ hiển thị rõ ràng các chỉ số hệ số nhân (Modifiers) đã được áp dụng như: Win Rate, Chênh lệch Rank, và thưởng Underdog Bonus.
+> - **Sửa lỗi Trả thưởng Tuần**: Khắc phục lỗi hệ thống không thể chạy tác vụ trừ Elo và cộng điểm hoạt động định kỳ hàng tuần.
+> 
+> **📜 Lệnh mới:**
+> - `/admin balance activity_info` — Xem danh sách các Clan đang đủ (hoặc không đủ) điều kiện nhận thưởng Bonus hoạt động tuần.
+
+#### 🔧 Technical Details
+- **UI Enhancements**:
+  - `cogs/matches.py`: Modified `handle_match_confirm` and `admin_match_resolve` to use `elo.format_elo_explanation_vn()` for the public embed description. This reveals the exact breakdown of Elo modifiers (Win Rate, Rank Mod, Underdog Bonus) to the users instead of only writing them to the log.
+- **Admin Commands**:
+  - `cogs/admin.py`: Added `/admin balance activity_info` command to display a detailed breakdown of clans eligible for the weekly activity bonus, including their current match count and Elo threshold status.
+- **Hotfixes**:
+  - Resolved `NameError: name 'config' is not defined` in `services/db.py` by adding the missing `import config` required by `get_clans_for_decay`.
+  - Resolved `AttributeError: module 'config' has no attribute 'ACTIVITY_BONUS_ELO'` in `main.py` by correcting the variable name to `ACTIVITY_BONUS_AMOUNT`.
+  - Added correct boundary check in `main.py` so that only clans with Elo `< ACTIVITY_BONUS_ELO_THRESHOLD` receive the weekly activity bonus.
+- **Files**: `services/db.py`, `main.py`, `cogs/admin.py`, `cogs/matches.py`
+
+## [1.7.0] - 2026-02-27
+### ⚖️ Feat: Balance System (9 Features)
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Hệ thống Cân Bằng mới**: 9 tính năng giúp cuộc đua Elo công bằng hơn giữa các clan.
+> - **Khai báo Rank**: Mọi thành viên phải khai Rank Valorant khi vào clan. Clan chưa khai đủ sẽ không được thi đấu.
+> - **Giới hạn tuyển quân**: Mỗi clan chỉ được tuyển tối đa số thành viên nhất định mỗi tuần.
+> - **Giới hạn Rank cao**: Mỗi clan chỉ có tối đa thành viên Immortal 2+ (tránh stacking).
+> - **Elo thông minh hơn**: Các modifier tự động giúp phân bổ điểm công bằng dựa trên sức mạnh thực tế.
+> - **Elo Decay**: Clan không hoạt động lâu sẽ bị giảm Elo tự động.
+> - **Thưởng hoạt động**: Clan thi đấu đều đặn sẽ nhận bonus Elo.
+> - **Bảng xếp hạng**: Hiển thị thêm Avg Rank bên cạnh Elo của mỗi clan.
+> - **Luật lệ cập nhật**: Mục Luật Lệ Arena được bổ sung phần Balance System.
+
+#### 🔧 Technical Details
+- **Phase 1 — Foundation**:
+  - `config.py`: 15+ balance constants (caps, decay, thresholds, modifiers).
+  - `services/db.py`: Auto-migration for 6 new columns (`valorant_rank`, `valorant_rank_score`, `roster_a/b`, `avg_rank_a/b`).
+  - `services/db.py`: 14 new balance functions (rank CRUD, recruiting cap, decay, activity, win rate, feature toggle, roster).
+  - `services/elo.py`: 3 modifier functions (`get_win_rate_modifier`, `get_underdog_bonus`, `get_rank_modifier`) integrated into `apply_match_result()` with feature toggle checks and Elo gain cap.
+- **Phase 2 — Rank Declaration + Enforcement**:
+  - `cogs/clan.py`: `RankDeclarationView` (25-rank Select Menu), integrated into invite accept flow, recruitment cap checks, `/clan update_rank` command.
+  - `cogs/arena.py`: Rank enforcement in `ChallengeSelectView.confirm()` and `ChallengeAcceptView._accept()`.
+  - `cogs/transfers.py`: Rank cap check in `complete_transfer()` and `transfer_request()`.
+- **Phase 3 — Roster System**:
+  - `cogs/challenge.py`: Auto-save clan roster + avg rank in `_continue_to_match_flow()` after ban/pick.
+- **Phase 4 — Admin + Weekly + UI**:
+  - `main.py`: `weekly_balance_task` (24h loop, 7-day gate via `system_settings`).
+  - `cogs/admin.py`: 6 admin balance commands (`/admin balance toggle/status/set_rank/clan_rank/adjust_elo/run_weekly`).
+  - `cogs/admin.py`: `/admin announce` command to post updates to #chat-arena with @player mention.
+  - `cogs/arena.py`: Leaderboard shows avg rank, Rules embed has Balance section.
+  - `cogs/clan.py`: Help embed updated with balance commands + Elo info.
+- **Files**: `config.py`, `services/db.py`, `services/elo.py`, `cogs/clan.py`, `cogs/arena.py`, `cogs/transfers.py`, `cogs/challenge.py`, `main.py`, `cogs/admin.py`
 
 ## [1.6.1] - 2026-02-20
 ### 🐛 Fix: Challenge Flow Bị Bỏ Qua (Ban/Pick + Channels Không Hoạt Động)

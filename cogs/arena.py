@@ -65,14 +65,15 @@ class ClanDetailSelectView(discord.ui.View):
         embed.add_field(name="👥 Thành viên", value=f"`{len(members)}`", inline=True)
         embed.add_field(name="📅 Trạng thái", value=f"`{clan.get('status', 'active')}`", inline=True)
         
-        # Full member list with roles
+        # Full member list with roles & rank
         member_lines = []
         for m in members:
             role_emoji = "👑" if m["role"] == "captain" else ("⚔️" if m["role"] == "vice" else "👤")
             discord_member = interaction.guild.get_member(int(m["discord_id"])) if interaction.guild else None
             display_name = discord_member.display_name if discord_member else m["riot_id"]
             role_text = "Captain" if m["role"] == "captain" else ("Vice Captain" if m["role"] == "vice" else "Member")
-            member_lines.append(f"{role_emoji} **{display_name}** — {role_text}")
+            rank_display = m.get("valorant_rank") or "❓ Chưa khai"
+            member_lines.append(f"{role_emoji} **{display_name}** — {role_text} | 🎖️ {rank_display}")
         
         embed.add_field(
             name="📋 Danh sách thành viên",
@@ -171,6 +172,23 @@ class ChallengeSelectView(discord.ui.View):
                 f"❌ **{target_clan['name']}** hiện đang có một trận đấu chưa hoàn thành. Không thể gửi thách đấu.",
                 ephemeral=True
             )
+        
+        # --- Balance System: Rank Enforcement (Feature 6) ---
+        if await db.is_balance_feature_enabled("rank_enforcement"):
+            undeclared_a = await db.get_undeclared_members(self.user_clan["id"])
+            if undeclared_a:
+                names = ", ".join(f"<@{m['discord_id']}>" for m in undeclared_a[:5])
+                return await interaction.response.send_message(
+                    f"❌ Clan của bạn có **{len(undeclared_a)}** thành viên chưa khai rank: {names}\n"
+                    f"Dùng `/clan update_rank` để gửi yêu cầu khai rank.",
+                    ephemeral=True
+                )
+            undeclared_b = await db.get_undeclared_members(target_clan["id"])
+            if undeclared_b:
+                return await interaction.response.send_message(
+                    f"❌ Clan **{target_clan['name']}** có **{len(undeclared_b)}** thành viên chưa khai rank. Không thể thách đấu.",
+                    ephemeral=True
+                )
              
         # Create challenge embed
         embed = discord.Embed(
@@ -433,6 +451,24 @@ class ChallengeAcceptView(discord.ui.View):
         if not opponent or opponent["status"] != "active":
             await interaction.followup.send("❌ Clan của bạn không còn active.")
             return
+
+        # --- Balance System: Rank Enforcement (Feature 6) ---
+        if await db.is_balance_feature_enabled("rank_enforcement"):
+            undeclared_chal = await db.get_undeclared_members(challenger["id"])
+            if undeclared_chal:
+                names = ", ".join(f"<@{m['discord_id']}>" for m in undeclared_chal[:5])
+                await interaction.followup.send(
+                    f"❌ Clan **{challenger['name']}** có **{len(undeclared_chal)}** thành viên chưa khai rank: {names}"
+                )
+                return
+            undeclared_opp = await db.get_undeclared_members(opponent["id"])
+            if undeclared_opp:
+                names = ", ".join(f"<@{m['discord_id']}>" for m in undeclared_opp[:5])
+                await interaction.followup.send(
+                    f"❌ Clan của bạn có **{len(undeclared_opp)}** thành viên chưa khai rank: {names}\n"
+                    f"Dùng `/clan update_rank` để gửi yêu cầu khai rank."
+                )
+                return
 
         # === CHALLENGE UPGRADE: redirect to ban/pick flow ===
         from cogs.challenge import start_challenge_flow
@@ -760,12 +796,16 @@ class ArenaView(discord.ui.View):
             
             for i, clan in enumerate(clans_sorted[:10], 0):
                 medal = medals[i] if i < 3 else f"**{i+1}.**"
+                # Balance System: show avg rank
+                avg_rank = await db.get_clan_avg_rank(clan["id"])
+                from services.elo import RANK_SCORE_TO_NAME
+                rank_label = RANK_SCORE_TO_NAME.get(round(avg_rank), "N/A") if avg_rank > 0 else "N/A"
                 leaderboard_lines.append(
-                    f"{medal} **{clan['name']}** — `{clan.get('elo', 1000)}` Elo"
+                    f"{medal} **{clan['name']}** — `{clan.get('elo', 1000)}` Elo | 🎯 {rank_label}"
                 )
             
             embed.description = "\n".join(leaderboard_lines)
-            embed.set_footer(text="Cập nhật theo thời gian thực")
+            embed.set_footer(text="🎯 = Avg Rank của clan | Cập nhật theo thời gian thực")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
             print(f"[ARENA] Sent leaderboard to {interaction.user}")
@@ -1127,6 +1167,22 @@ class ArenaView(discord.ui.View):
                 "• Mỗi team chỉ được tối đa **1 người nước ngoài (tây)** trong đội hình\n"
                 "• Không được lách luật bằng cách thay người giữa trận\n"
                 "• Vi phạm giới hạn đội hình/thay người trái phép sẽ bị xử lý nghiêm"
+            ),
+            inline=False
+        )
+
+        # Section: Balance System
+        embed.add_field(
+            name="⚖️ Hệ Thống Cân Bằng (Balance)",
+            value=(
+                "• **Khai báo Rank**: Mọi thành viên phải khai Rank Valorant khi vào clan\n"
+                "• **Bắt buộc khai báo**: Clan muốn thi đấu → tất cả phải đã khai Rank\n"
+                "• **Giới hạn tuyển quân**: Tối đa tuyển quân mỗi tuần (chống lách luật)\n"
+                "• **Giới hạn Rank cao**: Tối đa thành viên Immortal 2+ trong mỗi clan\n"
+                "• **Elo Decay**: Clan trên ngưỡng không thi đấu lâu sẽ bị giảm Elo\n"
+                "• **Thưởng hoạt động**: Clan thi đấu đều đặn nhận bonus Elo\n"
+                "• **Underdog Bonus**: Clan yếu hơn thắng sẽ được thưởng thêm\n"
+                "• **Chống farm**: Win rate quá cao sẽ bị giảm Elo nhận được"
             ),
             inline=False
         )

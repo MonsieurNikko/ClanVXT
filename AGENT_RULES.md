@@ -23,6 +23,7 @@ Tất cả các Agent (AI coding assistant) khi tham gia phát triển dự án 
 - **Row Factory**: Sử dụng row factory (`aiosqlite.Row`) để truy cập dữ liệu theo tên cột.
 - **Transactions**: Sử dụng transaction khi thực hiện nhiều lệnh UPDATE/INSERT có liên quan đến nhau.
 - **Integrity**: Tôn trọng các ràng buộc (UNIQUE cho tên clan, Foreign Keys). Luôn bắt lỗi `IntegrityError` khi xử lý dữ liệu trùng lặp.
+- **Auto-Migration (BẮT BUỘC)**: Bất kỳ thay đổi nào liên quan đến Database (thêm cột, thêm bảng, đổi schema) **ĐỀU PHẢI** kèm theo logic migration tự động trong `init_db()` của `services/db.py`. Sử dụng pattern hiện có: kiểm tra cột/bảng tồn tại bằng `PRAGMA table_info()` trước khi chạy `ALTER TABLE ADD COLUMN` hoặc `CREATE TABLE IF NOT EXISTS`. Migration phải **idempotent** (chạy lại nhiều lần không lỗi) và **zero downtime** (không cần xóa DB cũ). Điều này đảm bảo production database luôn được cập nhật khi bot restart mà không mất dữ liệu.
 
 ## 4. Giao Diện Người Dùng (UI/UX)
 - **Arena Dashboard**: Đây là trung tâm thông tin. Các View trong Arena phải đặt `timeout=None` để đảm bảo nút luôn hoạt động sau khi bot restart.

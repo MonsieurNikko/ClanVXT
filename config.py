@@ -90,6 +90,42 @@ MAP_BAN_TIMEOUT_SECONDS: int = 180       # 3 phút mỗi lượt ban/pick
 MATCH_CHANNEL_CLEANUP_DELAY: int = 300   # 5 phút sau khi match kết thúc → xoá channels
 
 # =============================================================================
+# BALANCE SYSTEM CONSTANTS
+# =============================================================================
+
+# Feature 1 — Recruitment Cap
+RECRUITMENT_CAP_PER_WEEK: int = 1        # Max invite/recruit thành công per 7 days
+RECRUITMENT_CAP_EXEMPT_MATCHES: int = 0  # Clan với matches_played <= giá trị này → miễn cap
+
+# Feature 2 — Elo Decay
+ELO_DECAY_THRESHOLD: int = 1050          # Elo tối thiểu để bắt đầu decay
+ELO_DECAY_AMOUNT: int = 15              # Elo trừ mỗi tuần không hoạt động
+ELO_DECAY_FLOOR: int = 1000             # Elo sàn cho decay (không decay xuống dưới)
+ELO_DECAY_INACTIVITY_DAYS: int = 7      # Số ngày không đánh = inactive
+
+# Feature 3 — Win Rate Modifier
+WIN_RATE_MIN_MATCHES: int = 5            # Tối thiểu 5 trận mới áp dụng modifier
+WIN_RATE_HIGH_THRESHOLD: float = 0.7     # Win rate >= 70% → giảm gain
+WIN_RATE_HIGH_MODIFIER: float = 0.5      # Modifier khi win rate cao (gain x0.5)
+WIN_RATE_LOW_THRESHOLD: float = 0.3      # Win rate <= 30% → tăng gain
+WIN_RATE_LOW_MODIFIER: float = 1.5       # Modifier khi win rate thấp (gain x1.5)
+
+# Feature 4 — Activity Bonus
+ACTIVITY_BONUS_AMOUNT: int = 10          # Bonus Elo cho clan hoạt động
+ACTIVITY_BONUS_MIN_MATCHES: int = 3      # Tối thiểu 3 trận/tuần
+ACTIVITY_BONUS_ELO_THRESHOLD: int = 1000 # Chỉ clan dưới 1000 Elo
+
+# Feature 5 — Underdog Bonus & Elo Gain Cap
+ELO_MAX_GAIN_PER_MATCH: int = 50         # Cap tổng gain cho 1 trận
+
+# Feature 7 — Rank Cap
+RANK_CAP_THRESHOLD_SCORE: int = 23       # Immortal 2 = score 23
+RANK_CAP_MAX_COUNT: int = 5              # Max 5 thành viên rank Immortal 2+
+
+# Feature 9 — Roster
+ROSTER_SIZE: int = 5                     # Số người phải khai cho mỗi roster
+
+# =============================================================================
 # DATABASE PATH
 # =============================================================================
 

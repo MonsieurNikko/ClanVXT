@@ -179,6 +179,7 @@ async def on_ready():
     check_loans_task.start()
     check_transfers_task.start()
     check_cooldowns_task.start()
+    weekly_balance_task.start()
     print("✓ Started background tasks")
     
     print("-" * 50)
@@ -365,6 +366,74 @@ async def check_cooldowns_task():
                 pass
 
 
+@tasks.loop(hours=24)
+async def weekly_balance_task():
+    """Balance System Weekly Task: Elo decay + activity bonus (runs daily, checks weekly gate)."""
+    try:
+        last_run = await db.get_system_setting("last_weekly_run")
+        now = datetime.now(timezone.utc)
+        
+        if last_run:
+            last_run_dt = datetime.fromisoformat(last_run.replace('Z', '+00:00'))
+            if (now - last_run_dt).days < 7:
+                return  # Not yet a week
+        
+        print("[BALANCE] Running weekly balance task...")
+        
+        # Feature 2: Elo Decay
+        if await db.is_balance_feature_enabled("elo_decay"):
+            decayed_clans = await db.get_clans_for_decay()
+            for clan in decayed_clans:
+                old_elo = clan["elo"]
+                await db.apply_elo_decay(clan["id"], config.ELO_DECAY_AMOUNT)
+                new_elo = max(config.ELO_FLOOR, old_elo - config.ELO_DECAY_AMOUNT)
+                print(f"[BALANCE] Elo decay: {clan['name']} {old_elo} → {new_elo}")
+            
+            if decayed_clans:
+                await bot_utils.log_event(
+                    "BALANCE_ELO_DECAY",
+                    f"Weekly Elo decay applied to {len(decayed_clans)} clans (-{config.ELO_DECAY_AMOUNT} each)"
+                )
+        
+        # Feature 4: Activity Bonus
+        if await db.is_balance_feature_enabled("activity_bonus"):
+            all_clans = await db.get_all_active_clans()
+            bonus_count = 0
+            for clan in all_clans:
+                # Optional: Check if clan is below the Elo threshold to receive bonus
+                if clan["elo"] < config.ACTIVITY_BONUS_ELO_THRESHOLD:
+                    activity = await db.get_clan_activity_count(clan["id"])
+                    if activity >= config.ACTIVITY_BONUS_MIN_MATCHES:
+                        bonus = config.ACTIVITY_BONUS_AMOUNT
+                        async with db.get_connection() as conn:
+                            await conn.execute(
+                                "UPDATE clans SET elo = elo + ?, updated_at = datetime('now') WHERE id = ?",
+                                (bonus, clan["id"])
+                            )
+                            await conn.execute(
+                                """INSERT INTO elo_history (clan_id, old_elo, new_elo, change_amount, reason)
+                                   VALUES (?, ?, ?, ?, ?)""",
+                                (clan["id"], clan["elo"], clan["elo"] + bonus, bonus, "activity_bonus")
+                            )
+                            await conn.commit()
+                        bonus_count += 1
+            
+            if bonus_count > 0:
+                await bot_utils.log_event(
+                    "BALANCE_ACTIVITY_BONUS",
+                    f"Weekly activity bonus (+{config.ACTIVITY_BONUS_AMOUNT}) applied to {bonus_count} clans"
+                )
+        
+        # Update last run timestamp
+        await db.set_system_setting("last_weekly_run", now.isoformat())
+        print("[BALANCE] Weekly balance task completed.")
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[BALANCE] Error in weekly task: {e}")
+
+
 @expire_requests_task.before_loop
 async def before_expire_task():
     """Wait until bot is ready before starting task."""
@@ -385,6 +454,12 @@ async def before_check_transfers():
 async def before_check_cooldowns():
     """Wait until bot is ready before starting task."""
     await bot.wait_until_ready()
+
+@weekly_balance_task.before_loop
+async def before_weekly_balance():
+    """Wait until bot is ready before starting task."""
+    await bot.wait_until_ready()
+
 
 
 # =============================================================================

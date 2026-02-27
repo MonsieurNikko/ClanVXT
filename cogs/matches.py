@@ -555,14 +555,12 @@ class MatchesCog(commands.Cog):
             delta_a = elo_result["final_delta_a"]
             delta_b = elo_result["final_delta_b"]
             delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
-            delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
+            # Build detailed explanation
+            explanation = elo.format_elo_explanation_vn(elo_result)
             
             status_text = (
                 f"✅ **Đã xác nhận!** {winner_name} thắng\n\n"
-                f"**Elo thay đổi:**\n"
-                f"• {elo_result['clan_a_name']}: {elo_result['elo_a_old']} → {elo_result['elo_a_new']} ({delta_a_str})\n"
-                f"• {elo_result['clan_b_name']}: {elo_result['elo_b_old']} → {elo_result['elo_b_new']} ({delta_b_str})\n\n"
-                f"📊 Multiplier: {elo_result['multiplier']}x (match {elo_result['match_count_24h']}/ngày)"
+                f"{explanation}"
             )
             color = discord.Color.green()
         else:
@@ -577,6 +575,8 @@ class MatchesCog(commands.Cog):
                 status_text = f"✅ **Đã xác nhận!**\n\n🚫 **Clan bị cấm hệ thống:** {banned}\n\n❌ Elo không được áp dụng."
             else:
                 status_text = f"✅ **Đã xác nhận!**\n\n⚠️ Không thể áp dụng Elo: {elo_result['reason']}"
+            
+            explanation = status_text # Use this for logging below
             color = discord.Color.orange()
         
         embed = create_match_embed(match, status_text, color)
@@ -863,16 +863,7 @@ class MatchesCog(commands.Cog):
         
         # Build result message
         if elo_result["success"]:
-            delta_a = elo_result["final_delta_a"]
-            delta_b = elo_result["final_delta_b"]
-            delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
-            delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
-            
-            elo_msg = (
-                f"**Elo thay đổi:**\n"
-                f"• {elo_result['clan_a_name']}: {elo_result['elo_a_old']} → {elo_result['elo_a_new']} ({delta_a_str})\n"
-                f"• {elo_result['clan_b_name']}: {elo_result['elo_b_old']} → {elo_result['elo_b_new']} ({delta_b_str})"
-            )
+            elo_msg = elo.format_elo_explanation_vn(elo_result)
         else:
             if elo_result["reason"] == "CLANS_INACTIVE":
                 inactive = ", ".join(elo_result["inactive_clans"])

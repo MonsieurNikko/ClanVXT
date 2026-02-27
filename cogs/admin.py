@@ -16,6 +16,72 @@ from services import db, cooldowns, moderation, permissions
 from services import bot_utils, elo
 
 
+class AnnounceModal(discord.ui.Modal, title="📢 Soạn Thông Báo"):
+    """Modal for admin to write a multiline announcement."""
+
+    ann_title = discord.ui.TextInput(
+        label="Tiêu đề thông báo",
+        placeholder="Ví dụ: 🚨 CẬP NHẬT LUẬT LỆ ARENA",
+        max_length=200,
+        required=True
+    )
+    body = discord.ui.TextInput(
+        label="Nội dung thông báo",
+        style=discord.TextStyle.paragraph,
+        placeholder="Paste nội dung thông báo ở đây...",
+        max_length=3900,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        guild = interaction.guild
+        if not guild:
+            return await interaction.followup.send("❌ Chỉ dùng trong server.", ephemeral=True)
+
+        chat_channel = bot_utils.get_chat_channel()
+        if not chat_channel:
+            return await interaction.followup.send("❌ Không tìm thấy kênh #chat-arena.", ephemeral=True)
+
+        player_role = discord.utils.get(guild.roles, name=config.ROLE_PLAYER)
+        mention_text = player_role.mention if player_role else "@player"
+
+        title_str = self.ann_title.value.strip()
+        body_str = self.body.value.strip()
+
+        # Build full text
+        full_body = f"**{title_str}**\n\n{body_str}\n\n*📢 Thông báo bởi {interaction.user.display_name}*"
+
+        # Split into ≤1900-char chunks at newline boundaries
+        MAX = 1900
+        chunks = []
+        remaining = full_body
+        while len(remaining) > MAX:
+            split_at = remaining.rfind("\n", 0, MAX)
+            if split_at == -1:
+                split_at = MAX
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:].lstrip("\n")
+        chunks.append(remaining)
+
+        try:
+            await chat_channel.send(content=f"{mention_text}\n\n{chunks[0]}")
+            for chunk in chunks[1:]:
+                await chat_channel.send(content=chunk)
+
+            await interaction.followup.send(
+                f"✅ Đã gửi thông báo lên {chat_channel.mention}! ({len(chunks)} tin nhắn)",
+                ephemeral=True
+            )
+            await bot_utils.log_event(
+                "ADMIN_ANNOUNCE",
+                f"{interaction.user.mention} posted announcement: **{title_str}**"
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Lỗi gửi thông báo: {e}", ephemeral=True)
+
+
 class AdminCog(commands.Cog):
     """Cog for Admin/Mod commands."""
     
@@ -1463,6 +1529,326 @@ class AdminCog(commands.Cog):
                     color=discord.Color.blue()
                 )
                 await interaction.followup.send(embed=extra_embed, ephemeral=True)
+
+    # =============================================================================
+    # BALANCE SYSTEM ADMIN COMMANDS (Phase 4)
+    # =============================================================================
+    
+    balance_group = app_commands.Group(name="balance", description="Balance system management", parent=admin_group)
+
+    @balance_group.command(name="toggle", description="Toggle a balance feature on/off")
+    @app_commands.describe(
+        feature="Feature key to toggle",
+        enabled="Enable (True) or disable (False)"
+    )
+    @app_commands.choices(feature=[
+        app_commands.Choice(name="Recruitment Cap", value="recruitment_cap"),
+        app_commands.Choice(name="Elo Decay", value="elo_decay"),
+        app_commands.Choice(name="Win Rate Modifier", value="win_rate_modifier"),
+        app_commands.Choice(name="Activity Bonus", value="activity_bonus"),
+        app_commands.Choice(name="Underdog Bonus", value="underdog_bonus"),
+        app_commands.Choice(name="Rank Enforcement", value="rank_enforcement"),
+        app_commands.Choice(name="Rank Cap", value="rank_cap"),
+        app_commands.Choice(name="Rank Modifier", value="rank_modifier"),
+        app_commands.Choice(name="Match Roster", value="match_roster"),
+        app_commands.Choice(name="Elo Gain Cap", value="elo_gain_cap"),
+    ])
+    async def balance_toggle(self, interaction: discord.Interaction, feature: str, enabled: bool):
+        """Toggle a balance feature."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await db.toggle_balance_feature(feature, enabled)
+        status = "✅ BẬT" if enabled else "❌ TẮT"
+        await interaction.response.send_message(
+            f"⚙️ Balance feature **{feature}**: {status}",
+            ephemeral=False
+        )
+        await bot_utils.log_event(
+            "BALANCE_TOGGLE",
+            f"{interaction.user.mention} {'enabled' if enabled else 'disabled'} balance feature: **{feature}**"
+        )
+    
+    @balance_group.command(name="status", description="View status of all balance features")
+    async def balance_status(self, interaction: discord.Interaction):
+        """View all balance feature statuses."""
+        if not await self.check_mod(interaction):
+            return
+        
+        features = [
+            "recruitment_cap", "elo_decay", "win_rate_modifier",
+            "activity_bonus", "underdog_bonus", "rank_enforcement",
+            "rank_cap", "rank_modifier", "match_roster", "elo_gain_cap"
+        ]
+        
+        lines = []
+        for f in features:
+            enabled = await db.is_balance_feature_enabled(f)
+            icon = "✅" if enabled else "❌"
+            lines.append(f"{icon} `{f}`")
+        
+        embed = discord.Embed(
+            title="⚙️ Balance System Status",
+            description="\n".join(lines),
+            color=discord.Color.blue()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @balance_group.command(name="set_rank", description="Đặt rank Valorant cho một thành viên (Mod only)")
+    @app_commands.describe(user="Thành viên cần đặt rank")
+    async def balance_set_rank(self, interaction: discord.Interaction, user: discord.Member):
+        """Admin manually set a member's rank via a dropdown select menu."""
+        if not await self.check_mod(interaction):
+            return
+        
+        db_user = await db.get_user(str(user.id))
+        if not db_user:
+            return await interaction.response.send_message("❌ User chưa đăng ký.", ephemeral=True)
+        
+        clan_data = await db.get_user_clan(db_user["id"])
+        if not clan_data:
+            return await interaction.response.send_message("❌ User chưa có clan.", ephemeral=True)
+        
+        # Import rank options
+        from cogs.clan import RANK_OPTIONS, RANK_SCORE_TO_NAME
+        
+        # Build a view with a rank select menu
+        view = discord.ui.View(timeout=120)
+        select = discord.ui.Select(
+            placeholder=f"Chọn rank cho {user.display_name}...",
+            options=RANK_OPTIONS,
+            min_values=1,
+            max_values=1,
+        )
+        
+        _user_ref = user
+        _db_user_ref = db_user
+        _clan_ref = clan_data
+        _mod_ref = interaction.user
+        
+        async def rank_set_callback(sel_interaction: discord.Interaction):
+            rank_score = int(sel_interaction.data["values"][0])
+            rank_name = RANK_SCORE_TO_NAME.get(rank_score, f"Unknown ({rank_score})")
+            await db.update_member_rank(_db_user_ref["id"], _clan_ref["id"], rank_name, rank_score)
+            await sel_interaction.response.edit_message(
+                content=f"✅ Đã set rank **{rank_name}** cho {_user_ref.mention}.",
+                view=None
+            )
+            await bot_utils.log_event(
+                "ADMIN_SET_RANK",
+                f"{_mod_ref.mention} set rank for {_user_ref.mention}: **{rank_name}** (score={rank_score})"
+            )
+        
+        select.callback = rank_set_callback
+        view.add_item(select)
+        
+        await interaction.response.send_message(
+            f"🎯 **Đặt Rank cho {user.display_name}**\n"
+            f"Clan hiện tại: **{clan_data['name']}**\n\n"
+            f"Chọn rank bên dưới:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @balance_group.command(name="clan_rank", description="View clan's average rank and undeclared members")
+    @app_commands.describe(clan_name="Name of the clan")
+    async def balance_clan_rank(self, interaction: discord.Interaction, clan_name: str):
+        """View clan rank info."""
+        if not await self.check_mod(interaction):
+            return
+        
+        clan = await db.get_clan(clan_name)
+        if not clan:
+            clan = await db.get_clan_any_status(clan_name)
+        if not clan:
+            return await interaction.response.send_message(f"❌ Clan '{clan_name}' không tồn tại.", ephemeral=True)
+        
+        avg_rank = await db.get_clan_avg_rank(clan["id"])
+        high_count = await db.count_high_rank_members(clan["id"])
+        undeclared = await db.get_undeclared_members(clan["id"])
+        
+        from services.elo import RANK_SCORE_TO_NAME
+        avg_name = RANK_SCORE_TO_NAME.get(round(avg_rank), f"~{avg_rank:.1f}") if avg_rank > 0 else "N/A"
+        
+        embed = discord.Embed(
+            title=f"🎯 Rank Info — {clan['name']}",
+            color=discord.Color.purple()
+        )
+        embed.add_field(name="Avg Rank", value=f"**{avg_name}** (Score: {avg_rank:.1f})", inline=True)
+        embed.add_field(name="High Rank (Imm2+)", value=f"**{high_count}** / {config.RANK_CAP_MAX_HIGH_RANK} max", inline=True)
+        
+        if undeclared:
+            names = ", ".join(f"<@{m['discord_id']}>" for m in undeclared[:10])
+            embed.add_field(name=f"⚠️ Undeclared ({len(undeclared)})", value=names, inline=False)
+        else:
+            embed.add_field(name="✅ Declaration", value="All members declared", inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @balance_group.command(name="adjust_elo", description="Manually adjust a clan's Elo with reason")
+    @app_commands.describe(
+        clan_name="Clan name",
+        amount="Elo change (positive or negative)",
+        reason="Reason for adjustment"
+    )
+    async def balance_adjust_elo(self, interaction: discord.Interaction, clan_name: str, amount: int, reason: str):
+        """Admin Elo adjustment with logging."""
+        if not await self.check_mod(interaction):
+            return
+        
+        clan = await db.get_clan(clan_name)
+        if not clan:
+            clan = await db.get_clan_any_status(clan_name)
+        if not clan:
+            return await interaction.response.send_message(f"❌ Clan '{clan_name}' không tồn tại.", ephemeral=True)
+        
+        old_elo = clan["elo"]
+        new_elo = max(0, old_elo + amount)
+        
+        async with db.get_connection() as conn:
+            await conn.execute(
+                "UPDATE clans SET elo = ?, updated_at = datetime('now') WHERE id = ?",
+                (new_elo, clan["id"])
+            )
+            await conn.execute(
+                """INSERT INTO elo_history (clan_id, old_elo, new_elo, change_amount, reason)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (clan["id"], old_elo, new_elo, amount, f"admin_adjust: {reason}")
+            )
+            await conn.commit()
+        
+        await interaction.response.send_message(
+            f"✅ Adjusted Elo for **{clan['name']}**: {old_elo} → {new_elo} ({amount:+d})\nReason: {reason}",
+            ephemeral=False
+        )
+        await bot_utils.log_event(
+            "ADMIN_ELO_ADJUST",
+            f"{interaction.user.mention} adjusted Elo for **{clan['name']}**: {old_elo} → {new_elo} ({amount:+d}). Reason: {reason}"
+        )
+    
+    @balance_group.command(name="run_weekly", description="Manually trigger weekly balance task")
+    async def balance_run_weekly(self, interaction: discord.Interaction):
+        """Force run the weekly balance task."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Reset the gate so it runs immediately
+        await db.set_system_setting("last_weekly_run", "")
+        
+        # Import and call the task directly
+        from main import weekly_balance_task
+        # We can't call it directly, but we can do the logic inline
+        from datetime import datetime, timezone
+        
+        results = []
+        
+        # Elo Decay
+        if await db.is_balance_feature_enabled("elo_decay"):
+            decayed = await db.get_clans_for_decay()
+            for clan in decayed:
+                await db.apply_elo_decay(clan["id"], config.ELO_DECAY_AMOUNT)
+            results.append(f"📉 Elo Decay: {len(decayed)} clans")
+        else:
+            results.append("📉 Elo Decay: DISABLED")
+        
+        # Activity Bonus
+        if await db.is_balance_feature_enabled("activity_bonus"):
+            all_clans = await db.get_all_active_clans()
+            bonus_count = 0
+            for clan in all_clans:
+                # Same check as main.py: under 1000 elo, >= 3 matches
+                if clan["elo"] < config.ACTIVITY_BONUS_ELO_THRESHOLD:
+                    activity = await db.get_clan_activity_count(clan["id"])
+                    if activity >= config.ACTIVITY_BONUS_MIN_MATCHES:
+                        bonus = config.ACTIVITY_BONUS_AMOUNT
+                        async with db.get_connection() as conn:
+                            await conn.execute(
+                                "UPDATE clans SET elo = elo + ?, updated_at = datetime('now') WHERE id = ?",
+                                (bonus, clan["id"])
+                            )
+                            await conn.execute(
+                                """INSERT INTO elo_history (clan_id, old_elo, new_elo, change_amount, reason)
+                                   VALUES (?, ?, ?, ?, ?)""",
+                                (clan["id"], clan["elo"], clan["elo"] + bonus, bonus, "activity_bonus_manual")
+                            )
+                            await conn.commit()
+                        bonus_count += 1
+            results.append(f"📈 Activity Bonus: {bonus_count} clans (+{config.ACTIVITY_BONUS_AMOUNT} Elo)")
+        else:
+            results.append("📈 Activity Bonus: DISABLED")
+        
+        # Update run time
+        from datetime import datetime, timezone
+        await db.set_system_setting("last_weekly_run", datetime.now(timezone.utc).isoformat())
+
+        embed = discord.Embed(
+            title="Manual Weekly Balance Task",
+            description="\n".join(results),
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        await bot_utils.log_event(
+            "BALANCE_WEEKLY_MANUAL",
+            f"{interaction.user.mention} manually triggered weekly balance task"
+        )
+
+    @balance_group.command(name="activity_info", description="View which clans are receiving the weekly activity bonus")
+    async def balance_activity_info(self, interaction: discord.Interaction):
+        """Show clans eligible for activity bonus and their match counts."""
+        if not await self.check_mod(interaction):
+            return
+            
+        await interaction.response.defer(ephemeral=False)
+        
+        all_clans = await db.get_all_active_clans()
+        eligible_clans = []
+        ineligible_clans = []
+        
+        for clan in all_clans:
+            activity = await db.get_clan_activity_count(clan["id"])
+            if clan["elo"] < config.ACTIVITY_BONUS_ELO_THRESHOLD:
+                if activity >= config.ACTIVITY_BONUS_MIN_MATCHES:
+                    eligible_clans.append(f"✅ **{clan['name']}**: {activity} trận (Đủ điều kiện nhận +{config.ACTIVITY_BONUS_AMOUNT})")
+                else:
+                    ineligible_clans.append(f"❌ **{clan['name']}**: {activity}/{config.ACTIVITY_BONUS_MIN_MATCHES} trận (Chưa đủ trận)")
+            else:
+                ineligible_clans.append(f"⛔ **{clan['name']}**: {clan['elo']} Elo (Đã vượt {config.ACTIVITY_BONUS_ELO_THRESHOLD} Elo)")
+                
+        # Format output
+        desc = f"**Cấu hình**: Tối thiểu `{config.ACTIVITY_BONUS_MIN_MATCHES}` trận/tuần, mức Elo dưới `{config.ACTIVITY_BONUS_ELO_THRESHOLD}`\n\n"
+        
+        if eligible_clans:
+            desc += "**ĐANG NHẬN THƯỞNG:**\n" + "\n".join(eligible_clans) + "\n\n"
+        else:
+            desc += "**ĐANG NHẬN THƯỞNG:** Không có clan nào đủ điều kiện.\n\n"
+            
+        if ineligible_clans:
+            desc += "**KHÔNG ĐƯỢC NHẬN:**\n" + "\n".join(ineligible_clans)
+            
+        # Truncate if too long
+        if len(desc) > 4000:
+            desc = desc[:4000] + "...\n*(Danh sách quá dài đã bị cắt bớt)*"
+            
+        embed = discord.Embed(
+            title="📈 Activity Bonus Status",
+            description=desc,
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed)
+
+    # =============================================================================
+    # ANNOUNCE COMMAND
+    # =============================================================================
+
+    @admin_group.command(name="announce", description="Mở form soạn thông báo và đăng lên #chat-arena với @player")
+    async def admin_announce(self, interaction: discord.Interaction):
+        """Open an announcement modal and post to #chat-arena tagging @player."""
+        if not await self.check_mod(interaction):
+            return
+        # Send a Modal so the user can paste multiline text with proper newlines
+        await interaction.response.send_modal(AnnounceModal())
 
 
 

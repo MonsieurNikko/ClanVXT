@@ -762,6 +762,33 @@ async def _continue_to_match_flow(bot: commands.Bot, state: MapBanPickState):
     # Ban/pick done — keep session for cleanup checker to handle
     # Channels will be cleaned after match is confirmed/voided/cancelled
 
+    # --- Balance System: Auto-save roster (Feature 9) ---
+    # Save all clan members as the roster with their avg rank
+    try:
+        if await db.is_balance_feature_enabled("match_roster"):
+            import json
+            # Clan A roster
+            members_a = await db.get_clan_members(state.clan_a_id)
+            roster_a_ids = [str(m["user_id"]) for m in members_a]
+            avg_rank_a = await db.get_clan_avg_rank(state.clan_a_id)
+            await db.save_match_roster(
+                state.match_id, "a",
+                json.dumps(roster_a_ids),
+                avg_rank_a
+            )
+            # Clan B roster
+            members_b = await db.get_clan_members(state.clan_b_id)
+            roster_b_ids = [str(m["user_id"]) for m in members_b]
+            avg_rank_b = await db.get_clan_avg_rank(state.clan_b_id)
+            await db.save_match_roster(
+                state.match_id, "b",
+                json.dumps(roster_b_ids),
+                avg_rank_b
+            )
+            print(f"[CHALLENGE] Roster saved for match #{state.match_id}: A avg={avg_rank_a}, B avg={avg_rank_b}")
+    except Exception as e:
+        print(f"[CHALLENGE] Error saving roster: {e}")
+
     await bot_utils.log_event(
         "CHALLENGE_BANPICK_DONE",
         f"Match #{state.match_id}: {state.clan_a_name} vs {state.clan_b_name} — "

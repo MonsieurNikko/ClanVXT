@@ -24,6 +24,20 @@ ANTI_FARM_MULTIPLIERS = {
 }
 DEFAULT_MULTIPLIER = 0.2  # 4th+ match
 
+# Rank Score → Name mapping (25 ranks)
+RANK_SCORE_TO_NAME = {
+    1: "Iron 1", 2: "Iron 2", 3: "Iron 3",
+    4: "Bronze 1", 5: "Bronze 2", 6: "Bronze 3",
+    7: "Silver 1", 8: "Silver 2", 9: "Silver 3",
+    10: "Gold 1", 11: "Gold 2", 12: "Gold 3",
+    13: "Platinum 1", 14: "Platinum 2", 15: "Platinum 3",
+    16: "Diamond 1", 17: "Diamond 2", 18: "Diamond 3",
+    19: "Ascendant 1", 20: "Ascendant 2", 21: "Ascendant 3",
+    22: "Immortal 1", 23: "Immortal 2", 24: "Immortal 3",
+    25: "Radiant",
+}
+RANK_NAME_TO_SCORE = {v: k for k, v in RANK_SCORE_TO_NAME.items()}
+
 
 def get_k_factor(matches_played: int) -> int:
     """
@@ -72,6 +86,55 @@ def get_pair_multiplier(match_count_24h: int) -> float:
         Multiplier (1.0, 0.7, 0.4, or 0.2)
     """
     return ANTI_FARM_MULTIPLIERS.get(match_count_24h, DEFAULT_MULTIPLIER)
+
+
+def get_win_rate_modifier(win_rate: float, total_matches: int) -> float:
+    """
+    Get Elo modifier based on clan's recent win rate.
+    High win rate → lower gain (modifier < 1.0)
+    Low win rate → higher gain (modifier > 1.0)
+    Not enough matches → no modifier (1.0)
+    """
+    if total_matches < config.WIN_RATE_MIN_MATCHES:
+        return 1.0
+    if win_rate >= config.WIN_RATE_HIGH_THRESHOLD:
+        return config.WIN_RATE_HIGH_MODIFIER
+    if win_rate <= config.WIN_RATE_LOW_THRESHOLD:
+        return config.WIN_RATE_LOW_MODIFIER
+    return 1.0
+
+
+def get_underdog_bonus(elo_winner: int, elo_loser: int) -> int:
+    """Only applies if winner's Elo < loser's Elo. Returns bonus points."""
+    gap = elo_loser - elo_winner
+    if gap < 100: return 0
+    if gap < 150: return 5
+    if gap <= 200: return 8
+    return 10
+
+
+def get_rank_modifier(avg_rank_a: float, avg_rank_b: float) -> Tuple[float, float]:
+    """
+    Returns (modifier_a, modifier_b) based on avg rank gap of rosters.
+    Higher avg rank → lower gain when winning, higher loss when losing.
+    """
+    if avg_rank_a is None or avg_rank_b is None:
+        return (1.0, 1.0)
+    
+    gap = abs(avg_rank_a - avg_rank_b)
+    if gap <= 2:
+        return (1.0, 1.0)
+    if gap <= 5:
+        mod = 0.9
+    elif gap <= 8:
+        mod = 0.8
+    else:
+        mod = 0.7
+    
+    if avg_rank_a > avg_rank_b:
+        return (mod, 2.0 - mod)
+    else:
+        return (2.0 - mod, mod)
 
 
 async def count_elo_matches_between_clans(clan_a_id: int, clan_b_id: int) -> int:
@@ -254,9 +317,62 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
         match_count = await count_elo_matches_between_clans(clan_a_id, clan_b_id)
         multiplier = get_pair_multiplier(match_count)
         
-        # Apply multiplier
+        # Apply anti-farm multiplier
         final_delta_a = round(base_delta_a * multiplier)
         final_delta_b = round(base_delta_b * multiplier)
+        
+        # --- Balance System Modifiers ---
+        win_rate_mod_a = 1.0
+        win_rate_mod_b = 1.0
+        rank_mod_a = 1.0
+        rank_mod_b = 1.0
+        underdog_bonus = 0
+        elo_capped = False
+        
+        # Feature 3 — Win Rate Modifier
+        if await db.is_balance_feature_enabled("win_rate_mod"):
+            wr_a = await db.get_clan_win_rate(clan_a_id)
+            wr_b = await db.get_clan_win_rate(clan_b_id)
+            win_rate_mod_a = get_win_rate_modifier(wr_a["win_rate"], wr_a["total"])
+            win_rate_mod_b = get_win_rate_modifier(wr_b["win_rate"], wr_b["total"])
+            if win_rate_mod_a != 1.0 or win_rate_mod_b != 1.0:
+                final_delta_a = round(final_delta_a * win_rate_mod_a)
+                final_delta_b = round(final_delta_b * win_rate_mod_b)
+        
+        # Feature 8 — Rank Elo Modifier (uses roster avg rank from Feature 9)
+        if await db.is_balance_feature_enabled("rank_elo_mod"):
+            rosters = await db.get_match_rosters(match_id)
+            avg_rank_a = rosters.get("avg_rank_a")
+            avg_rank_b = rosters.get("avg_rank_b")
+            if avg_rank_a is not None and avg_rank_b is not None:
+                rank_mod_a, rank_mod_b = get_rank_modifier(avg_rank_a, avg_rank_b)
+                if rank_mod_a != 1.0 or rank_mod_b != 1.0:
+                    # Cap combined modifier (win_rate * rank) >= 0.3 to avoid over-nerfing
+                    combined_mod_a = max(0.3, win_rate_mod_a * rank_mod_a)
+                    combined_mod_b = max(0.3, win_rate_mod_b * rank_mod_b)
+                    # Recompute with combined modifier instead of stacking
+                    final_delta_a = round(round(base_delta_a * multiplier) * combined_mod_a)
+                    final_delta_b = round(round(base_delta_b * multiplier) * combined_mod_b)
+        
+        # Feature 5 — Underdog Bonus
+        if await db.is_balance_feature_enabled("underdog_bonus"):
+            winner_elo = elo_a if winner_clan_id == clan_a_id else elo_b
+            loser_elo = elo_b if winner_clan_id == clan_a_id else elo_a
+            underdog_bonus = get_underdog_bonus(winner_elo, loser_elo)
+            if underdog_bonus > 0:
+                if winner_clan_id == clan_a_id:
+                    final_delta_a += underdog_bonus
+                else:
+                    final_delta_b += underdog_bonus
+        
+        # Feature 5 — Elo Gain Cap (only cap positive deltas)
+        if await db.is_balance_feature_enabled("elo_gain_cap"):
+            if final_delta_a > config.ELO_MAX_GAIN_PER_MATCH:
+                final_delta_a = config.ELO_MAX_GAIN_PER_MATCH
+                elo_capped = True
+            if final_delta_b > config.ELO_MAX_GAIN_PER_MATCH:
+                final_delta_b = config.ELO_MAX_GAIN_PER_MATCH
+                elo_capped = True
         
         # New Elo values (enforce floor)
         new_elo_a = max(ELO_FLOOR, elo_a + final_delta_a)
@@ -314,14 +430,22 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             "elo_b_new": new_elo_b,
             "clan_a_name": clan_a["name"],
             "clan_b_name": clan_b["name"],
-            "match_count_24h": match_count + 1,  # Including this match
+            "match_count_24h": match_count + 1,
             "k_a": k_a,
             "k_b": k_b,
+            # Balance modifiers info
+            "win_rate_mod_a": win_rate_mod_a,
+            "win_rate_mod_b": win_rate_mod_b,
+            "rank_mod_a": rank_mod_a,
+            "rank_mod_b": rank_mod_b,
+            "underdog_bonus": underdog_bonus,
+            "elo_capped": elo_capped,
         }
 
 def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     """
     Format a detailed, Vietnamese explanation string from elo_result for logs.
+    Updated: includes breakdown of all balance modifiers.
     """
     if not elo_result.get("success"):
         return f"Thất bại: {elo_result.get('reason', 'Lỗi không xác định')}"
@@ -329,13 +453,12 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     # K-factor explanations
     k_a = elo_result.get("k_a", 32)
     k_b = elo_result.get("k_b", 32)
-    k_a_desc = "Giai đoạn tân thủ" if k_a == K_FACTOR_PLACEMENT else "Giai đoạn ổn định"
-    k_b_desc = "Giai đoạn tân thủ" if k_b == K_FACTOR_PLACEMENT else "Giai đoạn ổn định"
+    k_a_desc = "Tân thủ" if k_a == K_FACTOR_PLACEMENT else "Ổn định"
+    k_b_desc = "Tân thủ" if k_b == K_FACTOR_PLACEMENT else "Ổn định"
     
-    # Multiplier explanation
+    # Anti-farm multiplier
     mult = elo_result.get("multiplier", 1.0)
     match_count = elo_result.get("match_count_24h", 1)
-    mult_desc = f"Hệ số {mult}x (Trận thứ {match_count} trong 24h)"
     
     # Delta strings
     delta_a = elo_result.get("final_delta_a", 0)
@@ -343,10 +466,36 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
     delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
     
-    explanation = (
-        f"📊 **Chi tiết Elo Match:**\n"
-        f"• **{elo_result['clan_a_name']}**: {delta_a_str} Elo (K={k_a}: {k_a_desc}, {mult_desc})\n"
-        f"• **{elo_result['clan_b_name']}**: {delta_b_str} Elo (K={k_b}: {k_b_desc}, {mult_desc})"
-    )
+    # Base explanation
+    lines = [
+        f"📊 **Chi tiết Elo Match:**",
+        f"• **{elo_result['clan_a_name']}**: {delta_a_str} Elo (K={k_a} {k_a_desc})",
+        f"• **{elo_result['clan_b_name']}**: {delta_b_str} Elo (K={k_b} {k_b_desc})",
+    ]
     
-    return explanation
+    # Modifiers breakdown
+    modifiers = []
+    if mult != 1.0:
+        modifiers.append(f"Anti-farm: {mult}x (Trận thứ {match_count}/24h)")
+    
+    wr_a = elo_result.get("win_rate_mod_a", 1.0)
+    wr_b = elo_result.get("win_rate_mod_b", 1.0)
+    if wr_a != 1.0 or wr_b != 1.0:
+        modifiers.append(f"Win Rate: {elo_result['clan_a_name']} x{wr_a}, {elo_result['clan_b_name']} x{wr_b}")
+    
+    rm_a = elo_result.get("rank_mod_a", 1.0)
+    rm_b = elo_result.get("rank_mod_b", 1.0)
+    if rm_a != 1.0 or rm_b != 1.0:
+        modifiers.append(f"Rank: {elo_result['clan_a_name']} x{rm_a}, {elo_result['clan_b_name']} x{rm_b}")
+    
+    ub = elo_result.get("underdog_bonus", 0)
+    if ub > 0:
+        modifiers.append(f"Underdog Bonus: +{ub}")
+    
+    if elo_result.get("elo_capped"):
+        modifiers.append(f"Elo Cap: max +{config.ELO_MAX_GAIN_PER_MATCH}")
+    
+    if modifiers:
+        lines.append("⚖️ **Modifiers:** " + " | ".join(modifiers))
+    
+    return "\n".join(lines)

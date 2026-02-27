@@ -88,6 +88,19 @@ class TransferAcceptView(discord.ui.View):
                 )
                 return
 
+            # --- Balance System: Rank Cap (Feature 7) ---
+            if await db.is_balance_feature_enabled("rank_cap"):
+                member_user = await db.get_user_by_id(self.member_id)
+                member_cm = await db.get_clan_member(self.member_id, self.source_clan_id)
+                if member_cm and member_cm.get("valorant_rank_score") and member_cm["valorant_rank_score"] >= config.RANK_CAP_THRESHOLD:
+                    high_rank_count = await db.count_high_rank_members(self.dest_clan_id)
+                    if high_rank_count >= config.RANK_CAP_MAX_HIGH_RANK:
+                        await interaction.followup.send(
+                            f"❌ Clan đích đã đạt giới hạn **{config.RANK_CAP_MAX_HIGH_RANK}** thành viên rank Immortal 2+. Không thể transfer.",
+                            ephemeral=True
+                        )
+                        return
+
             # Execute transfer (atomic)
             if not await db.complete_transfer(self.transfer_id):
                 return
@@ -362,6 +375,17 @@ class TransferCog(commands.Cog):
         allowed, error = await permissions.can_request_transfer(target_user["id"], source_clan["id"], dest_clan["id"])
         if not allowed:
             return await interaction.response.send_message(f"❌ Không thể yêu cầu transfer: {error}", ephemeral=True)
+        
+        # --- Balance System: Rank Cap (Feature 7) ---
+        if await db.is_balance_feature_enabled("rank_cap"):
+            member_cm = await db.get_clan_member(target_user["id"], source_clan["id"])
+            if member_cm and member_cm.get("valorant_rank_score") and member_cm["valorant_rank_score"] >= config.RANK_CAP_THRESHOLD:
+                high_rank_count = await db.count_high_rank_members(dest_clan["id"])
+                if high_rank_count >= config.RANK_CAP_MAX_HIGH_RANK:
+                    return await interaction.response.send_message(
+                        f"❌ Clan **{dest_clan['name']}** đã đạt giới hạn **{config.RANK_CAP_MAX_HIGH_RANK}** thành viên rank Immortal 2+.",
+                        ephemeral=True
+                    )
             
         # Create Transfer
         transfer_id = await db.create_transfer(

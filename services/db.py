@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
+import config
+
 # Database path
 DB_PATH = Path(__file__).parent.parent / "data" / "clan.db"
 SCHEMA_PATH = Path(__file__).parent.parent / "db" / "schema.sql"
@@ -151,6 +153,54 @@ async def init_db() -> None:
         # Ensure lfg_posts table exists (handled by executescript but for clarity)
         if "lfg_posts" not in all_tables:
              print("[DB] Initializing 'lfg_posts' table...")
+
+        # --- Balance System Migrations ---
+
+        # Rank Declaration columns in clan_members (Feature 6)
+        # Re-read member_columns in case it changed
+        cursor = await conn.execute("PRAGMA table_info(clan_members)")
+        member_columns = [row[1] for row in await cursor.fetchall()]
+
+        if "valorant_rank" not in member_columns:
+            print("[DB] Migrating: Adding 'valorant_rank' to 'clan_members' table...")
+            await conn.execute("ALTER TABLE clan_members ADD COLUMN valorant_rank TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        if "valorant_rank_score" not in member_columns:
+            print("[DB] Migrating: Adding 'valorant_rank_score' to 'clan_members' table...")
+            await conn.execute("ALTER TABLE clan_members ADD COLUMN valorant_rank_score INTEGER")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        # Roster columns in matches (Feature 9)
+        # Re-read match_columns
+        cursor = await conn.execute("PRAGMA table_info(matches)")
+        match_columns = [row[1] for row in await cursor.fetchall()]
+
+        if "roster_a" not in match_columns:
+            print("[DB] Migrating: Adding 'roster_a' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN roster_a TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        if "roster_b" not in match_columns:
+            print("[DB] Migrating: Adding 'roster_b' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN roster_b TEXT")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        if "avg_rank_a" not in match_columns:
+            print("[DB] Migrating: Adding 'avg_rank_a' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN avg_rank_a REAL")
+            await conn.commit()
+            print("  ✓ Column added.")
+
+        if "avg_rank_b" not in match_columns:
+            print("[DB] Migrating: Adding 'avg_rank_b' to 'matches' table...")
+            await conn.execute("ALTER TABLE matches ADD COLUMN avg_rank_b REAL")
+            await conn.commit()
+            print("  ✓ Column added.")
 
 
 
@@ -2233,3 +2283,204 @@ async def get_expired_tryouts() -> List[Dict[str, Any]]:
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+# =============================================================================
+# BALANCE SYSTEM — Rank, Recruitment, Decay, Win Rate, Activity, Roster
+# =============================================================================
+
+async def update_member_rank(user_id: int, clan_id: int, rank: str, rank_score: int) -> None:
+    """Update valorant rank for a clan member."""
+    async with get_connection() as conn:
+        await conn.execute(
+            """UPDATE clan_members 
+               SET valorant_rank = ?, valorant_rank_score = ?
+               WHERE user_id = ? AND clan_id = ?""",
+            (rank, rank_score, user_id, clan_id)
+        )
+        await conn.commit()
+
+
+async def get_clan_avg_rank(clan_id: int) -> float:
+    """Get average rank score for a clan. Only counts members with declared rank."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT AVG(valorant_rank_score) as avg_score
+               FROM clan_members WHERE clan_id = ? AND valorant_rank_score IS NOT NULL""",
+            (clan_id,)
+        )
+        row = await cursor.fetchone()
+        return float(row["avg_score"]) if row and row["avg_score"] else 0.0
+
+
+async def count_high_rank_members(clan_id: int, min_score: int = None) -> int:
+    """Count members with rank_score >= min_score. Used for Rank Cap (F7)."""
+    if min_score is None:
+        min_score = config.RANK_CAP_THRESHOLD
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT COUNT(*) as count FROM clan_members WHERE clan_id = ? AND valorant_rank_score >= ?",
+            (clan_id, min_score)
+        )
+        row = await cursor.fetchone()
+        return row["count"]
+
+
+async def get_undeclared_members(clan_id: int) -> List[Dict[str, Any]]:
+    """Get members who haven't declared their rank. Used to block competition."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT cm.user_id, u.discord_id, u.riot_id
+               FROM clan_members cm
+               JOIN users u ON cm.user_id = u.id
+               WHERE cm.clan_id = ? AND cm.valorant_rank IS NULL""",
+            (clan_id,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def count_recent_recruits(clan_id: int, days: int = 7) -> int:
+    """Count successful invites/recruits in the last N days. Used for Recruitment Cap (F1)."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT COUNT(*) as count FROM invite_requests
+               WHERE clan_id = ? AND status = 'accepted'
+               AND responded_at >= datetime('now', ? || ' days')""",
+            (clan_id, f"-{days}")
+        )
+        row = await cursor.fetchone()
+        return row["count"]
+
+
+async def get_clans_for_decay(elo_threshold: int = None, inactivity_days: int = None) -> List[Dict[str, Any]]:
+    """Get active clans eligible for Elo decay (above threshold, no recent matches)."""
+    if elo_threshold is None:
+        elo_threshold = config.ELO_DECAY_THRESHOLD
+    if inactivity_days is None:
+        inactivity_days = config.ELO_DECAY_INACTIVITY_DAYS
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT c.id, c.name, c.elo FROM clans c
+               WHERE c.status = 'active' AND c.elo > ?
+               AND c.id NOT IN (
+                   SELECT DISTINCT clan_a_id FROM matches 
+                   WHERE created_at >= datetime('now', ? || ' days')
+                   AND status IN ('confirmed', 'resolved')
+                   UNION
+                   SELECT DISTINCT clan_b_id FROM matches 
+                   WHERE created_at >= datetime('now', ? || ' days')
+                   AND status IN ('confirmed', 'resolved')
+               )""",
+            (elo_threshold, f"-{inactivity_days}", f"-{inactivity_days}")
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def apply_elo_decay(clan_id: int, amount: int, floor: int = None) -> Dict[str, Any]:
+    """Apply Elo decay to a clan. Returns {old_elo, new_elo, change}."""
+    if floor is None:
+        floor = config.ELO_FLOOR
+    async with get_connection() as conn:
+        cursor = await conn.execute("SELECT elo FROM clans WHERE id = ?", (clan_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return {"success": False, "reason": "clan_not_found"}
+        
+        old_elo = row["elo"]
+        new_elo = max(old_elo - amount, floor)
+        change = new_elo - old_elo
+        
+        if change == 0:
+            return {"success": True, "old_elo": old_elo, "new_elo": new_elo, "change": 0, "skipped": True}
+    
+    # Use update_clan_elo for proper history tracking
+    await update_clan_elo(clan_id, new_elo, None, "elo_decay")
+    return {"success": True, "old_elo": old_elo, "new_elo": new_elo, "change": change, "skipped": False}
+
+
+async def get_clan_activity_count(clan_id: int, days: int = 7) -> int:
+    """Count confirmed/resolved matches for a clan in the last N days."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT COUNT(*) as count FROM matches
+               WHERE (clan_a_id = ? OR clan_b_id = ?)
+               AND status IN ('confirmed', 'resolved')
+               AND created_at >= datetime('now', ? || ' days')""",
+            (clan_id, clan_id, f"-{days}")
+        )
+        row = await cursor.fetchone()
+        return row["count"]
+
+
+async def get_clan_win_rate(clan_id: int, last_n: int = 10) -> Dict[str, Any]:
+    """Calculate clan's win rate over their last N confirmed/resolved matches."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """SELECT id, winner_clan_id FROM matches
+               WHERE (clan_a_id = ? OR clan_b_id = ?)
+               AND status IN ('confirmed', 'resolved')
+               AND winner_clan_id IS NOT NULL
+               ORDER BY created_at DESC LIMIT ?""",
+            (clan_id, clan_id, last_n)
+        )
+        rows = await cursor.fetchall()
+        
+        total = len(rows)
+        if total == 0:
+            return {"total": 0, "wins": 0, "losses": 0, "win_rate": 0.0}
+        
+        wins = sum(1 for r in rows if r["winner_clan_id"] == clan_id)
+        losses = total - wins
+        win_rate = wins / total
+        return {"total": total, "wins": wins, "losses": losses, "win_rate": win_rate}
+
+
+async def is_balance_feature_enabled(feature: str) -> bool:
+    """Check if a balance feature is enabled. Default = True if not set."""
+    val = await get_system_setting(f"balance_{feature}_enabled")
+    return val != "0"
+
+
+async def toggle_balance_feature(feature: str, enabled: bool) -> None:
+    """Enable/disable a balance feature."""
+    await set_system_setting(f"balance_{feature}_enabled", "1" if enabled else "0")
+
+
+async def save_match_roster(match_id: int, side: str, roster_json: str, avg_rank: float) -> None:
+    """Save roster for a match side ('a' or 'b'). roster_json is a JSON string."""
+    async with get_connection() as conn:
+        if side == "a":
+            await conn.execute(
+                "UPDATE matches SET roster_a = ?, avg_rank_a = ? WHERE id = ?",
+                (roster_json, avg_rank, match_id)
+            )
+        else:
+            await conn.execute(
+                "UPDATE matches SET roster_b = ?, avg_rank_b = ? WHERE id = ?",
+                (roster_json, avg_rank, match_id)
+            )
+        await conn.commit()
+
+
+async def get_match_rosters(match_id: int) -> Dict[str, Any]:
+    """Get roster data for a match. Returns {roster_a, roster_b, avg_rank_a, avg_rank_b}."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT roster_a, roster_b, avg_rank_a, avg_rank_b FROM matches WHERE id = ?",
+            (match_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else {"roster_a": None, "roster_b": None, "avg_rank_a": None, "avg_rank_b": None}
+
+
+async def get_clan_member(user_id: int, clan_id: int) -> Dict[str, Any]:
+    """Get a specific clan_member row for a user in a clan."""
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            "SELECT * FROM clan_members WHERE user_id = ? AND clan_id = ?",
+            (user_id, clan_id)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
