@@ -1616,7 +1616,7 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=120)
         select = discord.ui.Select(
             placeholder=f"Chọn rank cho {user.display_name}...",
-            options=RANK_OPTIONS,
+            options=[o for o in RANK_OPTIONS if o.value != "0"],  # Exclude score=0 (max 25)
             min_values=1,
             max_values=1,
         )
