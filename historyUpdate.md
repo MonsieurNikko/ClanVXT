@@ -15,7 +15,7 @@ This document provides a cumulative history of all technical improvements, fixes
 - **UI Structure**: `cogs/clan.py` — Discord limits `SelectMenu` to a maximum of 25 options. With 25 Valorant ranks + the "Không chơi" option, it caused `HTTPException: 400 Bad Request... Must be between 1 and 25`.
 - **Fix**: Removed `value=0` from `RANK_OPTIONS` (restoring it to exactly 25 items). Added a dedicated `discord.ui.Button` with `custom_id="rank_noplay:{user_id}:{clan_id}"` directly to the `RankDeclarationView`.
 - **Handler**: `cogs/clan.py` — The persistent handler `on_interaction` now successfully captures `rank_noplay` events and assigns `rank_score=0`.
-- **Admin Fix**: `cogs/admin.py` — `/admin balance set_rank` code reverted to use the standard 25 `RANK_OPTIONS` without needing a list comprehension filter.
+- **Admin Fix**: `cogs/admin.py` — `/admin balance set_rank` code reverted to use the standard 25 `RANK_OPTIONS` without needing a list comprehension filter. Also added the dedicated "Không chơi Valorant" button directly in the Admin View, giving admins the same feature to assign non-players.
 
 ## [1.7.4] - 2026-02-28
 ### 🔧 Fix & Improvement: Rank Declaration

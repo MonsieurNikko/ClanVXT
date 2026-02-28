@@ -1642,6 +1642,27 @@ class AdminCog(commands.Cog):
         select.callback = rank_set_callback
         view.add_item(select)
         
+        async def rank_noplay_callback(btn_interaction: discord.Interaction):
+            rank_name = "Không chơi Valorant"
+            rank_score = 0
+            await db.update_member_rank(_db_user_ref["id"], _clan_ref["id"], rank_name, rank_score)
+            await btn_interaction.response.edit_message(
+                content=f"✅ Đã set rank **{rank_name}** cho {_user_ref.mention}.",
+                view=None
+            )
+            await bot_utils.log_event(
+                "ADMIN_SET_RANK",
+                f"{_mod_ref.mention} set rank for {_user_ref.mention}: **{rank_name}** (score={rank_score})"
+            )
+            
+        btn_noplay = discord.ui.Button(
+            label="Không chơi Valorant",
+            style=discord.ButtonStyle.secondary,
+            emoji="➖",
+        )
+        btn_noplay.callback = rank_noplay_callback
+        view.add_item(btn_noplay)
+        
         await interaction.response.send_message(
             f"🎯 **Đặt Rank cho {user.display_name}**\n"
             f"Clan hiện tại: **{clan_data['name']}**\n\n"
