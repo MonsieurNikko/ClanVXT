@@ -395,7 +395,6 @@ class InviteAcceptDeclineView(discord.ui.View):
 
 # 25 Valorant ranks mapped to score
 RANK_OPTIONS = [
-    discord.SelectOption(label="\u274c Kh\u00f4ng ch\u01a1i Valorant", value="0", description="Kh\u00f4ng t\u00ednh v\u00e0o rank trung b\u00ecnh", emoji="\u2796"),
     discord.SelectOption(label="Iron 1", value="1"),
     discord.SelectOption(label="Iron 2", value="2"),
     discord.SelectOption(label="Iron 3", value="3"),
@@ -427,9 +426,8 @@ from services.elo import RANK_SCORE_TO_NAME
 
 
 class RankDeclarationView(discord.ui.View):
-    """View with a Select Menu for declaring Valorant rank.
-    NOTE: The actual callback is handled by on_interaction persistent handler.
-    This View only provides the UI, no callback attached to avoid double-firing.
+    """View with a Select Menu for declaring Valorant rank + a button for non-players.
+    NOTE: Callbacks are handled by on_interaction persistent handler via custom_id.
     """
     
     def __init__(self, user_id: int, clan_id: int):
@@ -438,14 +436,22 @@ class RankDeclarationView(discord.ui.View):
         self.clan_id = clan_id
         
         select = discord.ui.Select(
-            placeholder="Ch\u1ecdn rank Valorant c\u1ee7a b\u1ea1n...",
+            placeholder="Chọn rank Valorant của bạn...",
             options=RANK_OPTIONS,
             custom_id=f"rank_declare:{user_id}:{clan_id}",
             min_values=1,
             max_values=1,
         )
-        # No callback here — handled by ClanCog.on_interaction persistent handler
         self.add_item(select)
+        
+        # Separate button for non-players (keeps select at 25 options)
+        btn = discord.ui.Button(
+            label="Tôi không chơi Valorant",
+            style=discord.ButtonStyle.secondary,
+            emoji="➖",
+            custom_id=f"rank_noplay:{user_id}:{clan_id}",
+        )
+        self.add_item(btn)
 
 
 # =============================================================================
@@ -597,6 +603,35 @@ class ClanCog(commands.Cog):
                     )
                 except Exception as e:
                     print(f"[RANK] DB error in persistent handler: {e}")
+            return
+        
+        # Handle "Không chơi Valorant" button (Balance System)
+        if custom_id.startswith("rank_noplay:"):
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                db_user_id = int(parts[1])
+                clan_id = int(parts[2])
+                rank_name = "Không chơi Valorant"
+                # Respond first
+                try:
+                    await interaction.response.edit_message(
+                        content=f"✅ Đã ghi nhận: **{rank_name}**. Bạn sẽ không tính vào rank trung bình của clan.",
+                        view=None
+                    )
+                except Exception:
+                    try:
+                        await interaction.response.send_message(f"✅ Đã ghi nhận: **{rank_name}**.")
+                    except Exception:
+                        pass
+                # Save to DB (score=0 excluded from avg)
+                try:
+                    await db.update_member_rank(db_user_id, clan_id, rank_name, 0)
+                    await bot_utils.log_event(
+                        "RANK_DECLARED",
+                        f"{interaction.user.mention} ({interaction.user.display_name}) khai rank **{rank_name}**"
+                    )
+                except Exception as e:
+                    print(f"[RANK] DB error in noplay handler: {e}")
             return
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
