@@ -3,6 +3,20 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.7.5] - 2026-02-28
+### 🚑 Hotfix: Discord UI Limits (Rank Declaration)
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Lựa chọn "Không chơi Valorant"**: Để đảm bảo giao diện hiển thị đầy đủ 25 rank trong game, mục "Không chơi Valorant" giờ đây được **tách riêng thành một nút bấm (Button)** nằm ngay dưới danh sách chọn rank. Mọi người thao tác như bình thường!
+
+#### 🔧 Technical Details
+- **UI Structure**: `cogs/clan.py` — Discord limits `SelectMenu` to a maximum of 25 options. With 25 Valorant ranks + the "Không chơi" option, it caused `HTTPException: 400 Bad Request... Must be between 1 and 25`.
+- **Fix**: Removed `value=0` from `RANK_OPTIONS` (restoring it to exactly 25 items). Added a dedicated `discord.ui.Button` with `custom_id="rank_noplay:{user_id}:{clan_id}"` directly to the `RankDeclarationView`.
+- **Handler**: `cogs/clan.py` — The persistent handler `on_interaction` now successfully captures `rank_noplay` events and assigns `rank_score=0`.
+- **Admin Fix**: `cogs/admin.py` — `/admin balance set_rank` code reverted to use the standard 25 `RANK_OPTIONS` without needing a list comprehension filter.
+
 ## [1.7.4] - 2026-02-28
 ### 🔧 Fix & Improvement: Rank Declaration
 
