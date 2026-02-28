@@ -3,6 +3,21 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.7.3] - 2026-02-28
+### 🚑 Hotfix: Rank Declaration Persistent Handler
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Khai Rank không hết hạn**: Thành viên giờ có thể khai Rank bất cứ lúc nào, không còn bị giới hạn 5 phút.
+> - **Khai Rank sau Restart**: Tin nhắn khai rank gửi trước khi bot restart giờ vẫn hoạt động bình thường.
+
+#### 🔧 Technical Details
+- `cogs/clan.py` — `RankDeclarationView`: Changed `timeout=300` → `timeout=None` to prevent select menu expiry.
+- `cogs/clan.py` — `on_interaction`: Replaced the stub `return` for `rank_declare:` custom_id with a full persistent handler that parses `user_id`/`clan_id` from custom_id, responds immediately, then saves to DB. This ensures rank selection works even after bot restarts.
+- `cogs/clan.py` — Log format: Changed `RANK_DECLARED` logs to use `interaction.user.mention` and display name instead of raw DB IDs per `AGENT_RULES.md`.
+- **Files**: `cogs/clan.py`
+
 ## [1.7.2] - 2026-02-27
 ### ✨ Cải thiện UX: Rank & Thông báo
 

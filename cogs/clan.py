@@ -472,7 +472,7 @@ class RankDeclarationView(discord.ui.View):
             await db.update_member_rank(self.db_user_id, self.clan_id, rank_name, rank_score)
             await bot_utils.log_event(
                 "RANK_DECLARED",
-                f"User ID {self.db_user_id} declared rank **{rank_name}** (score={rank_score}) in clan ID {self.clan_id}"
+                f"{interaction.user.mention} ({interaction.user.display_name}) khai rank **{rank_name}**"
             )
         except Exception as e:
             print(f"[RANK] DB update failed after responding: {e}")
@@ -623,7 +623,7 @@ class ClanCog(commands.Cog):
                     await db.update_member_rank(db_user_id, clan_id, rank_name, rank_score)
                     await bot_utils.log_event(
                         "RANK_DECLARED",
-                        f"User ID {db_user_id} declared rank **{rank_name}** (score={rank_score}) via persistent handler"
+                        f"{interaction.user.mention} ({interaction.user.display_name}) khai rank **{rank_name}**"
                     )
                 except Exception as e:
                     print(f"[RANK] DB error in persistent handler: {e}")
