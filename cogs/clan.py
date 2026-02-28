@@ -395,6 +395,7 @@ class InviteAcceptDeclineView(discord.ui.View):
 
 # 25 Valorant ranks mapped to score
 RANK_OPTIONS = [
+    discord.SelectOption(label="\u274c Kh\u00f4ng ch\u01a1i Valorant", value="0", description="Kh\u00f4ng t\u00ednh v\u00e0o rank trung b\u00ecnh", emoji="\u2796"),
     discord.SelectOption(label="Iron 1", value="1"),
     discord.SelectOption(label="Iron 2", value="2"),
     discord.SelectOption(label="Iron 3", value="3"),
@@ -426,56 +427,25 @@ from services.elo import RANK_SCORE_TO_NAME
 
 
 class RankDeclarationView(discord.ui.View):
-    """View with a Select Menu for declaring Valorant rank."""
+    """View with a Select Menu for declaring Valorant rank.
+    NOTE: The actual callback is handled by on_interaction persistent handler.
+    This View only provides the UI, no callback attached to avoid double-firing.
+    """
     
     def __init__(self, user_id: int, clan_id: int):
-        super().__init__(timeout=None)  # No timeout — member có thể khai rank bất cứ lúc nào
+        super().__init__(timeout=None)
         self.db_user_id = user_id
         self.clan_id = clan_id
         
         select = discord.ui.Select(
-            placeholder="Chọn rank Valorant của bạn...",
+            placeholder="Ch\u1ecdn rank Valorant c\u1ee7a b\u1ea1n...",
             options=RANK_OPTIONS,
             custom_id=f"rank_declare:{user_id}:{clan_id}",
             min_values=1,
             max_values=1,
         )
-        select.callback = self.rank_selected
+        # No callback here — handled by ClanCog.on_interaction persistent handler
         self.add_item(select)
-    
-    async def rank_selected(self, interaction: discord.Interaction):
-        # Respond to interaction FIRST (within 3s) to avoid 'This interaction failed'
-        try:
-            rank_score = int(interaction.data["values"][0])
-            rank_name = RANK_SCORE_TO_NAME.get(rank_score, f"Unknown ({rank_score})")
-        except Exception:
-            await interaction.response.send_message("\u274c Lỗi xử lý dữ liệu. Vui lòng thử lại.", ephemeral=True)
-            return
-        
-        # Respond immediately (edit the message with the select menu, or fallback to new message)
-        try:
-            await interaction.response.edit_message(
-                content=f"\u2705 Đã khai rank: **{rank_name}**! Cảm ơn bạn đã cập nhật thông tin.",
-                view=None
-            )
-        except Exception:
-            # In DM context, just ack with a new message (no ephemeral in DMs)
-            try:
-                await interaction.response.send_message(
-                    f"\u2705 Đã khai rank: **{rank_name}**! Cảm ơn bạn."
-                )
-            except Exception:
-                pass  # If even this fails, interaction already timed out, just proceed
-        
-        # Save to DB after responding
-        try:
-            await db.update_member_rank(self.db_user_id, self.clan_id, rank_name, rank_score)
-            await bot_utils.log_event(
-                "RANK_DECLARED",
-                f"{interaction.user.mention} ({interaction.user.display_name}) khai rank **{rank_name}**"
-            )
-        except Exception as e:
-            print(f"[RANK] DB update failed after responding: {e}")
 
 
 # =============================================================================

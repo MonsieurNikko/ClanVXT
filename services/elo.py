@@ -26,6 +26,7 @@ DEFAULT_MULTIPLIER = 0.2  # 4th+ match
 
 # Rank Score → Name mapping (25 ranks)
 RANK_SCORE_TO_NAME = {
+    0: "Không chơi Valorant",
     1: "Iron 1", 2: "Iron 2", 3: "Iron 3",
     4: "Bronze 1", 5: "Bronze 2", 6: "Bronze 3",
     7: "Silver 1", 8: "Silver 2", 9: "Silver 3",

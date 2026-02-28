@@ -3,6 +3,21 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.7.4] - 2026-02-28
+### 🔧 Fix & Improvement: Rank Declaration
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Sửa lỗi Khai Rank trùng lặp**: Khắc phục lỗi hệ thống ghi nhận rank 2 lần mỗi lần chọn.
+> - **Thêm lựa chọn "Không chơi Valorant"**: Thành viên không chơi Valorant có thể chọn option này thay vì bắt buộc khai rank. Lựa chọn này **không tính vào rank trung bình** của clan.
+
+#### 🔧 Technical Details
+- **Bug Fix**: `cogs/clan.py` — Removed `select.callback` from `RankDeclarationView` to prevent double-firing (both View callback and `on_interaction` persistent handler were processing the same interaction, causing duplicate logs and DB writes).
+- **Feature**: Added "Không chơi Valorant" option (score=0) to `RANK_OPTIONS` in `cogs/clan.py` and `RANK_SCORE_TO_NAME` in `services/elo.py`.
+- **DB Query**: `services/db.py` — `get_clan_avg_rank` updated to `AND valorant_rank_score > 0`, excluding non-players from avg rank calculation.
+- **Files**: `cogs/clan.py`, `services/elo.py`, `services/db.py`
+
 ## [1.7.3] - 2026-02-28
 ### 🚑 Hotfix: Rank Declaration Persistent Handler
 

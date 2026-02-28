@@ -2306,7 +2306,7 @@ async def get_clan_avg_rank(clan_id: int) -> float:
     async with get_connection() as conn:
         cursor = await conn.execute(
             """SELECT AVG(valorant_rank_score) as avg_score
-               FROM clan_members WHERE clan_id = ? AND valorant_rank_score IS NOT NULL""",
+               FROM clan_members WHERE clan_id = ? AND valorant_rank_score IS NOT NULL AND valorant_rank_score > 0""",
             (clan_id,)
         )
         row = await cursor.fetchone()
