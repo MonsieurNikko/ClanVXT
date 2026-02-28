@@ -429,7 +429,7 @@ class RankDeclarationView(discord.ui.View):
     """View with a Select Menu for declaring Valorant rank."""
     
     def __init__(self, user_id: int, clan_id: int):
-        super().__init__(timeout=300)  # 5 min timeout
+        super().__init__(timeout=None)  # No timeout — member có thể khai rank bất cứ lúc nào
         self.db_user_id = user_id
         self.clan_id = clan_id
         
@@ -597,7 +597,36 @@ class ClanCog(commands.Cog):
         
         # Handle rank declaration select (Balance System)
         if custom_id.startswith("rank_declare:"):
-            # Handled by RankDeclarationView callback directly
+            parts = custom_id.split(":")
+            if len(parts) == 3:
+                db_user_id = int(parts[1])
+                clan_id = int(parts[2])
+                # Extract selected rank score from interaction data
+                try:
+                    rank_score = int(interaction.data["values"][0])
+                    rank_name = RANK_SCORE_TO_NAME.get(rank_score, f"Unknown ({rank_score})")
+                except Exception:
+                    await interaction.response.send_message("❌ Lỗi xử lý dữ liệu. Vui lòng thử lại.", ephemeral=True)
+                    return
+                # Respond first, then save DB
+                try:
+                    await interaction.response.edit_message(
+                        content=f"✅ Đã khai rank: **{rank_name}**! Cảm ơn bạn đã cập nhật thông tin.",
+                        view=None
+                    )
+                except Exception:
+                    try:
+                        await interaction.response.send_message(f"✅ Đã khai rank: **{rank_name}**! Cảm ơn bạn.")
+                    except Exception:
+                        pass
+                try:
+                    await db.update_member_rank(db_user_id, clan_id, rank_name, rank_score)
+                    await bot_utils.log_event(
+                        "RANK_DECLARED",
+                        f"User ID {db_user_id} declared rank **{rank_name}** (score={rank_score}) via persistent handler"
+                    )
+                except Exception as e:
+                    print(f"[RANK] DB error in persistent handler: {e}")
             return
 
     async def handle_clan_accept(self, interaction: discord.Interaction, clan_id: int, user_id: int):
