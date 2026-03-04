@@ -2063,16 +2063,23 @@ async def get_all_active_clans() -> List[Dict[str, Any]]:
 
 
 
-
-async def get_recent_matches(limit: int = 10, include_cancelled: bool = False) -> List[Dict[str, Any]]:
+async def get_recent_matches(limit: int = 10, include_cancelled: bool = False, clan_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Get recent matches, ordered by created_at descending."""
     async with get_connection() as conn:
-        query = "SELECT * FROM matches"
-        if not include_cancelled:
-            query += " WHERE status != 'cancelled'"
-        query += " ORDER BY created_at DESC LIMIT ?"
+        query = "SELECT * FROM matches WHERE 1=1"
+        params = []
         
-        cursor = await conn.execute(query, (limit,))
+        if not include_cancelled:
+            query += " AND status != 'cancelled'"
+            
+        if clan_id is not None:
+            query += " AND (clan_a_id = ? OR clan_b_id = ?)"
+            params.extend([clan_id, clan_id])
+            
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        
+        cursor = await conn.execute(query, tuple(params))
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 

@@ -1452,6 +1452,94 @@ class ClanCog(commands.Cog):
             f"✅ {member.mention} đã được thăng chức thành **Vice Captain**!",
             ephemeral=True
         )
+
+    @clan_group.command(name="history", description="Xem lịch sử 10 trận đấu gần nhất của clan")
+    @app_commands.describe(clan_name="Tên clan (để trống để xem clan của bạn)")
+    async def clan_history(self, interaction: discord.Interaction, clan_name: Optional[str] = None):
+        """View the match history of a clan."""
+        await interaction.response.defer(ephemeral=False)
+        
+        target_clan = None
+        if clan_name:
+            target_clan = await db.get_clan(clan_name)
+            if not target_clan:
+                target_clan = await db.get_clan_any_status(clan_name)
+            if not target_clan:
+                await interaction.followup.send(f"❌ Không tìm thấy clan **{clan_name}**.", ephemeral=True)
+                return
+        else:
+            user = await db.get_user(str(interaction.user.id))
+            if user:
+                target_clan = await db.get_user_clan(user["id"])
+            if not target_clan:
+                await interaction.followup.send("❌ Bạn chưa có trong hệ thống clan nào. Vui lòng cung cấp tên clan cần xem.", ephemeral=True)
+                return
+        
+        matches = await db.get_recent_matches(limit=10, include_cancelled=False, clan_id=target_clan["id"])
+        if not matches:
+            await interaction.followup.send(f"📭 Clan **{target_clan['name']}** chưa có trận đấu nào được ghi nhận.")
+            return
+            
+        embed = discord.Embed(
+            title=f"⚔️ Lịch Sử Trận Đấu: {target_clan['name']}",
+            color=discord.Color.blue(),
+            description=f"*Ghi chú: 10 trận đấu chính thức mới nhất.*"
+        )
+        
+        match_lines = []
+        for match in matches:
+            clan_a = await db.get_clan_by_id(match["clan_a_id"])
+            clan_b = await db.get_clan_by_id(match["clan_b_id"])
+            
+            clan_a_name = clan_a["name"] if clan_a else "Unknown"
+            clan_b_name = clan_b["name"] if clan_b else "Unknown"
+            
+            status_emoji = {
+                "confirmed": "✅",
+                "reported": "⏳",
+                "dispute": "⚠️",
+                "resolved": "⚖️",
+                "voided": "🚫",
+                "created": "🆕"
+            }.get(match["status"], "❓")
+            
+            raw_date = match.get("created_at", "")
+            display_date = raw_date.replace("T", " ")[:16] if raw_date else "N/A"
+            
+            winner_id = match.get("winner_clan_id") or match.get("reported_winner_clan_id") or match.get("resolved_winner_clan_id")
+            
+            if winner_id and match["status"] in ("confirmed", "resolved", "reported"):
+                winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
+                loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
+                
+                score_text = ""
+                if match.get("score_a") is not None and match.get("score_b") is not None:
+                    score_text = f" `{match['score_a']}-{match['score_b']}`"
+                
+                elo_text = ""
+                if match.get("elo_applied"):
+                    delta_a = match.get("final_delta_a", 0)
+                    delta_b = match.get("final_delta_b", 0)
+                    my_delta = delta_a if target_clan["id"] == match["clan_a_id"] else delta_b
+                    elo_text = f" ({my_delta:+d} Elo)"
+                
+                prefix = "✅ " if match["status"] == "confirmed" else status_emoji
+                line = f"{prefix}**{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
+                if match["status"] == "reported":
+                    line += " — *đang chờ xác nhận*"
+            elif match["status"] == "voided":
+                line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *Trận đấu vô hiệu*"
+            else:
+                status_text = {"created": "đang chờ kết quả", "reported": "chờ xác nhận", "dispute": "tranh chấp"}.get(match["status"], match["status"])
+                line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
+            
+            line += f"\n└ 🕒 `{display_date}` | ID: `#{match['id']}`"
+            match_lines.append(line)
+        
+        embed.description = "\n\n".join(match_lines)
+        embed.set_footer(text=f"Clan Elo: {target_clan.get('elo', 1000)}")
+        
+        await interaction.followup.send(embed=embed)
     
     @clan_group.command(name="invite", description="Invite a member to join your clan")
     @app_commands.describe(member="The member to invite")

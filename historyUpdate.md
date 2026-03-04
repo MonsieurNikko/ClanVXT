@@ -3,6 +3,22 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.8.2] - 2026-03-04
+### 📜 Feature: Clan History Command
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Lệnh theo dõi lịch sử đấu**: Ra mắt lệnh `/clan history [tên clan]`.
+>     - Nếu để trống tên clan, bot sẽ trả về danh sách 10 trận đấu gần nhất của clan bạn đang tham gia.
+>     - Nếu điền tên, bot sẽ hiển thị lịch sử của clan đó.
+>     - Rất tiện lợi để check lịch sử chiến hình của clan đối thủ hoặc điểm số biến động của bản thân.
+
+#### 🔧 Technical Details
+- **Command Added**: `cogs/clan.py` — `clan_history`. Fetches target clan ID, retrieves last 10 matches, and parses them into a discord embed.
+- **Database Enhancement**: `services/db.py` — Updated `get_recent_matches` to accept an optional `clan_id`. 
+- **Files**: `cogs/clan.py`, `services/db.py`
+
 ## [1.8.1] - 2026-03-04
 ### 🧮 Enhancement: Detailed Elo Math Breakdown
 
