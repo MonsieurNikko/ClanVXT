@@ -457,8 +457,8 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     
     k_a = elo_result.get("k_a", 32)
     k_b = elo_result.get("k_b", 32)
-    k_a_desc = "Tân thủ" if k_a == config.K_FACTOR_PLACEMENT else "Ổn định"
-    k_b_desc = "Tân thủ" if k_b == config.K_FACTOR_PLACEMENT else "Ổn định"
+    k_a_desc = "Tân thủ" if k_a == K_FACTOR_PLACEMENT else "Ổn định"
+    k_b_desc = "Tân thủ" if k_b == K_FACTOR_PLACEMENT else "Ổn định"
     
     base_a = elo_result.get("base_delta_a", 0)
     base_b = elo_result.get("base_delta_b", 0)
