@@ -3,6 +3,20 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.8.1] - 2026-03-04
+### 🧮 Enhancement: Detailed Elo Math Breakdown
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Hiển thị công thức tính Elo chi tiết**: Lệnh tính lại Elo và các thông báo kết quả trận đấu giờ đây sẽ hiển thị chi tiết toán học thay vì chỉ ghi kết quả cuối cùng. Người chơi sẽ thấy rõ: `Điểm gốc (Base) × Phạt Winrate × Phạt Rank = Điểm Nhận Được`.
+> - **Sửa lỗi lệnh Recalc**: Khắc phục lỗi khiến lệnh `/admin balance recalc_match` bị crash do truyền sai số lượng tham số khi khởi tạo bảng giải thích.
+
+#### 🔧 Technical Details
+- **UI Enhancement**: `services/elo.py` — Rewrote `format_elo_explanation_vn` to construct a step-by-step mathematical string out of the modifier values instead of just dumping them into a comma-separated list.
+- **Bug Fix**: `cogs/admin.py` — Fixed `balance_recalc_match` improperly calling `format_elo_explanation_vn(clan_a["name"], clan_b["name"], result)` when the signature was updated to only accept `(result)`.
+- **Files**: `services/elo.py`, `cogs/admin.py`
+
 ## [1.8.0] - 2026-03-04
 ### ⚖️ Balance Adjustment: Win Rate Modifiers & Recalc Command
 
