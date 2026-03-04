@@ -1830,7 +1830,7 @@ class AdminCog(commands.Cog):
             )
             
             # Explain the new result
-            explanation = format_elo_explanation_vn(clan_a["name"], clan_b["name"], result)
+            explanation = format_elo_explanation_vn(result)
             embed.add_field(name="📊 Chi tiết cách tính MỚI:", value=explanation, inline=False)
             
             await interaction.followup.send(embed=embed)
