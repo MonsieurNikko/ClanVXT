@@ -470,11 +470,45 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     # Base explanation
     lines = [
         f"📊 **Chi tiết Elo Match:**",
-        f"• **{elo_result['clan_a_name']}**: {delta_a_str} Elo (K={k_a} {k_a_desc})",
-        f"• **{elo_result['clan_b_name']}**: {delta_b_str} Elo (K={k_b} {k_b_desc})",
     ]
     
-    # Modifiers breakdown
+    # Calculate effective multiplier for each
+    wr_a = elo_result.get("win_rate_mod_a", 1.0)
+    wr_b = elo_result.get("win_rate_mod_b", 1.0)
+    rm_a = elo_result.get("rank_mod_a", 1.0)
+    rm_b = elo_result.get("rank_mod_b", 1.0)
+    
+    base_a = elo_result.get("base_delta_a", 0)
+    base_b = elo_result.get("base_delta_b", 0)
+    
+    # Let's cleanly format the math: Base -> AntiFarm -> WinRate -> Rank -> Bonus
+    math_a = f"{base_a} (Base, K={k_a} {k_a_desc})"
+    math_b = f"{base_b} (Base, K={k_b} {k_b_desc})"
+    
+    if mult != 1.0:
+        math_a += f" × {mult} (Anti-farm)"
+        math_b += f" × {mult} (Anti-farm)"
+    if wr_a != 1.0:
+        math_a += f" × {wr_a} (Win Rate)"
+    if wr_b != 1.0:
+        math_b += f" × {wr_b} (Win Rate)"
+    if rm_a != 1.0:
+        math_a += f" × {rm_a} (Rank Mod)"
+    if rm_b != 1.0:
+        math_b += f" × {rm_b} (Rank Mod)"
+        
+    ub = elo_result.get("underdog_bonus", 0)
+    if ub > 0:
+        # We don't know who got the bonus just from the dict directly effortlessly,
+        # but underdog bonus is ALWAYS positive and added to the winner.
+        # Let's just state it generally in the modifiers section if it exists,
+        # or we check if final_delta > base * multipliers.
+        pass # We'll handle this in the modifiers list to keep it simple
+    
+    lines.append(f"• **{elo_result['clan_a_name']}**: {math_a} = **{delta_a_str} Elo**")
+    lines.append(f"• **{elo_result['clan_b_name']}**: {math_b} = **{delta_b_str} Elo**")
+    
+    # Modifiers breakdown (for summary at the bottom)
     modifiers = []
     if mult != 1.0:
         modifiers.append(f"Anti-farm: {mult}x (Trận thứ {match_count}/24h)")
