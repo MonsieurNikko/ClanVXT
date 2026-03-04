@@ -3,6 +3,23 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.8.0] - 2026-03-04
+### ⚖️ Balance Adjustment: Win Rate Modifiers & Recalc Command
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Giảm nhẹ hình phạt Win Rate chênh lệch**: Thay đổi thông số Hệ thống Cân bằng (Balance System) để giảm bớt hình phạt Elo đối với các Clan đang có chuỗi thắng hoặc tỷ lệ thắng cao. Cụ thể:
+>     - Cần đánh **ít nhất 10 trận** (thay vì 5) mới bắt đầu áp dụng việc chia Elo dựa vào Win rate.
+>     - Những Clan có tỷ lệ thắng trên 70% nay sẽ chỉ bị trừ **25% Elo (x0.75)** thay vì bị chia đôi (x0.5) như trước.
+>     - Điểm cộng tối đa cho một trận giảm từ 50 xuống 40 để tránh các Clan cấp thấp thăng hạng quá mức.
+> - **Lệnh Tính lại Elo**: Admin có thể gõ lệnh `/admin balance recalc_match` để phục hồi điểm Elo cũ của một trận đấu và tự động tính lại Elo theo quy định mới nhất. Bot sẽ cung cấp thông tin chi tiết bảng điểm và lý do.
+
+#### 🔧 Technical Details
+- **Config changes**: `config.py` — Updated `WIN_RATE_MIN_MATCHES`: 5 → 10, `WIN_RATE_HIGH_MODIFIER`: 0.5 → 0.75, `ELO_MAX_GAIN_PER_MATCH`: 50 → 40.
+- **New Admin Command**: `cogs/admin.py` — Added `@balance_group.command(name="recalc_match")` which allows moderators to recalculate Match Elo. It grabs the existing `final_delta_a` / `final_delta_b` and reverses them from the active clan elo, resets `elo_applied = 0` on the match row, and triggers a fresh `apply_match_result()`.
+- **Files**: `config.py`, `cogs/admin.py`
+
 ## [1.7.5] - 2026-02-28
 ### 🚑 Hotfix: Discord UI Limits (Rank Declaration)
 

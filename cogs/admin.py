@@ -1746,6 +1746,97 @@ class AdminCog(commands.Cog):
             "ADMIN_ELO_ADJUST",
             f"{interaction.user.mention} adjusted Elo for **{clan['name']}**: {old_elo} → {new_elo} ({amount:+d}). Reason: {reason}"
         )
+
+    @balance_group.command(name="recalc_match", description="Tự động tính lại điểm Elo cho một trận đấu (Undo cũ, tính theo luật mới nhất)")
+    @app_commands.describe(match_id="ID trận đấu cần tính lại")
+    async def balance_recalc_match(self, interaction: discord.Interaction, match_id: int):
+        """Admin recalc match Elo."""
+        if not await self.check_mod(interaction):
+            return
+        
+        await interaction.response.defer(ephemeral=False)
+        
+        async with db.get_connection() as conn:
+            cursor = await conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,))
+            match = await cursor.fetchone()
+            
+            if not match:
+                return await interaction.followup.send(f"❌ Không tìm thấy Match #{match_id}.")
+            
+            match = dict(match)
+            if not match["elo_applied"]:
+                return await interaction.followup.send("❌ Trận này chưa từng được cộng Elo, hãy dùng lệnh resolve để chốt kết quả bình thường.")
+            
+            if not match["winner_clan_id"]:
+                return await interaction.followup.send("❌ Trận này không có winner rõ ràng, không thể tự động tính lại.")
+            
+            # Revert Elo
+            clan_a_id = match["clan_a_id"]
+            clan_b_id = match["clan_b_id"]
+            delta_a = match.get("final_delta_a", 0) or 0
+            delta_b = match.get("final_delta_b", 0) or 0
+            
+            # Get current clan stats
+            cursor = await conn.execute("SELECT * FROM clans WHERE id = ?", (clan_a_id,))
+            clan_a = dict(await cursor.fetchone())
+            
+            cursor = await conn.execute("SELECT * FROM clans WHERE id = ?", (clan_b_id,))
+            clan_b = dict(await cursor.fetchone())
+            
+            new_elo_a_reverted = clan_a["elo"] - delta_a
+            new_elo_b_reverted = clan_b["elo"] - delta_b
+            
+            # Update clans Elo with reverted numbers
+            await conn.execute("UPDATE clans SET elo = ? WHERE id = ?", (new_elo_a_reverted, clan_a_id))
+            await conn.execute("UPDATE clans SET elo = ? WHERE id = ?", (new_elo_b_reverted, clan_b_id))
+            
+            # Reset match elo state so apply_match_result can recalculate it
+            await conn.execute(
+                """UPDATE matches SET 
+                   elo_applied = 0, 
+                   base_delta_a = NULL, base_delta_b = NULL, 
+                   multiplier = NULL, 
+                   final_delta_a = NULL, final_delta_b = NULL 
+                   WHERE id = ?""",
+                (match_id,)
+            )
+            await conn.commit()
+        
+        # Recalculate using the fresh (reverted) Elo state
+        from services.elo import apply_match_result, format_elo_explanation_vn
+        result = await apply_match_result(match_id, match["winner_clan_id"])
+        
+        if result["success"]:
+            new_delta_a = result["final_delta_a"]
+            new_delta_b = result["final_delta_b"]
+            
+            # Log event
+            await bot_utils.log_event(
+                "MATCH_RECALC", 
+                f"Match #{match_id} recalculated by {interaction.user.mention}. Old: A({delta_a:+d}), B({delta_b:+d}) -> New: A({new_delta_a:+d}), B({new_delta_b:+d})"
+            )
+            
+            # Identify winner name
+            winner_name = clan_a["name"] if match["winner_clan_id"] == clan_a_id else clan_b["name"]
+            
+            embed = discord.Embed(
+                title=f"🔄 Đã tính lại Elo cho Match #{match_id}",
+                color=discord.Color.green(),
+                description=f"**Trận đấu:** {clan_a['name']} vs {clan_b['name']}\n"
+                            f"**Winner:** {winner_name}\n\n"
+                            f"**Thống kê thay đổi (Trước → Nay):**\n"
+                            f"• {clan_a['name']}: `{delta_a:+d}` → `{new_delta_a:+d}` Elo\n"
+                            f"• {clan_b['name']}: `{delta_b:+d}` → `{new_delta_b:+d}` Elo"
+            )
+            
+            # Explain the new result
+            explanation = format_elo_explanation_vn(clan_a["name"], clan_b["name"], result)
+            embed.add_field(name="📊 Chi tiết cách tính MỚI:", value=explanation, inline=False)
+            
+            await interaction.followup.send(embed=embed)
+        else:
+            # If recalculate failed (e.g., clans frozen now), user needs to manually resolve
+            await interaction.followup.send(f"❌ Tính lại thất bại: {result['reason']}. **Lưu ý: Điểm Elo cũ đã bị reset, vui lòng dùng lệnh `/admin adjust_elo` để đền bù thao tác này.**")
     
     @balance_group.command(name="run_weekly", description="Manually trigger weekly balance task")
     async def balance_run_weekly(self, interaction: discord.Interaction):

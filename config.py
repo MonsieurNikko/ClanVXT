@@ -104,9 +104,9 @@ ELO_DECAY_FLOOR: int = 1000             # Elo sàn cho decay (không decay xuố
 ELO_DECAY_INACTIVITY_DAYS: int = 7      # Số ngày không đánh = inactive
 
 # Feature 3 — Win Rate Modifier
-WIN_RATE_MIN_MATCHES: int = 5            # Tối thiểu 5 trận mới áp dụng modifier
+WIN_RATE_MIN_MATCHES: int = 10           # Tối thiểu 10 trận mới áp dụng modifier
 WIN_RATE_HIGH_THRESHOLD: float = 0.7     # Win rate >= 70% → giảm gain
-WIN_RATE_HIGH_MODIFIER: float = 0.5      # Modifier khi win rate cao (gain x0.5)
+WIN_RATE_HIGH_MODIFIER: float = 0.75     # Modifier khi win rate cao (gain x0.75)
 WIN_RATE_LOW_THRESHOLD: float = 0.3      # Win rate <= 30% → tăng gain
 WIN_RATE_LOW_MODIFIER: float = 1.5       # Modifier khi win rate thấp (gain x1.5)
 
@@ -116,7 +116,7 @@ ACTIVITY_BONUS_MIN_MATCHES: int = 3      # Tối thiểu 3 trận/tuần
 ACTIVITY_BONUS_ELO_THRESHOLD: int = 1000 # Chỉ clan dưới 1000 Elo
 
 # Feature 5 — Underdog Bonus & Elo Gain Cap
-ELO_MAX_GAIN_PER_MATCH: int = 50         # Cap tổng gain cho 1 trận
+ELO_MAX_GAIN_PER_MATCH: int = 40         # Cap tổng gain cho 1 trận
 
 # Feature 7 — Rank Cap
 RANK_CAP_THRESHOLD_SCORE: int = 23       # Immortal 2 = score 23
