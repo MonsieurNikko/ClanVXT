@@ -2348,12 +2348,14 @@ async def get_undeclared_members(clan_id: int) -> List[Dict[str, Any]]:
 
 
 async def count_recent_recruits(clan_id: int, days: int = 7) -> int:
-    """Count successful invites/recruits in the last N days. Used for Recruitment Cap (F1)."""
+    """Count successful invites/recruits in the last N days who are active players. Used for Recruitment Cap (F1)."""
     async with get_connection() as conn:
         cursor = await conn.execute(
-            """SELECT COUNT(*) as count FROM invite_requests
-               WHERE clan_id = ? AND status = 'accepted'
-               AND responded_at >= datetime('now', ? || ' days')""",
+            """SELECT COUNT(*) as count FROM invite_requests i
+               JOIN users u ON i.user_id = u.id
+               WHERE i.clan_id = ? AND i.status = 'accepted'
+               AND i.responded_at >= datetime('now', ? || ' days')
+               AND u.valorant_rank_score > 0""",
             (clan_id, f"-{days}")
         )
         row = await cursor.fetchone()

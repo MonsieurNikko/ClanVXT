@@ -491,27 +491,34 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
         # Anti-farm
         if mult != 1.0:
             clan_lines.append(f"  • Phạt cày cuốc: `x{mult}` (Đây là trận thứ {match_count} với đối thủ này trong 24h)")
-            calc_path.append(f"x{mult}")
+            calc_path.append(str(mult))
             
         # Win Rate
+        wr_pct = wr_val * 100
         if win_rate_mod != 1.0:
-            wr_pct = wr_val * 100
             reason = "cao" if win_rate_mod < 1.0 else "thấp"
             impact = "giảm gain" if win_rate_mod < 1.0 else "tăng gain"
             clan_lines.append(f"  • Tỷ lệ thắng {reason}: `x{win_rate_mod}` ({wr_pct:.1f}% trong {wr_total} trận gần nhất → {impact})")
-            calc_path.append(f"x{win_rate_mod}")
+        else:
+            if wr_total < config.WIN_RATE_MIN_MATCHES:
+                clan_lines.append(f"  • Tỷ lệ thắng: `x1.0` ({wr_pct:.1f}% trong {wr_total} trận → Chưa đủ {config.WIN_RATE_MIN_MATCHES} trận)")
+            else:
+                clan_lines.append(f"  • Tỷ lệ thắng: `x1.0` ({wr_pct:.1f}% trong {wr_total} trận → Bình thường)")
+        calc_path.append(str(win_rate_mod))
             
         # Rank Mod
         if rank_mod != 1.0:
             rank_a_name = RANK_SCORE_TO_NAME.get(round(avg_rank), "Unknown")
             rank_b_name = RANK_SCORE_TO_NAME.get(round(other_avg_rank), "Unknown")
             if rank_mod < 1.0:
-                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` nặng đô hơn đối thủ `{rank_b_name}`)")
+                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` > `{rank_b_name}`)")
             else:
-                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` nhẹ cân hơn đối thủ `{rank_b_name}`)")
-            calc_path.append(f"x{rank_mod}")
+                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` < `{rank_b_name}`)")
+        else:
+            clan_lines.append(f"  • Chênh lệch trình độ: `x1.0` (Cân bằng)")
+        calc_path.append(str(rank_mod))
             
-        calc_str = " ".join(calc_path)
+        calc_str = " × ".join(calc_path)
         if len(calc_path) > 1:
             clan_lines.append(f"  👉 Công thức: `{calc_str}` = **{delta_str} Elo**")
         else:

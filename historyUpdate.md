@@ -1,6 +1,38 @@
 # 📜 ClanVXT Changelog
 
+## [1.8.6] - 2026-03-04
+### 📊 Enhancement: Elo Calculation Transparency & Polish
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Hiển thị cách tính Elo minh bạch hơn**: Bảng phân tích Elo giờ đây sẽ **luôn hiển thị** các hệ số Tỷ lệ thắng và Chênh lệch Rank, ngay cả khi là `x1.0`. 
+> - **Cải thiện thẩm mỹ (Visual Polish)**: Công thức tính toán sử dụng ký tự ` × ` chuyên nghiệp hơn (ví dụ: `14 × 1.0 × 1.0 = +14 Elo`).
+> - **Giải thích chi tiết**: Hệ thống sẽ chỉ rõ lý do nếu Tỷ lệ thắng chưa được áp dụng (Ví dụ: `Chưa đủ 10 trận`) thay vì chỉ ghi "Bình thường", giúp người chơi hiểu rõ quy tắc cân bằng.
+> - **Giao diện gọn gàng**: Lược bỏ các tiêu đề thừa khi admin tính lại Elo để bảng thông báo sạch sẽ và dễ đọc hơn.
+
+#### 🔧 Technical Details
+- **UI Logic Update**: `services/elo.py` — Modified `format_elo_explanation_vn` to remove the conditional `if win_rate_mod != 1.0` / `if rank_mod != 1.0` checks for those specific lines.
+- **UI Cleanup**: `cogs/admin.py` — Moved `format_elo_explanation_vn` into the embed description and removed the redundant field name in `recalc_match`.
+- **Files**: `services/elo.py`, `cogs/admin.py`
+
+## [1.8.5] - 2026-03-04
+
+### ⚖️ Balance & UI: Exclude Non-Players from Limits
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Loại bỏ người chơi không Valorant khỏi giới hạn**: Những thành viên chọn "Không chơi Valorant" (rank 0) giờ đây sẽ **không còn tính vào hạn mức tuyển quân hàng tuần** của clan. Điều này giúp các clan có thể thoải mái mời thêm bạn bè vào server chơi cùng mà không lo bị mất slot tuyển tuyển thủ thi đấu.
+> - **Hiển thị minh bạch**: Thông tin clan tại Arena giờ sẽ hiển thị rõ số lượng `Tuyển thủ / Tổng thành viên` (Ví dụ: `5 Tuyển thủ / 30 Thành viên`) để phân biệt rõ ai là tuyển thủ tham gia thi đấu tính Elo.
+
+#### 🔧 Technical Details
+- **Recruitment Logic**: `services/db.py` — Updated `count_recent_recruits` to JOIN with the `users` table and filter by `valorant_rank_score > 0`.
+- **UI Enhancement**: `cogs/arena.py` — Updated `ClanDetailSelectView` to show active players vs total members in the member field.
+- **Files**: `services/db.py`, `cogs/arena.py`
+
 ## [1.8.4] - 2026-03-04
+
 ### 📊 Enhancement: Siêu Chi Tiết Cách Tính Điểm Elo
 
 >**Author: Nikko**

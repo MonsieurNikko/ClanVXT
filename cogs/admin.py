@@ -1831,7 +1831,7 @@ class AdminCog(commands.Cog):
             
             # Explain the new result
             explanation = format_elo_explanation_vn(result)
-            embed.add_field(name="📊 Chi tiết cách tính MỚI:", value=explanation, inline=False)
+            embed.description += f"\n\n{explanation}"
             
             await interaction.followup.send(embed=embed)
         else:

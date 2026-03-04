@@ -56,13 +56,14 @@ class ClanDetailSelectView(discord.ui.View):
         
         # Get full member list
         members = await db.get_clan_members(clan_id)
+        active_players = [m for m in members if (m.get("valorant_rank_score") or 0) > 0]
         
         embed = discord.Embed(
             title=f"🏰 {clan['name']}",
             color=discord.Color.dark_gold()
         )
         embed.add_field(name="📊 Elo", value=f"`{clan.get('elo', 1000)}`", inline=True)
-        embed.add_field(name="👥 Thành viên", value=f"`{len(members)}`", inline=True)
+        embed.add_field(name="👥 Thành viên", value=f"`{len(active_players)} Tuyển thủ / {len(members)} Tổng`", inline=True)
         embed.add_field(name="📅 Trạng thái", value=f"`{clan.get('status', 'active')}`", inline=True)
         
         # Full member list with roles & rank
