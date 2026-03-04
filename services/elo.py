@@ -446,91 +446,91 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
 def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     """
     Format a detailed, Vietnamese explanation string from elo_result for logs.
-    Updated: includes breakdown of all balance modifiers.
+    Updated: includes breakdown of all balance modifiers in a highly readable format.
     """
     if not elo_result.get("success"):
         return f"Thất bại: {elo_result.get('reason', 'Lỗi không xác định')}"
     
-    # K-factor explanations
+    # Extract data
+    clan_a_name = elo_result['clan_a_name']
+    clan_b_name = elo_result['clan_b_name']
+    
     k_a = elo_result.get("k_a", 32)
     k_b = elo_result.get("k_b", 32)
-    k_a_desc = "Tân thủ" if k_a == K_FACTOR_PLACEMENT else "Ổn định"
-    k_b_desc = "Tân thủ" if k_b == K_FACTOR_PLACEMENT else "Ổn định"
+    k_a_desc = "Tân thủ" if k_a == config.K_FACTOR_PLACEMENT else "Ổn định"
+    k_b_desc = "Tân thủ" if k_b == config.K_FACTOR_PLACEMENT else "Ổn định"
     
-    # Anti-farm multiplier
+    base_a = elo_result.get("base_delta_a", 0)
+    base_b = elo_result.get("base_delta_b", 0)
+    
     mult = elo_result.get("multiplier", 1.0)
     match_count = elo_result.get("match_count_24h", 1)
     
-    # Delta strings
+    wr_a = elo_result.get("win_rate_mod_a", 1.0)
+    wr_b = elo_result.get("win_rate_mod_b", 1.0)
+    rm_a = elo_result.get("rank_mod_a", 1.0)
+    rm_b = elo_result.get("rank_mod_b", 1.0)
+    
     delta_a = elo_result.get("final_delta_a", 0)
     delta_b = elo_result.get("final_delta_b", 0)
     delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
     delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
     
-    # Base explanation
-    lines = [
-        f"📊 **Chi tiết Elo Match:**",
-    ]
+    lines = [f"📊 **Hệ Thống Phân Tích Điểm Elo:**"]
     
-    # Calculate effective multiplier for each
-    wr_a = elo_result.get("win_rate_mod_a", 1.0)
-    wr_b = elo_result.get("win_rate_mod_b", 1.0)
-    rm_a = elo_result.get("rank_mod_a", 1.0)
-    rm_b = elo_result.get("rank_mod_b", 1.0)
+    # Detail for Clan A
+    lines.append(f"**1️⃣ {clan_a_name}**")
+    lines.append(f"  • Điểm gốc (Base): `{base_a}` (Hệ số K={k_a} - {k_a_desc})")
     
-    base_a = elo_result.get("base_delta_a", 0)
-    base_b = elo_result.get("base_delta_b", 0)
-    
-    # Let's cleanly format the math: Base -> AntiFarm -> WinRate -> Rank -> Bonus
-    math_a = f"{base_a} (Base, K={k_a} {k_a_desc})"
-    math_b = f"{base_b} (Base, K={k_b} {k_b_desc})"
-    
+    calc_path_a = [str(base_a)]
     if mult != 1.0:
-        math_a += f" × {mult} (Anti-farm)"
-        math_b += f" × {mult} (Anti-farm)"
+        lines.append(f"  • Phạt cày cuốc: `x{mult}` (Trận thứ {match_count}/24h)")
+        calc_path_a.append(f"x{mult}")
     if wr_a != 1.0:
-        math_a += f" × {wr_a} (Win Rate)"
-    if wr_b != 1.0:
-        math_b += f" × {wr_b} (Win Rate)"
+        lines.append(f"  • { 'Phạt' if wr_a < 1 else 'Thưởng' } Win Rate: `x{wr_a}`")
+        calc_path_a.append(f"x{wr_a}")
     if rm_a != 1.0:
-        math_a += f" × {rm_a} (Rank Mod)"
-    if rm_b != 1.0:
-        math_b += f" × {rm_b} (Rank Mod)"
+        lines.append(f"  • Chênh lệch Rank: `x{rm_a}`")
+        calc_path_a.append(f"x{rm_a}")
         
-    ub = elo_result.get("underdog_bonus", 0)
-    if ub > 0:
-        # We don't know who got the bonus just from the dict directly effortlessly,
-        # but underdog bonus is ALWAYS positive and added to the winner.
-        # Let's just state it generally in the modifiers section if it exists,
-        # or we check if final_delta > base * multipliers.
-        pass # We'll handle this in the modifiers list to keep it simple
+    calc_str_a = " ".join(calc_path_a)
+    if len(calc_path_a) > 1:
+        lines.append(f"  👉 Công thức: `{calc_str_a}` = **{delta_a_str} Elo**")
+    else:
+        lines.append(f"  👉 Tổng cộng: **{delta_a_str} Elo**")
+
+    # Detail for Clan B
+    lines.append(f"\n**2️⃣ {clan_b_name}**")
+    lines.append(f"  • Điểm gốc (Base): `{base_b}` (Hệ số K={k_b} - {k_b_desc})")
     
-    lines.append(f"• **{elo_result['clan_a_name']}**: {math_a} = **{delta_a_str} Elo**")
-    lines.append(f"• **{elo_result['clan_b_name']}**: {math_b} = **{delta_b_str} Elo**")
-    
-    # Modifiers breakdown (for summary at the bottom)
-    modifiers = []
+    calc_path_b = [str(base_b)]
     if mult != 1.0:
-        modifiers.append(f"Anti-farm: {mult}x (Trận thứ {match_count}/24h)")
-    
-    wr_a = elo_result.get("win_rate_mod_a", 1.0)
-    wr_b = elo_result.get("win_rate_mod_b", 1.0)
-    if wr_a != 1.0 or wr_b != 1.0:
-        modifiers.append(f"Win Rate: {elo_result['clan_a_name']} x{wr_a}, {elo_result['clan_b_name']} x{wr_b}")
-    
-    rm_a = elo_result.get("rank_mod_a", 1.0)
-    rm_b = elo_result.get("rank_mod_b", 1.0)
-    if rm_a != 1.0 or rm_b != 1.0:
-        modifiers.append(f"Rank: {elo_result['clan_a_name']} x{rm_a}, {elo_result['clan_b_name']} x{rm_b}")
-    
+        lines.append(f"  • Phạt cày cuốc: `x{mult}` (Trận thứ {match_count}/24h)")
+        calc_path_b.append(f"x{mult}")
+    if wr_b != 1.0:
+        lines.append(f"  • { 'Phạt' if wr_b < 1 else 'Thưởng' } Win Rate: `x{wr_b}`")
+        calc_path_b.append(f"x{wr_b}")
+    if rm_b != 1.0:
+        lines.append(f"  • Chênh lệch Rank: `x{rm_b}`")
+        calc_path_b.append(f"x{rm_b}")
+        
+    calc_str_b = " ".join(calc_path_b)
+    if len(calc_path_b) > 1:
+        lines.append(f"  👉 Công thức: `{calc_str_b}` = **{delta_b_str} Elo**")
+    else:
+        lines.append(f"  👉 Tổng cộng: **{delta_b_str} Elo**")
+
+    # Underdog & Cap notes
+    final_notes = []
     ub = elo_result.get("underdog_bonus", 0)
     if ub > 0:
-        modifiers.append(f"Underdog Bonus: +{ub}")
-    
-    if elo_result.get("elo_capped"):
-        modifiers.append(f"Elo Cap: max +{config.ELO_MAX_GAIN_PER_MATCH}")
-    
-    if modifiers:
-        lines.append("⚖️ **Modifiers:** " + " | ".join(modifiers))
-    
+        final_notes.append(f"🎁 Thưởng Underdog: +{ub} Elo cho đội yếu thắng đội mạnh")
+    if elo_result.get("elo_capped", False):
+        final_notes.append(f"🛑 Đã chạm mức giới hạn biến động Elo (tối đa ±{config.ELO_MAX_GAIN_PER_MATCH})")
+        
+    if final_notes:
+        lines.append("\n📌 **Ghi chú đặc biệt:**")
+        for note in final_notes:
+            lines.append(f"  • {note}")
+
     return "\n".join(lines)

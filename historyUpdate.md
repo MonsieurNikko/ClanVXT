@@ -1,5 +1,20 @@
 # 📜 ClanVXT Changelog
 
+## [1.8.4] - 2026-03-04
+### 📊 Enhancement: Siêu Chi Tiết Cách Tính Điểm Elo
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Hiển thị cách tính Elo cực kỳ trực quan**: Thay vì chỉ in ra một dãy số nhân chéo khó hiểu, bây giờ hệ thống sẽ liệt kê riêng biệt từng dòng cho từng Clan.
+>     - Hiển thị rõ Điểm Gốc (Base Elo) và Hệ Số K (Tân thủ / Ổn định).
+>     - Liệt kê các hình phạt / điểm thưởng áp dụng: Phạt cày cuốc, Win Rate, Chênh lệch Rank, và thưởng Underdog cực kỳ rành mạch.
+>     - Thêm phần "Công thức" tổng kết lại các phép tính dẫn đến con số Elo thay đổi cuối cùng.
+>     - Thêm ghi chú đặc biệt cho các trường hợp như chạm mốc trần Elo (Cap).
+
+#### 🔧 Technical Details
+- **Logic Updated**: `services/elo.py` — Rewrote `format_elo_explanation_vn` to render a block-by-block string instead of a linear combination of modifiers.
+
 ## [1.8.3.1] - 2026-03-04
 ### 🐛 Hotfix: Lỗi NameError khi khởi chạy Bot
 
