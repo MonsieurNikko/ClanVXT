@@ -14,6 +14,7 @@
 
 #### 🔧 Technical Details
 - **Logic Updated**: `services/elo.py` — Rewrote `format_elo_explanation_vn` to render a block-by-block string instead of a linear combination of modifiers.
+- **Files**: `services/elo.py`
 
 ## [1.8.3.1] - 2026-03-04
 ### 🐛 Hotfix: Lỗi NameError khi khởi chạy Bot
