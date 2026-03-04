@@ -1,7 +1,12 @@
 # 📜 ClanVXT Changelog
 
-This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
+## [1.8.3.1] - 2026-03-04
+### 🐛 Hotfix: Lỗi NameError khi khởi chạy Bot
 
+>**Author: Nikko**
+
+#### 🔧 Technical Details
+- **Bug fix**: `cogs/clan.py` — Sửa lỗi thụt lề (indentation) khi định nghĩa class `HistoryPagedView` và lệnh `clan_history`. Lệnh này đã vô tình bị lồng sai vị trí khiến Python báo lỗi `NameError: name 'clan_group' is not defined` lúc khởi chạy cog.
 
 ## [1.8.3] - 2026-03-04
 ### 📖 Feature Improvement: Paginated Clan History
