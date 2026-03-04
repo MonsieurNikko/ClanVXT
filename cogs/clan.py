@@ -1453,41 +1453,44 @@ class ClanCog(commands.Cog):
             ephemeral=True
         )
 
-    @clan_group.command(name="history", description="Xem lịch sử 10 trận đấu gần nhất của clan")
-    @app_commands.describe(clan_name="Tên clan (để trống để xem clan của bạn)")
-    async def clan_history(self, interaction: discord.Interaction, clan_name: Optional[str] = None):
-        """View the match history of a clan."""
-        await interaction.response.defer(ephemeral=False)
+class HistoryPagedView(discord.ui.View):
+    """View to paginate through clan match history."""
+    
+    def __init__(self, matches: list, target_clan: dict, author_id: int):
+        super().__init__(timeout=300) # 5 minutes
+        self.matches = matches
+        self.target_clan = target_clan
+        self.author_id = author_id
+        self.current_page = 0
+        self.per_page = 10
+        self.max_pages = max(1, (len(matches) + self.per_page - 1) // self.per_page)
+        self._update_buttons()
         
-        target_clan = None
-        if clan_name:
-            target_clan = await db.get_clan(clan_name)
-            if not target_clan:
-                target_clan = await db.get_clan_any_status(clan_name)
-            if not target_clan:
-                await interaction.followup.send(f"❌ Không tìm thấy clan **{clan_name}**.", ephemeral=True)
-                return
-        else:
-            user = await db.get_user(str(interaction.user.id))
-            if user:
-                target_clan = await db.get_user_clan(user["id"])
-            if not target_clan:
-                await interaction.followup.send("❌ Bạn chưa có trong hệ thống clan nào. Vui lòng cung cấp tên clan cần xem.", ephemeral=True)
-                return
-        
-        matches = await db.get_recent_matches(limit=10, include_cancelled=False, clan_id=target_clan["id"])
-        if not matches:
-            await interaction.followup.send(f"📭 Clan **{target_clan['name']}** chưa có trận đấu nào được ghi nhận.")
-            return
-            
+    def _update_buttons(self):
+        # Update button state based on current page
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                if item.custom_id == "prev":
+                    item.disabled = (self.current_page == 0)
+                elif item.custom_id == "next":
+                    item.disabled = (self.current_page >= self.max_pages - 1)
+                elif item.custom_id == "page_num":
+                    item.label = f"Trang {self.current_page + 1}/{self.max_pages}"
+                    item.disabled = True
+                    
+    async def _generate_embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title=f"⚔️ Lịch Sử Trận Đấu: {target_clan['name']}",
+            title=f"⚔️ Lịch Sử Trận Đấu: {self.target_clan['name']}",
             color=discord.Color.blue(),
-            description=f"*Ghi chú: 10 trận đấu chính thức mới nhất.*"
+            description=f"*Tổng cộng: {len(self.matches)} trận đấu.*"
         )
         
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        page_matches = self.matches[start_idx:end_idx]
+        
         match_lines = []
-        for match in matches:
+        for match in page_matches:
             clan_a = await db.get_clan_by_id(match["clan_a_id"])
             clan_b = await db.get_clan_by_id(match["clan_b_id"])
             
@@ -1520,7 +1523,7 @@ class ClanCog(commands.Cog):
                 if match.get("elo_applied"):
                     delta_a = match.get("final_delta_a", 0)
                     delta_b = match.get("final_delta_b", 0)
-                    my_delta = delta_a if target_clan["id"] == match["clan_a_id"] else delta_b
+                    my_delta = delta_a if self.target_clan["id"] == match["clan_a_id"] else delta_b
                     elo_text = f" ({my_delta:+d} Elo)"
                 
                 prefix = "✅ " if match["status"] == "confirmed" else status_emoji
@@ -1535,11 +1538,75 @@ class ClanCog(commands.Cog):
             
             line += f"\n└ 🕒 `{display_date}` | ID: `#{match['id']}`"
             match_lines.append(line)
+            
+        embed.description = "\n\n".join(match_lines) if match_lines else "*Vẫn chưa có trận đấu nào được ghi nhận.*"
+        embed.set_footer(text=f"Clan Elo: {self.target_clan.get('elo', 1000)} | Hệ thống quản lý giải đấu VXT")
+        return embed
+
+    @discord.ui.button(label="⬅️ Trang trước", style=discord.ButtonStyle.secondary, custom_id="prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
+            return
+            
+        self.current_page = max(0, self.current_page - 1)
+        self._update_buttons()
+        embed = await self._generate_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Trang 1/1", style=discord.ButtonStyle.primary, custom_id="page_num", disabled=True)
+    async def page_num_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass # Just an indicator
         
-        embed.description = "\n\n".join(match_lines)
-        embed.set_footer(text=f"Clan Elo: {target_clan.get('elo', 1000)}")
+    @discord.ui.button(label="Trang sau ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
+            return
+            
+        self.current_page = min(self.max_pages - 1, self.current_page + 1)
+        self._update_buttons()
+        embed = await self._generate_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+    @clan_group.command(name="history", description="Xem toàn bộ lịch sử trận đấu của clan")
+    @app_commands.describe(clan_name="Tên clan (để trống để xem clan của bạn)")
+    async def clan_history(self, interaction: discord.Interaction, clan_name: Optional[str] = None):
+        """View the match history of a clan (paginated)."""
+        await interaction.response.defer(ephemeral=False)
         
-        await interaction.followup.send(embed=embed)
+        target_clan = None
+        if clan_name:
+            target_clan = await db.get_clan(clan_name)
+            if not target_clan:
+                target_clan = await db.get_clan_any_status(clan_name)
+            if not target_clan:
+                await interaction.followup.send(f"❌ Không tìm thấy clan **{clan_name}**.", ephemeral=True)
+                return
+        else:
+            user = await db.get_user(str(interaction.user.id))
+            if user:
+                target_clan = await db.get_user_clan(user["id"])
+            if not target_clan:
+                await interaction.followup.send("❌ Bạn chưa có trong hệ thống clan nào. Vui lòng cung cấp tên clan cần xem.", ephemeral=True)
+                return
+        
+        # Fetching a larger limit. Usually 1000 is practically "all" for early discord bot usage, but we'll fetch up to 500 for safety.
+        # SQLite handles this instantly anyway.
+        matches = await db.get_recent_matches(limit=500, include_cancelled=False, clan_id=target_clan["id"])
+        if not matches:
+            await interaction.followup.send(f"📭 Clan **{target_clan['name']}** chưa tham gia trận đấu nào được ghi nhận.")
+            return
+            
+        view = HistoryPagedView(matches, target_clan, interaction.user.id)
+        embed = await view._generate_embed()
+        
+        # If there's only 1 page, no need to show buttons
+        if view.max_pages <= 1:
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.followup.send(embed=embed, view=view)
     
     @clan_group.command(name="invite", description="Invite a member to join your clan")
     @app_commands.describe(member="The member to invite")

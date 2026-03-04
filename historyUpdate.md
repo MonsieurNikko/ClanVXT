@@ -3,6 +3,19 @@
 This document provides a cumulative history of all technical improvements, fixes, and feature updates for the ClanVXT system.
 
 
+## [1.8.3] - 2026-03-04
+### 📖 Feature Improvement: Paginated Clan History
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Lịch sử đấu không giới hạn**: Lệnh `/clan history` giờ đây cho phép bạn xem **tất cả** các trận đấu mà clan đã tham gia từ trước tới nay, thay vì bị giới hạn lại 10 trận mới nhất.
+> - Bổ sung nút bấm sang trang ⬅️ ➡️ để bạn có thể xem lại lịch sử đấu dễ dàng.
+
+#### 🔧 Technical Details
+- **UI Enhancement**: `cogs/clan.py` — Implemented `HistoryPagedView` using `discord.ui.View` to support pagination. `clan_history` now fetches up to 500 matches instead of hardcoding a limit of 10.
+- **Files**: `cogs/clan.py`
+
 ## [1.8.2] - 2026-03-04
 ### 📜 Feature: Clan History Command
 
