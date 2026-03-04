@@ -331,16 +331,21 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
         elo_capped = False
         
         # Feature 3 — Win Rate Modifier
+        wr_a_val, wr_a_total = 0.0, 0
+        wr_b_val, wr_b_total = 0.0, 0
         if await db.is_balance_feature_enabled("win_rate_mod"):
             wr_a = await db.get_clan_win_rate(clan_a_id)
             wr_b = await db.get_clan_win_rate(clan_b_id)
-            win_rate_mod_a = get_win_rate_modifier(wr_a["win_rate"], wr_a["total"])
-            win_rate_mod_b = get_win_rate_modifier(wr_b["win_rate"], wr_b["total"])
+            wr_a_val, wr_a_total = wr_a["win_rate"], wr_a["total"]
+            wr_b_val, wr_b_total = wr_b["win_rate"], wr_b["total"]
+            win_rate_mod_a = get_win_rate_modifier(wr_a_val, wr_a_total)
+            win_rate_mod_b = get_win_rate_modifier(wr_b_val, wr_b_total)
             if win_rate_mod_a != 1.0 or win_rate_mod_b != 1.0:
                 final_delta_a = round(final_delta_a * win_rate_mod_a)
                 final_delta_b = round(final_delta_b * win_rate_mod_b)
         
         # Feature 8 — Rank Elo Modifier (uses roster avg rank from Feature 9)
+        avg_rank_a, avg_rank_b = None, None
         if await db.is_balance_feature_enabled("rank_elo_mod"):
             rosters = await db.get_match_rosters(match_id)
             avg_rank_a = rosters.get("avg_rank_a")
@@ -437,8 +442,12 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             # Balance modifiers info
             "win_rate_mod_a": win_rate_mod_a,
             "win_rate_mod_b": win_rate_mod_b,
+            "wr_a_val": wr_a_val, "wr_a_total": wr_a_total,
+            "wr_b_val": wr_b_val, "wr_b_total": wr_b_total,
             "rank_mod_a": rank_mod_a,
             "rank_mod_b": rank_mod_b,
+            "avg_rank_a": avg_rank_a,
+            "avg_rank_b": avg_rank_b,
             "underdog_bonus": underdog_bonus,
             "elo_capped": elo_capped,
         }
@@ -446,7 +455,7 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
 def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     """
     Format a detailed, Vietnamese explanation string from elo_result for logs.
-    Updated: includes breakdown of all balance modifiers in a highly readable format.
+    Updated: includes narrative reasoning for all balance modifiers.
     """
     if not elo_result.get("success"):
         return f"Thất bại: {elo_result.get('reason', 'Lỗi không xác định')}"
@@ -466,70 +475,77 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
     mult = elo_result.get("multiplier", 1.0)
     match_count = elo_result.get("match_count_24h", 1)
     
-    wr_a = elo_result.get("win_rate_mod_a", 1.0)
-    wr_b = elo_result.get("win_rate_mod_b", 1.0)
-    rm_a = elo_result.get("rank_mod_a", 1.0)
-    rm_b = elo_result.get("rank_mod_b", 1.0)
-    
     delta_a = elo_result.get("final_delta_a", 0)
     delta_b = elo_result.get("final_delta_b", 0)
     delta_a_str = f"+{delta_a}" if delta_a >= 0 else str(delta_a)
     delta_b_str = f"+{delta_b}" if delta_b >= 0 else str(delta_b)
     
-    lines = [f"📊 **Hệ Thống Phân Tích Điểm Elo:**"]
+    lines = [f"📊 **Phân Tích Chi Tiết Biến Động Elo:**"]
     
-    # Detail for Clan A
-    lines.append(f"**1️⃣ {clan_a_name}**")
-    lines.append(f"  • Điểm gốc (Base): `{base_a}` (Hệ số K={k_a} - {k_a_desc})")
-    
-    calc_path_a = [str(base_a)]
-    if mult != 1.0:
-        lines.append(f"  • Phạt cày cuốc: `x{mult}` (Trận thứ {match_count}/24h)")
-        calc_path_a.append(f"x{mult}")
-    if wr_a != 1.0:
-        lines.append(f"  • { 'Phạt' if wr_a < 1 else 'Thưởng' } Win Rate: `x{wr_a}`")
-        calc_path_a.append(f"x{wr_a}")
-    if rm_a != 1.0:
-        lines.append(f"  • Chênh lệch Rank: `x{rm_a}`")
-        calc_path_a.append(f"x{rm_a}")
+    def get_clan_details(prefix_num, clan_name, base_val, k_factor, k_desc, win_rate_mod, wr_val, wr_total, rank_mod, avg_rank, other_avg_rank, delta_str):
+        clan_lines = [f"\n{prefix_num} **{clan_name}**"]
+        clan_lines.append(f"  • Điểm gốc (Base): `{base_val}` (Hệ số K={k_factor} - {k_desc})")
         
-    calc_str_a = " ".join(calc_path_a)
-    if len(calc_path_a) > 1:
-        lines.append(f"  👉 Công thức: `{calc_str_a}` = **{delta_a_str} Elo**")
-    else:
-        lines.append(f"  👉 Tổng cộng: **{delta_a_str} Elo**")
+        calc_path = [str(base_val)]
+        
+        # Anti-farm
+        if mult != 1.0:
+            clan_lines.append(f"  • Phạt cày cuốc: `x{mult}` (Đây là trận thứ {match_count} với đối thủ này trong 24h)")
+            calc_path.append(f"x{mult}")
+            
+        # Win Rate
+        if win_rate_mod != 1.0:
+            wr_pct = wr_val * 100
+            reason = "cao" if win_rate_mod < 1.0 else "thấp"
+            impact = "giảm gain" if win_rate_mod < 1.0 else "tăng gain"
+            clan_lines.append(f"  • Tỷ lệ thắng {reason}: `x{win_rate_mod}` ({wr_pct:.1f}% trong {wr_total} trận gần nhất → {impact})")
+            calc_path.append(f"x{win_rate_mod}")
+            
+        # Rank Mod
+        if rank_mod != 1.0:
+            rank_a_name = RANK_SCORE_TO_NAME.get(round(avg_rank), "Unknown")
+            rank_b_name = RANK_SCORE_TO_NAME.get(round(other_avg_rank), "Unknown")
+            if rank_mod < 1.0:
+                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` nặng đô hơn đối thủ `{rank_b_name}`)")
+            else:
+                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` nhẹ cân hơn đối thủ `{rank_b_name}`)")
+            calc_path.append(f"x{rank_mod}")
+            
+        calc_str = " ".join(calc_path)
+        if len(calc_path) > 1:
+            clan_lines.append(f"  👉 Công thức: `{calc_str}` = **{delta_str} Elo**")
+        else:
+            clan_lines.append(f"  👉 Tổng cộng: **{delta_str} Elo**")
+            
+        return clan_lines
 
-    # Detail for Clan B
-    lines.append(f"\n**2️⃣ {clan_b_name}**")
-    lines.append(f"  • Điểm gốc (Base): `{base_b}` (Hệ số K={k_b} - {k_b_desc})")
+    # Clan A details
+    lines.extend(get_clan_details(
+        "1️⃣", clan_a_name, base_a, k_a, k_a_desc, 
+        elo_result.get("win_rate_mod_a", 1.0), elo_result.get("wr_a_val", 0), elo_result.get("wr_a_total", 0),
+        elo_result.get("rank_mod_a", 1.0), elo_result.get("avg_rank_a", 0), elo_result.get("avg_rank_b", 0),
+        delta_a_str
+    ))
     
-    calc_path_b = [str(base_b)]
-    if mult != 1.0:
-        lines.append(f"  • Phạt cày cuốc: `x{mult}` (Trận thứ {match_count}/24h)")
-        calc_path_b.append(f"x{mult}")
-    if wr_b != 1.0:
-        lines.append(f"  • { 'Phạt' if wr_b < 1 else 'Thưởng' } Win Rate: `x{wr_b}`")
-        calc_path_b.append(f"x{wr_b}")
-    if rm_b != 1.0:
-        lines.append(f"  • Chênh lệch Rank: `x{rm_b}`")
-        calc_path_b.append(f"x{rm_b}")
-        
-    calc_str_b = " ".join(calc_path_b)
-    if len(calc_path_b) > 1:
-        lines.append(f"  👉 Công thức: `{calc_str_b}` = **{delta_b_str} Elo**")
-    else:
-        lines.append(f"  👉 Tổng cộng: **{delta_b_str} Elo**")
+    # Clan B details
+    lines.extend(get_clan_details(
+        "2️⃣", clan_b_name, base_b, k_b, k_b_desc, 
+        elo_result.get("win_rate_mod_b", 1.0), elo_result.get("wr_b_val", 0), elo_result.get("wr_b_total", 0),
+        elo_result.get("rank_mod_b", 1.0), elo_result.get("avg_rank_b", 0), elo_result.get("avg_rank_a", 0),
+        delta_b_str
+    ))
 
     # Underdog & Cap notes
     final_notes = []
     ub = elo_result.get("underdog_bonus", 0)
     if ub > 0:
-        final_notes.append(f"🎁 Thưởng Underdog: +{ub} Elo cho đội yếu thắng đội mạnh")
+        final_notes.append(f"🎁 Thưởng Underdog: +{ub} Elo (Đội yếu đã xuất sắc đánh bại đội mạnh)")
+        
     if elo_result.get("elo_capped", False):
-        final_notes.append(f"🛑 Đã chạm mức giới hạn biến động Elo (tối đa ±{config.ELO_MAX_GAIN_PER_MATCH})")
+        final_notes.append(f"🛑 Đã chạm mức giới hạn (Cap): Tối đa ±{config.ELO_MAX_GAIN_PER_MATCH} Elo mỗi trận")
         
     if final_notes:
-        lines.append("\n📌 **Ghi chú đặc biệt:**")
+        lines.append("\n📌 **Ghi chú bổ sung:**")
         for note in final_notes:
             lines.append(f"  • {note}")
 
