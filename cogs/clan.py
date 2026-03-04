@@ -458,7 +458,124 @@ class RankDeclarationView(discord.ui.View):
 # COG DEFINITION
 # =============================================================================
 
+class HistoryPagedView(discord.ui.View):
+    """View to paginate through clan match history."""
+    
+    def __init__(self, matches: list, target_clan: dict, author_id: int):
+        super().__init__(timeout=300) # 5 minutes
+        self.matches = matches
+        self.target_clan = target_clan
+        self.author_id = author_id
+        self.current_page = 0
+        self.per_page = 10
+        self.max_pages = max(1, (len(matches) + self.per_page - 1) // self.per_page)
+        self._update_buttons()
+        
+    def _update_buttons(self):
+        # Update button state based on current page
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                if item.custom_id == "prev":
+                    item.disabled = (self.current_page == 0)
+                elif item.custom_id == "next":
+                    item.disabled = (self.current_page >= self.max_pages - 1)
+                elif item.custom_id == "page_num":
+                    item.label = f"Trang {self.current_page + 1}/{self.max_pages}"
+                    item.disabled = True
+                    
+    async def _generate_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"⚔️ Lịch Sử Trận Đấu: {self.target_clan['name']}",
+            color=discord.Color.blue(),
+            description=f"*Tổng cộng: {len(self.matches)} trận đấu.*"
+        )
+        
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        page_matches = self.matches[start_idx:end_idx]
+        
+        match_lines = []
+        for match in page_matches:
+            clan_a = await db.get_clan_by_id(match["clan_a_id"])
+            clan_b = await db.get_clan_by_id(match["clan_b_id"])
+            
+            clan_a_name = clan_a["name"] if clan_a else "Unknown"
+            clan_b_name = clan_b["name"] if clan_b else "Unknown"
+            
+            status_emoji = {
+                "confirmed": "✅",
+                "reported": "⏳",
+                "dispute": "⚠️",
+                "resolved": "⚖️",
+                "voided": "🚫",
+                "created": "🆕"
+            }.get(match["status"], "❓")
+            
+            raw_date = match.get("created_at", "")
+            display_date = raw_date.replace("T", " ")[:16] if raw_date else "N/A"
+            
+            winner_id = match.get("winner_clan_id") or match.get("reported_winner_clan_id") or match.get("resolved_winner_clan_id")
+            
+            if winner_id and match["status"] in ("confirmed", "resolved", "reported"):
+                winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
+                loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
+                
+                score_text = ""
+                if match.get("score_a") is not None and match.get("score_b") is not None:
+                    score_text = f" `{match['score_a']}-{match['score_b']}`"
+                
+                elo_text = ""
+                if match.get("elo_applied"):
+                    delta_a = match.get("final_delta_a", 0)
+                    delta_b = match.get("final_delta_b", 0)
+                    my_delta = delta_a if self.target_clan["id"] == match["clan_a_id"] else delta_b
+                    elo_text = f" ({my_delta:+d} Elo)"
+                
+                prefix = "✅ " if match["status"] == "confirmed" else status_emoji
+                line = f"{prefix}**{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
+                if match["status"] == "reported":
+                    line += " — *đang chờ xác nhận*"
+            elif match["status"] == "voided":
+                line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *Trận đấu vô hiệu*"
+            else:
+                status_text = {"created": "đang chờ kết quả", "reported": "chờ xác nhận", "dispute": "tranh chấp"}.get(match["status"], match["status"])
+                line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
+            
+            line += f"\n└ 🕒 `{display_date}` | ID: `#{match['id']}`"
+            match_lines.append(line)
+            
+        embed.description = "\n\n".join(match_lines) if match_lines else "*Vẫn chưa có trận đấu nào được ghi nhận.*"
+        embed.set_footer(text=f"Clan Elo: {self.target_clan.get('elo', 1000)} | Hệ thống quản lý giải đấu VXT")
+        return embed
+
+    @discord.ui.button(label="⬅️ Trang trước", style=discord.ButtonStyle.secondary, custom_id="prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
+            return
+            
+        self.current_page = max(0, self.current_page - 1)
+        self._update_buttons()
+        embed = await self._generate_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Trang 1/1", style=discord.ButtonStyle.primary, custom_id="page_num", disabled=True)
+    async def page_num_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass # Just an indicator
+        
+    @discord.ui.button(label="Trang sau ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
+            return
+            
+        self.current_page = min(self.max_pages - 1, self.current_page + 1)
+        self._update_buttons()
+        embed = await self._generate_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
 class ClanCog(commands.Cog):
+
     """Cog containing all clan-related commands."""
     
     def __init__(self, bot: commands.Bot):
@@ -1452,123 +1569,6 @@ class ClanCog(commands.Cog):
             f"✅ {member.mention} đã được thăng chức thành **Vice Captain**!",
             ephemeral=True
         )
-
-class HistoryPagedView(discord.ui.View):
-    """View to paginate through clan match history."""
-    
-    def __init__(self, matches: list, target_clan: dict, author_id: int):
-        super().__init__(timeout=300) # 5 minutes
-        self.matches = matches
-        self.target_clan = target_clan
-        self.author_id = author_id
-        self.current_page = 0
-        self.per_page = 10
-        self.max_pages = max(1, (len(matches) + self.per_page - 1) // self.per_page)
-        self._update_buttons()
-        
-    def _update_buttons(self):
-        # Update button state based on current page
-        for item in self.children:
-            if isinstance(item, discord.ui.Button):
-                if item.custom_id == "prev":
-                    item.disabled = (self.current_page == 0)
-                elif item.custom_id == "next":
-                    item.disabled = (self.current_page >= self.max_pages - 1)
-                elif item.custom_id == "page_num":
-                    item.label = f"Trang {self.current_page + 1}/{self.max_pages}"
-                    item.disabled = True
-                    
-    async def _generate_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title=f"⚔️ Lịch Sử Trận Đấu: {self.target_clan['name']}",
-            color=discord.Color.blue(),
-            description=f"*Tổng cộng: {len(self.matches)} trận đấu.*"
-        )
-        
-        start_idx = self.current_page * self.per_page
-        end_idx = start_idx + self.per_page
-        page_matches = self.matches[start_idx:end_idx]
-        
-        match_lines = []
-        for match in page_matches:
-            clan_a = await db.get_clan_by_id(match["clan_a_id"])
-            clan_b = await db.get_clan_by_id(match["clan_b_id"])
-            
-            clan_a_name = clan_a["name"] if clan_a else "Unknown"
-            clan_b_name = clan_b["name"] if clan_b else "Unknown"
-            
-            status_emoji = {
-                "confirmed": "✅",
-                "reported": "⏳",
-                "dispute": "⚠️",
-                "resolved": "⚖️",
-                "voided": "🚫",
-                "created": "🆕"
-            }.get(match["status"], "❓")
-            
-            raw_date = match.get("created_at", "")
-            display_date = raw_date.replace("T", " ")[:16] if raw_date else "N/A"
-            
-            winner_id = match.get("winner_clan_id") or match.get("reported_winner_clan_id") or match.get("resolved_winner_clan_id")
-            
-            if winner_id and match["status"] in ("confirmed", "resolved", "reported"):
-                winner_name = clan_a_name if winner_id == match["clan_a_id"] else clan_b_name
-                loser_name = clan_b_name if winner_id == match["clan_a_id"] else clan_a_name
-                
-                score_text = ""
-                if match.get("score_a") is not None and match.get("score_b") is not None:
-                    score_text = f" `{match['score_a']}-{match['score_b']}`"
-                
-                elo_text = ""
-                if match.get("elo_applied"):
-                    delta_a = match.get("final_delta_a", 0)
-                    delta_b = match.get("final_delta_b", 0)
-                    my_delta = delta_a if self.target_clan["id"] == match["clan_a_id"] else delta_b
-                    elo_text = f" ({my_delta:+d} Elo)"
-                
-                prefix = "✅ " if match["status"] == "confirmed" else status_emoji
-                line = f"{prefix}**{winner_name}** thắng **{loser_name}**{score_text}{elo_text}"
-                if match["status"] == "reported":
-                    line += " — *đang chờ xác nhận*"
-            elif match["status"] == "voided":
-                line = f"{status_emoji} ~~{clan_a_name} vs {clan_b_name}~~ — *Trận đấu vô hiệu*"
-            else:
-                status_text = {"created": "đang chờ kết quả", "reported": "chờ xác nhận", "dispute": "tranh chấp"}.get(match["status"], match["status"])
-                line = f"{status_emoji} **{clan_a_name}** vs **{clan_b_name}** — *{status_text}*"
-            
-            line += f"\n└ 🕒 `{display_date}` | ID: `#{match['id']}`"
-            match_lines.append(line)
-            
-        embed.description = "\n\n".join(match_lines) if match_lines else "*Vẫn chưa có trận đấu nào được ghi nhận.*"
-        embed.set_footer(text=f"Clan Elo: {self.target_clan.get('elo', 1000)} | Hệ thống quản lý giải đấu VXT")
-        return embed
-
-    @discord.ui.button(label="⬅️ Trang trước", style=discord.ButtonStyle.secondary, custom_id="prev")
-    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
-            return
-            
-        self.current_page = max(0, self.current_page - 1)
-        self._update_buttons()
-        embed = await self._generate_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label="Trang 1/1", style=discord.ButtonStyle.primary, custom_id="page_num", disabled=True)
-    async def page_num_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass # Just an indicator
-        
-    @discord.ui.button(label="Trang sau ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Bạn không có quyền sử dụng nút này.", ephemeral=True)
-            return
-            
-        self.current_page = min(self.max_pages - 1, self.current_page + 1)
-        self._update_buttons()
-        embed = await self._generate_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-
 
     @clan_group.command(name="history", description="Xem toàn bộ lịch sử trận đấu của clan")
     @app_commands.describe(clan_name="Tên clan (để trống để xem clan của bạn)")
