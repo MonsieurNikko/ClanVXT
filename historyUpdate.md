@@ -1,6 +1,19 @@
 # 📜 ClanVXT Changelog
 
+## [1.8.8] - 2026-03-05
+### 🐛 Hotfix: Map Ban/Pick Interaction Error
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Sửa lỗi nút Map**: Sửa lỗi "Interaction has already been acknowledged" khiến việc ấn nút Ban/Pick map hoặc thao tác chọn Side không được hệ thống ghi nhận kịp lúc.
+
+#### 🔧 Technical Details
+- **Bug fix**: `cogs/challenge.py` — Removed `callback` attributes from `MapSelectView` and `SidePickView` components. Ban/Pick actions are now natively handled by the global `on_interaction` event listener to prevent double-acknowledgment race conditions, ensuring interactions register correctly even after bot restarts.
+- **Files**: `cogs/challenge.py`
+
 ## [1.8.7] - 2026-03-05
+
 ### 🐛 Hotfix: Invite Command OperationalError
 
 >**Author: Nikko**

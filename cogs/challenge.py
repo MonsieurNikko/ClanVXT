@@ -536,7 +536,6 @@ class MapSelectView(discord.ui.View):
                 max_values=max_sel,
                 custom_id=f"mapbp_select:{mid}",
             )
-            select.callback = self._handle
             self.add_item(select)
 
         # Confirm button
@@ -545,7 +544,6 @@ class MapSelectView(discord.ui.View):
             style=discord.ButtonStyle.success,
             custom_id=f"mapbp_confirm:{mid}",
         )
-        confirm_btn.callback = self._handle
         self.add_item(confirm_btn)
 
         # Reset turn button
@@ -554,7 +552,6 @@ class MapSelectView(discord.ui.View):
             style=discord.ButtonStyle.secondary,
             custom_id=f"mapbp_reset:{mid}",
         )
-        reset_btn.callback = self._handle
         self.add_item(reset_btn)
 
         # Cancel match button
@@ -563,13 +560,7 @@ class MapSelectView(discord.ui.View):
             style=discord.ButtonStyle.danger,
             custom_id=f"mapbp_cancel:{mid}",
         )
-        cancel_btn.callback = self._handle
         self.add_item(cancel_btn)
-
-    async def _handle(self, interaction: discord.Interaction):
-        """Directly handle interactions."""
-        bot = self._bot or interaction.client
-        await handle_mapbp_interaction(bot, interaction)
 
 
 class SidePickView(discord.ui.View):
@@ -585,7 +576,6 @@ class SidePickView(discord.ui.View):
             style=discord.ButtonStyle.danger,
             custom_id=f"mapbp_side_atk:{mid}",
         )
-        atk_btn.callback = self._handle
         self.add_item(atk_btn)
 
         def_btn = discord.ui.Button(
@@ -593,7 +583,6 @@ class SidePickView(discord.ui.View):
             style=discord.ButtonStyle.primary,
             custom_id=f"mapbp_side_def:{mid}",
         )
-        def_btn.callback = self._handle
         self.add_item(def_btn)
 
         cancel_btn = discord.ui.Button(
@@ -601,12 +590,7 @@ class SidePickView(discord.ui.View):
             style=discord.ButtonStyle.secondary,
             custom_id=f"mapbp_cancel:{mid}",
         )
-        cancel_btn.callback = self._handle
         self.add_item(cancel_btn)
-
-    async def _handle(self, interaction: discord.Interaction):
-        bot = self._bot or interaction.client
-        await handle_mapbp_interaction(bot, interaction)
 
 
 # =============================================================================
@@ -1191,8 +1175,9 @@ class ChallengeCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        """Fallback handler for post-restart: handles mapbp interactions when
-        no View is in memory (bot was restarted while ban/pick was active)."""
+        """Global handler for mapbp interactions.
+        This handles all interactions directly, preventing race conditions from View callbacks,
+        and persisting through bot restarts."""
         if interaction.type != discord.InteractionType.component:
             return
 
@@ -1200,14 +1185,6 @@ class ChallengeCog(commands.Cog):
         if not custom_id.startswith("mapbp_"):
             return
 
-        # Give the View's _handle callback time to acknowledge first
-        await asyncio.sleep(0.5)
-
-        # If the View's _handle callback already handled this, skip
-        if interaction.response.is_done():
-            return
-
-        # Post-restart fallback: no View in memory, handle here
         await handle_mapbp_interaction(self.bot, interaction)
 
 
