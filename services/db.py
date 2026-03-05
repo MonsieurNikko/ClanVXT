@@ -2352,10 +2352,10 @@ async def count_recent_recruits(clan_id: int, days: int = 7) -> int:
     async with get_connection() as conn:
         cursor = await conn.execute(
             """SELECT COUNT(*) as count FROM invite_requests i
-               JOIN users u ON i.user_id = u.id
+               LEFT JOIN clan_members cm ON i.user_id = cm.user_id AND i.clan_id = cm.clan_id
                WHERE i.clan_id = ? AND i.status = 'accepted'
                AND i.responded_at >= datetime('now', ? || ' days')
-               AND u.valorant_rank_score > 0""",
+               AND (cm.valorant_rank_score IS NULL OR cm.valorant_rank_score > 0)""",
             (clan_id, f"-{days}")
         )
         row = await cursor.fetchone()

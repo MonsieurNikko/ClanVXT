@@ -1,6 +1,19 @@
 # 📜 ClanVXT Changelog
 
+## [1.8.7] - 2026-03-05
+### 🐛 Hotfix: Invite Command OperationalError
+
+>**Author: Nikko**
+
+#### 📢 Discord Update
+> - **Sửa lỗi mời người mới**: Khắc phục lỗi khi hệ thống báo đỏ (OperationalError) lúc Captain sử dụng lệnh `/clan invite` để mời thành viên mới.
+
+#### 🔧 Technical Details
+- **Bug fix**: `services/db.py` — `count_recent_recruits` was improperly attempting to reference `u.valorant_rank_score` from the `users` table instead of connecting to `clan_members`. Replaced with a `LEFT JOIN clan_members cm` to correctly evaluate a recruited member's rank score (or lack thereof if not declared yet) without crashing the database.
+- **Files**: `services/db.py`
+
 ## [1.8.6] - 2026-03-04
+
 ### 📊 Enhancement: Elo Calculation Transparency & Polish
 
 >**Author: Nikko**
