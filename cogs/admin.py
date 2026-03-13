@@ -2079,9 +2079,7 @@ class EloRollbackSelectView(discord.ui.View):
     # RECRUIT MANAGEMENT COMMANDS
     # =========================================================================
 
-    recruit_group = app_commands.Group(name="recruit", description="Admin recruit management")
-
-    @recruit_group.command(name="bypass", description="Bypass the recruitment cap for a clan")
+    @app_commands.command(name="adminrecruitbypass", description="Bypass the recruitment cap for a clan")
     @app_commands.describe(
         clan_name="Clan name to bypass",
         reason="Reason for bypass"
