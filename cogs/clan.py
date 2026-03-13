@@ -1438,6 +1438,72 @@ class ClanCog(commands.Cog):
             color=discord.Color.orange()
         )
     
+    @clan_group.command(name="resign", description="Transfer captaincy to another member")
+    @app_commands.describe(
+        new_captain="The member to transfer captaincy to"
+    )
+    async def clan_resign(self, interaction: discord.Interaction, new_captain: discord.Member):
+        """Transfer captaincy to another member."""
+        if not await check_verified(interaction):
+            return
+            
+        user = await ensure_user_registered(interaction)
+        if not user:
+            return
+            
+        # Get user's clan
+        clan_data = await db.get_user_clan(user["id"])
+        if not clan_data:
+            await interaction.response.send_message(ERRORS["NOT_IN_CLAN"], ephemeral=True)
+            return
+            
+        # Check if user is captain
+        if clan_data["member_role"] != "captain":
+            await interaction.response.send_message(ERRORS["NOT_CAPTAIN"], ephemeral=True)
+            return
+            
+        # Check target user
+        target_db_user = await db.get_user(str(new_captain.id))
+        if not target_db_user:
+            await interaction.response.send_message("Người này chưa đăng ký hệ thống.", ephemeral=True)
+            return
+            
+        if target_db_user["id"] == user["id"]:
+            await interaction.response.send_message("Bạn không thể truyền ngôi cho chính mình.", ephemeral=True)
+            return
+            
+        # Ensure target is in the same clan
+        target_clan_data = await db.get_user_clan(target_db_user["id"])
+        if not target_clan_data or target_clan_data["id"] != clan_data["id"]:
+            await interaction.response.send_message("Người này không thuộc clan của bạn.", ephemeral=True)
+            return
+
+        clan_id = clan_data["id"]
+        clan_name = clan_data["name"]
+        
+        await interaction.response.defer()
+        
+        # Admin set role logic handles the captain reassignment properly
+        await db.admin_set_member_role(clan_id, target_db_user["id"], "captain")
+        
+        # Optionally demote the old captain to 'member' if they want a clean slate, 
+        # Though the DB function auto demotes the old captain to 'member'.
+        # We can just rely on the existing safety check logic in admin_set_member_role.
+
+        await bot_utils.log_event(
+            "CLAN_RESIGN",
+            f"{interaction.user.mention} transferred captaincy of **{clan_name}** to {new_captain.mention}."
+        )
+
+        await interaction.followup.send(f"👑 Bạn đã truyền ngôi Captain của clan **{clan_name}** cho {new_captain.mention}.")
+        
+        # Public announcement
+        await bot_utils.announce_public(
+            title="👑 New Captain",
+            description=f"<@{user['discord_id']}> đã từ chức và trao quyền Captain clan **{clan_name}** cho {new_captain.mention}!",
+            color=discord.Color.gold()
+        )
+
     @clan_group.command(name="disband", description="Disband your clan (Captain only, deletes clan)")
     async def clan_disband(self, interaction: discord.Interaction):
         """Disband the clan entirely (Captain only)."""

@@ -1,5 +1,20 @@
 # 📜 ClanVXT Changelog
 
+## [1.9.0] - 2026-03-13
+### ✨ Feat: Captain Transfer & Recruitment Bypass
+
+>**Author: Antigravity**
+
+#### 📢 Discord Update
+> - **Lệnh Rời ghế Captain (`/clan resign`)**: Captain hiện tại có thể dùng lệnh này để nhường lại chức vụ cao nhất cho một thành viên khác trong clan. Chức quyền sẽ được chuyển giao một cách nhanh chóng minh bạch.
+> - **Tuyển quân linh hoạt**: Nếu clan bạn đã đạt giới hạn tuần, Admin nay có thể cấp quyền ưu tiên để clan bạn tiếp tục mời thêm người!
+
+#### 🔧 Technical Details
+- **New Feature**: `cogs/clan.py` — Added `@clan_group.command(name="resign")`. Demotes the current captain and promotes the targeted `new_captain` utilizing `db.admin_set_member_role`. Automates the process of stepping down cleanly without disbanding the clan.
+- **New Feature**: `cogs/admin.py` — Added `@recruit_group.command(name="bypass")`. Allows a moderator to reset the 7-day recruit cap window for a specific clan. 
+- **DB Helper**: `services/db.py` — Added `admin_clear_recent_recruits(clan_id)`, which shifts the `responded_at` timestamps of recent invite accesses back an extra week so they bypass the 7-day recruit limit check inside `count_recent_accepted_invites()`.
+- **Files**: `cogs/clan.py`, `cogs/admin.py`, `services/db.py`
+
 ## [1.8.9] - 2026-03-13
 ### ⚖️ Balance Adjustment: Rank Elo Modifiers
 
