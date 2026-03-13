@@ -2075,6 +2075,41 @@ class EloRollbackSelectView(discord.ui.View):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
+    # =========================================================================
+    # RECRUIT MANAGEMENT COMMANDS
+    # =========================================================================
+
+    recruit_group = app_commands.Group(name="recruit", description="Admin recruit management")
+
+    @recruit_group.command(name="bypass", description="Bypass the recruitment cap for a clan")
+    @app_commands.describe(
+        clan_name="Clan name to bypass",
+        reason="Reason for bypass"
+    )
+    async def admin_recruit_bypass(self, interaction: discord.Interaction, clan_name: str, reason: str = "Admin bypass"):
+        """Bypass the weekly recruitment cap for a clan."""
+        if not await self.check_mod(interaction):
+            return
+            
+        await interaction.response.defer(ephemeral=False)
+        
+        clan = await db.get_clan_any_status(clan_name)
+        if not clan:
+            await interaction.followup.send("❌ Không tìm thấy clan này.", ephemeral=True)
+            return
+            
+        await db.admin_clear_recent_recruits(clan["id"])
+        
+        await interaction.followup.send(
+            f"✅ Đã xóa giới hạn tuyển quân tuần này cho clan **{clan['name']}**.\n"
+            f"Họ có thể tiếp tục mời thành viên mới ngay lập tức.\nLý do: {reason}"
+        )
+        
+        await bot_utils.log_event(
+            "RECRUIT_CAP_BYPASS",
+            f"Admin {interaction.user.mention} bypassed recruitment cap for clan '{clan['name']}'. Reason: {reason}"
+        )
+
 # =============================================================================
 # DASHBOARD VIEW
 # =============================================================================
