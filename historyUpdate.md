@@ -1,5 +1,22 @@
 # 📜 ClanVXT Changelog
 
+## [1.8.9] - 2026-03-13
+### ⚖️ Balance Adjustment: Rank Elo Modifiers
+
+>**Author: Antigravity**
+
+#### 📢 Discord Update
+> - **Cân bằng lại cách tính chênh lệch trình độ**: Điều chỉnh hệ số phạt và mức bù trừ Elo khi có sự chênh lệch Rank giữa 2 đội.
+>   - **Siết chặt khoảng cách Cân bằng**: Giờ đây khoảng cách Cân bằng (x1.0) chỉ áp dụng cho hai đội cách nhau tối đa 1 bậc Rank (Ví dụ: Ascendant 3 vs Immortal 1). Còn những mức Rank như Immortal 1 và Ascendant 2 (cách 2 bậc) sẽ được tính là có chênh lệch và bắt đầu áp dụng hệ số bù trừ.
+>   - **Sửa lỗi tính điểm Thua**: Khắc phục lỗi khiến đội xếp hạng thấp hơn (yếu hơn) khi thua trận lại bị trừ nhiều Elo hơn. Cụ thể, thay vì đội yếu bị áp dụng hệ số bóp điểm mù quáng, bây giờ hệ thống sẽ dùng hệ số thắng của **đối thủ** để tính số điểm bị trừ cho đội thua. Điều này giúp đội hạng thấp bị trừ RẤT ÍT khi thua đội hạng cao, ngược lại đội hạng cao sẽ mất RẤT NHIỀU điểm nếu để thua đội hạng thấp.
+>   - **Mô tả tường minh hơn**: Bảng hiển thị thông báo chi tiết Elo giờ sẽ ghi rõ: "Thắng đội yếu hơn", "Thua đội mạnh hơn", v.v... đi kèm giải thích giảm/tăng số điểm nhận được một cách minh bạch, trực quan.
+
+#### 🔧 Technical Details
+- **Math Update**: `services/elo.py` — `get_rank_modifier` threshold gaps tightened (0-1: x1.0, 2-3: x0.90/1.10, 4-5: x0.80/1.25, 6-8: x0.70/1.50, 9+: x0.60/1.80).
+- **Logic Fix**: `apply_match_result` — Rank modifiers logic is corrected by applying them dynamically to the final Delta. High rank winners apply their own (< 1.0) modifier scaling down gains. Meanwhile, the loser's loss is safely derived using the *winner's* modifier. This inherently buffs low-rank teams losing to high-rank teams while punishing high-rank teams losing to low-rank teams properly.
+- **UI Update**: `format_elo_explanation_vn` — Reworked explanation to explicitly state whether a team beat a weaker/stronger team or lost to a weaker/stronger team, reverse-engineering the effective multiplier on the loss side to be accurate with Discord UI limits.
+- **Files**: `services/elo.py`
+
 ## [1.8.8] - 2026-03-05
 ### 🐛 Hotfix: Map Ban/Pick Interaction Error
 

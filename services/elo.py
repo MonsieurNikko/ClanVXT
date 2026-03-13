@@ -123,19 +123,26 @@ def get_rank_modifier(avg_rank_a: float, avg_rank_b: float) -> Tuple[float, floa
         return (1.0, 1.0)
     
     gap = abs(avg_rank_a - avg_rank_b)
-    if gap <= 2:
+    # Tighter gap thresholds to trigger modifiers earlier
+    if gap <= 1:
         return (1.0, 1.0)
-    if gap <= 5:
-        mod = 0.9
+    if gap <= 3:
+        mod_higher = 0.90
+        mod_lower = 1.10
+    elif gap <= 5:
+        mod_higher = 0.80
+        mod_lower = 1.25
     elif gap <= 8:
-        mod = 0.8
+        mod_higher = 0.70
+        mod_lower = 1.50
     else:
-        mod = 0.7
+        mod_higher = 0.60
+        mod_lower = 1.80
     
     if avg_rank_a > avg_rank_b:
-        return (mod, 2.0 - mod)
+        return (mod_higher, mod_lower)
     else:
-        return (2.0 - mod, mod)
+        return (mod_lower, mod_higher)
 
 
 async def count_elo_matches_between_clans(clan_a_id: int, clan_b_id: int) -> int:
@@ -353,12 +360,49 @@ async def apply_match_result(match_id: int, winner_clan_id: int) -> Dict[str, An
             if avg_rank_a is not None and avg_rank_b is not None:
                 rank_mod_a, rank_mod_b = get_rank_modifier(avg_rank_a, avg_rank_b)
                 if rank_mod_a != 1.0 or rank_mod_b != 1.0:
-                    # Cap combined modifier (win_rate * rank) >= 0.3 to avoid over-nerfing
-                    combined_mod_a = max(0.3, win_rate_mod_a * rank_mod_a)
-                    combined_mod_b = max(0.3, win_rate_mod_b * rank_mod_b)
-                    # Recompute with combined modifier instead of stacking
-                    final_delta_a = round(round(base_delta_a * multiplier) * combined_mod_a)
-                    final_delta_b = round(round(base_delta_b * multiplier) * combined_mod_b)
+                    # Apply rank mod based on win/loss. 
+                    # If you win, you want a modifier to scale your gain.
+                    # If you lose, you want a modifier to scale your loss.
+                    
+                    # For Clan A
+                    if final_delta_a > 0:
+                        # Clan A won (gain elo). If A is higher rank, rank_mod_a is < 1 (gain less). If A is lower rank, rank_mod_a is > 1 (gain more).
+                        final_delta_a = round(final_delta_a * rank_mod_a)
+                    else:
+                        # Clan A lost (lose elo). If A is higher rank, rank_mod_a is < 1. To lose MORE, we need to divide or use the inverse.
+                        # Wait, if higher rank loses to lower rank, it should be heavily penalized. 
+                        # Let's say A (higher, mod 0.8) loses. Their loss should increase. We can divide by mod or use a separate loss modifier.
+                        # The user pointed out that lower rank getting a 1.2 loss modifier means they get penalized MORE, which is unfair.
+                        # Lower rank losing to Higher rank should be penalized LESS (lose less elo).
+                        # Let's use the other clan's modifier for losses.
+                        # A lost to B. A is lower rank (mod_a=1.25), B is higher rank (mod_b=0.8).
+                        # A's loss should be reduced. final_delta_a * (1 / mod_a)? -16 * (1/1.25) = -12.
+                        # B's gain should be reduced. final_delta_b * mod_b? 16 * 0.8 = 12.
+                        # If A (higher, mod_a=0.8) loses to B (lower, mod_b=1.25).
+                        # A's loss should be increased. final_delta_a * mod_b? final_delta_a * 1.25.
+                        pass # We will apply it smartly down below
+                    
+                    # Combine win_rate mod and rank mod safely to avoid extreme values.
+                    # However, to fix the specific issue of "lower-ranked team losing -> punished more":
+                    # When a team GAINS elo (winner), multiply by their own rank_mod.
+                    #   - Higher rank winner -> rank_mod < 1 -> gain less.
+                    #   - Lower rank winner -> rank_mod > 1 -> gain more.
+                    # When a team LOSES elo (loser), multiply by the WINNER'S rank_mod.
+                    #   - Higher rank loser -> Winner is lower rank (mod > 1) -> loss multiplied by > 1 -> lose more.
+                    #   - Lower rank loser -> Winner is higher rank (mod < 1) -> loss multiplied by < 1 -> lose less.
+
+                    if final_delta_a > 0: # A won, B lost
+                        combined_mod_win_a = max(0.3, win_rate_mod_a * rank_mod_a)
+                        final_delta_a = round(round(base_delta_a * multiplier) * combined_mod_win_a)
+                        # B lost, apply A's rank_mod to B's loss
+                        combined_mod_loss_b = max(0.3, win_rate_mod_b * rank_mod_a)
+                        final_delta_b = round(round(base_delta_b * multiplier) * combined_mod_loss_b)
+                    else: # B won, A lost
+                        combined_mod_win_b = max(0.3, win_rate_mod_b * rank_mod_b)
+                        final_delta_b = round(round(base_delta_b * multiplier) * combined_mod_win_b)
+                        # A lost, apply B's rank_mod to A's loss
+                        combined_mod_loss_a = max(0.3, win_rate_mod_a * rank_mod_b)
+                        final_delta_a = round(round(base_delta_a * multiplier) * combined_mod_loss_a)
         
         # Feature 5 — Underdog Bonus
         if await db.is_balance_feature_enabled("underdog_bonus"):
@@ -510,10 +554,34 @@ def format_elo_explanation_vn(elo_result: Dict[str, Any]) -> str:
         if rank_mod != 1.0:
             rank_a_name = RANK_SCORE_TO_NAME.get(round(avg_rank), "Unknown")
             rank_b_name = RANK_SCORE_TO_NAME.get(round(other_avg_rank), "Unknown")
-            if rank_mod < 1.0:
-                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` > `{rank_b_name}`)")
+            
+            # For the explanation, we want to clarify how rank mod affected the calculation
+            # If the clan WON, they used their own rank_mod
+            is_winner = (delta_str.startswith('+') and delta_str != "+0") or (delta_str == "0" and base_val > 0)
+            
+            if is_winner:
+                if rank_mod < 1.0:
+                    clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Thắng đội yếu hơn `{rank_a_name}` > `{rank_b_name}` → Giảm điểm cộng)")
+                else:
+                    clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Thắng đội mạnh hơn `{rank_a_name}` < `{rank_b_name}` → Tăng điểm cộng)")
             else:
-                clan_lines.append(f"  • Chênh lệch trình độ: `x{rank_mod}` (Đội bạn `{rank_a_name}` < `{rank_b_name}`)")
+                # If they lost, they used the WINNER'S rank_mod. But the variable passed here is their own mod_a/b.
+                # However we want to print the modifier that was ACTUALLY applied to their base value.
+                # Since we don't pass the "applied modifier" into get_clan_details easily yet, let's just reverse engineer it.
+                applied_mod = round(float(delta_str) / base_val, 2) if base_val != 0 else 1.0
+                
+                # Try to clean up applied_mod from anti-farm or win_rate
+                if mult != 1.0 and mult != 0: applied_mod = applied_mod / mult
+                if win_rate_mod != 1.0 and win_rate_mod != 0: applied_mod = applied_mod / win_rate_mod
+                
+                applied_mod = round(applied_mod, 2)
+                
+                if avg_rank > other_avg_rank:
+                    clan_lines.append(f"  • Chênh lệch trình độ: `x{applied_mod}` (Thua đội yếu hơn `{rank_a_name}` > `{rank_b_name}` → Tăng điểm trừ)")
+                else:
+                    clan_lines.append(f"  • Chênh lệch trình độ: `x{applied_mod}` (Thua đội mạnh hơn `{rank_a_name}` < `{rank_b_name}` → Giảm điểm trừ)")
+                
+                rank_mod = applied_mod # For the calculation string
         else:
             clan_lines.append(f"  • Chênh lệch trình độ: `x1.0` (Cân bằng)")
         calc_path.append(str(rank_mod))
